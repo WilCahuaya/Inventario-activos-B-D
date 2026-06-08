@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Plan de Desarrollo MVP v1.0 — Inventario de Activos Fijos</title>
+  <style>
+    @page { size: A4; margin: 2cm 1.8cm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      color: #1a1a1a;
+      max-width: 100%;
+    }
+    h1 {
+      font-size: 20pt;
+      color: #0f3460;
+      border-bottom: 3px solid #0f3460;
+      padding-bottom: 8px;
+      margin-top: 0;
+    }
+    h2 {
+      font-size: 14pt;
+      color: #0f3460;
+      margin-top: 24px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 4px;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11.5pt;
+      color: #16213e;
+      margin-top: 16px;
+      page-break-after: avoid;
+    }
+    h4 { font-size: 10.5pt; color: #333; margin-top: 12px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px;
+      font-size: 9.5pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #bbb;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #0f3460; color: #fff; font-weight: 600; }
+    tr:nth-child(even) td { background: #f5f7fa; }
+    code, pre {
+      font-family: "Consolas", "Courier New", monospace;
+      background: #f0f0f0;
+      font-size: 9pt;
+    }
+    pre {
+      padding: 10px 12px;
+      border-left: 4px solid #0f3460;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      page-break-inside: avoid;
+    }
+    ul, ol { margin: 6px 0 12px; padding-left: 22px; }
+    li { margin-bottom: 3px; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+    .cover-meta {
+      background: #f0f4f8;
+      border: 1px solid #ccd6e0;
+      padding: 14px 16px;
+      margin: 16px 0 24px;
+      border-radius: 4px;
+    }
+    .cover-meta table { margin: 0; }
+    .cover-meta th { background: #16213e; width: 35%; }
+    .confidential {
+      text-align: center;
+      font-size: 9pt;
+      color: #666;
+      margin-top: 30px;
+      padding-top: 12px;
+      border-top: 1px solid #ccc;
+    }
+    .phase-box {
+      background: #eef2f7;
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li::before { content: "☐ "; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+
+<h1>Plan de Desarrollo — Sistema de Inventario de Activos Fijos (MVP v1.0)</h1>
+
+<div class="cover-meta">
+  <table>
+    <tr><th>Cliente</th><td>B&amp;D Consultores Global EIRL</td></tr>
+    <tr><th>RUC</th><td>20614326418</td></tr>
+    <tr><th>Versión documento</th><td>1.0</td></tr>
+    <tr><th>Fecha</th><td>Junio 2026</td></tr>
+    <tr><th>Clasificación</th><td>Uso interno — Confidencial</td></tr>
+  </table>
+</div>
+
+<h2>1. Resumen ejecutivo</h2>
+<p>Este documento define las <strong>fases de desarrollo</strong> del MVP del Sistema de Inventario de Activos Fijos, para presentación y ejecución por el grupo de desarrollo.</p>
+
+<table>
+  <tr><th>Componente</th><th>Tecnología</th><th>Propósito</th></tr>
+  <tr><td>App de Escritorio</td><td>Electron + TypeScript + React</td><td>Campo: escaneo, registro, etiquetas, offline</td></tr>
+  <tr><td>Plataforma Web</td><td>Next.js 14 + shadcn/ui + Tailwind</td><td>Acceso remoto contadores y admins</td></tr>
+  <tr><td>Backend / API</td><td>Supabase (PostgreSQL + Auth + Storage)</td><td>Capa central de datos compartida</td></tr>
+</table>
+
+<p><strong>Volumen inicial:</strong> 4–10 entidades · 500–2.000 activos<br>
+<strong>Duración total:</strong> 14 semanas (3,5 meses)<br>
+<strong>Metodología:</strong> Sprints de 2 semanas con entregables demoables</p>
+
+<h2>2. Stack tecnológico</h2>
+<table>
+  <tr><th>Capa</th><th>Tecnología</th><th>Justificación</th></tr>
+  <tr><td>Backend / BD / Auth</td><td>Supabase (PostgreSQL)</td><td>Multi-tenant RLS, auth JWT, storage</td></tr>
+  <tr><td>Web frontend</td><td>Next.js 14 + shadcn/ui</td><td>SSR, rutas por rol, Vercel</td></tr>
+  <tr><td>App escritorio</td><td>Electron + React</td><td>USB, impresión, componentes compartidos</td></tr>
+  <tr><td>Offline local</td><td>SQLite (better-sqlite3)</td><td>Caché y cola de sync en campo</td></tr>
+  <tr><td>Impresión etiquetas</td><td>ZPL via ZSim (PC42E-T)</td><td>Calidad en impresora térmica Honeywell</td></tr>
+  <tr><td>Código de barras</td><td>Code 128 (ZPL nativo)</td><td>Estándar inventarios; pistola USB</td></tr>
+  <tr><td>Reportes PDF</td><td>React-PDF / Puppeteer</td><td>Membrete B&amp;D institucional</td></tr>
+  <tr><td>Reportes Excel</td><td>ExcelJS</td><td>Exportación con estilos</td></tr>
+  <tr><td>Monorepo</td><td>pnpm + Turborepo</td><td>Código compartido web/desktop</td></tr>
+</table>
+
+<h2>3. Visión general de fases</h2>
+<div class="phase-box">
+<pre>Fase 0 ──► Fase 1 ──► Fase 2 ──► Fase 3 ──► Fase 4 ──► Fase 5 ──► Fase 6
+ Setup      Backend     Web         Escritorio   Reportes    Piloto      Cierre
+ (1 sem)    (2 sem)     (3 sem)     (3 sem)      (2 sem)     (2 sem)     (1 sem)</pre>
+</div>
+
+<table>
+  <tr><th>Fase</th><th>Nombre</th><th>Duración</th><th>Entregable clave</th></tr>
+  <tr><td>0</td><td>Fundamentos</td><td>1 semana</td><td>Repositorio, Supabase, CI/CD</td></tr>
+  <tr><td>1</td><td>Backend y datos</td><td>2 semanas</td><td>BD, RLS, auth, CRUD activos</td></tr>
+  <tr><td>2</td><td>Plataforma web</td><td>3 semanas</td><td>Panel contador + admin entidad</td></tr>
+  <tr><td>3</td><td>App escritorio</td><td>3 semanas</td><td>Escaneo, registro, ZPL, offline</td></tr>
+  <tr><td>4</td><td>Reportes</td><td>2 semanas</td><td>PDF/Excel con membrete B&amp;D</td></tr>
+  <tr><td>5</td><td>Piloto en campo</td><td>2 semanas</td><td>Prueba con 1 entidad real</td></tr>
+  <tr><td>6</td><td>Cierre MVP</td><td>1 semana</td><td>Documentación, deploy, capacitación</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>4. Detalle por fase</h2>
+
+<h3>Fase 0 — Fundamentos y entorno (Semana 1)</h3>
+<p><strong>Objetivo:</strong> Base técnica lista para trabajo en paralelo del equipo.</p>
+<h4>Actividades</h4>
+<ul>
+  <li>Monorepo pnpm + Turborepo: apps/web, apps/desktop, packages/, supabase/</li>
+  <li>Proyecto Supabase (dev + staging), Next.js 14, Electron base</li>
+  <li>Git, ramas, deploy Vercel staging, convenciones de equipo</li>
+  <li>Definir formato código de barras Code 128 con contadores</li>
+</ul>
+<h4>Entregables</h4>
+<ul class="checklist">
+  <li>Repositorio funcionando</li>
+  <li>Supabase conectado desde web y desktop</li>
+  <li>Login básico en web</li>
+  <li>Documento arquitectura v1</li>
+  <li>Formato código de barras acordado</li>
+</ul>
+
+<h3>Fase 1 — Backend, modelo de datos y seguridad (Semanas 2–3)</h3>
+<p><strong>Objetivo:</strong> BD completa, roles, permisos y API funcional.</p>
+<h4>Modelo de datos</h4>
+<ul>
+  <li>Tablas: entidades, sedes, ambientes, activos, historial_cambios, profiles</li>
+  <li>Estados: PREREGISTRADO, REGISTRADO, DADO_DE_BAJA</li>
+  <li>Correlativo automático por entidad</li>
+  <li>Depreciación calculada (vistas SQL) + triggers de historial</li>
+</ul>
+<h4>Seguridad RLS</h4>
+<ul>
+  <li>CONTADOR: acceso total · ADMIN_ENTIDAD: solo su entidad</li>
+  <li>Storage fotos/PDF con compresión (~500 KB máx.)</li>
+</ul>
+<h4>Criterios de aceptación</h4>
+<ul>
+  <li>Contador crea activo → REGISTRADO + correlativo</li>
+  <li>Admin crea activo → PREREGISTRADO</li>
+  <li>Admin no ve otras entidades</li>
+</ul>
+
+<h3>Fase 2 — Plataforma web (Semanas 4–6)</h3>
+<p><strong>Objetivo:</strong> Web operativa para contador y admin de entidad.</p>
+<table>
+  <tr><th>Módulo contador</th><th>Módulo admin entidad</th></tr>
+  <tr>
+    <td>
+      Entidades · Jerarquía Sede/Ambiente · Inventario con filtros<br>
+      Ficha activo · Usuarios · Bandeja preregistrados
+    </td>
+    <td>
+      Mi inventario · Registrar activo (PREREGISTRADO)<br>
+      Editar ubicación · Historial · Mis reportes
+    </td>
+  </tr>
+</table>
+<h4>Criterios de aceptación</h4>
+<ul>
+  <li>Flujo preregistro → validación contador completo</li>
+  <li>Admin solo edita ubicación</li>
+  <li>Filtros &lt; 1 s con 2.000 activos de prueba</li>
+</ul>
+
+<div class="page-break"></div>
+
+<h3>Fase 3 — App de escritorio Windows (Semanas 7–9)</h3>
+<p><strong>Objetivo:</strong> Herramienta de campo: escaneo, registro, etiquetas ZPL y offline.</p>
+<table>
+  <tr><th>Módulo</th><th>Funcionalidad</th></tr>
+  <tr><td>Login</td><td>Sesión persistente Supabase Auth</td></tr>
+  <tr><td>Escaneo USB</td><td>Pistola → búsqueda instantánea → ficha</td></tr>
+  <tr><td>Registro</td><td>Formulario completo + foto + PDF</td></tr>
+  <tr><td>ZPL (ZSim)</td><td>Etiquetas Code 128 → Honeywell PC42E-T</td></tr>
+  <tr><td>Offline</td><td>SQLite + cola sync automática al reconectar</td></tr>
+</table>
+<h4>Comportamiento offline</h4>
+<table>
+  <tr><th>Situación</th><th>Comportamiento</th></tr>
+  <tr><td>Sin internet, primera vez</td><td>No puede hacer login</td></tr>
+  <tr><td>Sin internet, sesión previa</td><td>Trabaja con sesión cacheada + SQLite</td></tr>
+  <tr><td>Vuelve internet</td><td>Sync automático de cola pendiente</td></tr>
+  <tr><td>Impresión ZPL</td><td>100% offline via USB</td></tr>
+</table>
+<h4>Criterios de aceptación</h4>
+<ul>
+  <li>4 h offline sin pérdida de datos</li>
+  <li>Etiqueta Code 128 legible por pistola</li>
+  <li>Escaneo → ficha &lt; 500 ms online</li>
+</ul>
+
+<h3>Fase 4 — Reportes (Semanas 10–11)</h3>
+<table>
+  <tr><th>#</th><th>Reporte</th><th>Formato</th><th>Roles</th></tr>
+  <tr><td>1</td><td>Inventario por ambiente (sin valores)</td><td>PDF, Excel</td><td>Contador, Admin</td></tr>
+  <tr><td>2</td><td>Inventario general por entidad (sin valores)</td><td>PDF, Excel</td><td>Contador, Admin</td></tr>
+  <tr><td>3</td><td>Inventario valorizado por ambiente</td><td>PDF, Excel</td><td>Contador, Admin</td></tr>
+  <tr><td>4</td><td>Inventario valorizado por entidad</td><td>PDF, Excel</td><td>Contador, Admin</td></tr>
+  <tr><td>5</td><td>Acta de inventario</td><td>PDF firmable</td><td>Contador</td></tr>
+  <tr><td>6</td><td>Reporte de bajas</td><td>PDF, Excel</td><td>Contador</td></tr>
+</table>
+<p>Todos incluyen membrete B&amp;D, fecha de corte, depreciación calculada y resumen por clasificación contable.</p>
+
+<h3>Fase 5 — Piloto en campo (Semanas 12–13)</h3>
+<table>
+  <tr><th>Métrica</th><th>Meta</th></tr>
+  <tr><td>Activos registrados</td><td>≥ 50</td></tr>
+  <tr><td>Etiquetas impresas</td><td>100% de registrados</td></tr>
+  <tr><td>Errores sync offline</td><td>0 pérdida de datos</td></tr>
+  <tr><td>Tiempo escaneo → ficha</td><td>&lt; 1 segundo</td></tr>
+  <tr><td>Satisfacción contador</td><td>≥ 4/5</td></tr>
+</table>
+
+<h3>Fase 6 — Cierre MVP y go-live (Semana 14)</h3>
+<ul class="checklist">
+  <li>MVP v1.0 en producción (Supabase Pro + Vercel)</li>
+  <li>Instalador Windows (.exe) distribuible</li>
+  <li>Documentación usuario + técnica</li>
+  <li>Capacitación equipo B&amp;D</li>
+  <li>Plan soporte post-lanzamiento (30 días)</li>
+</ul>
+
+<div class="page-break"></div>
+
+<h2>5. Hitos y demos</h2>
+<div class="phase-box">
+<pre>Mes 1              Mes 2              Mes 3              Mes 3.5
+H1: BD+Auth        H2: Web lista      H3: Desktop        H4: Go-live
+    (sem 3)           (sem 6)            (sem 9)            (sem 14)</pre>
+</div>
+<table>
+  <tr><th>Hito</th><th>Semana</th><th>Demo al cliente</th></tr>
+  <tr><td>H1</td><td>3</td><td>Login + CRUD activo + RLS</td></tr>
+  <tr><td>H2</td><td>6</td><td>Web contador + bandeja preregistrados</td></tr>
+  <tr><td>H3</td><td>9</td><td>Escritorio: escaneo + etiqueta + offline</td></tr>
+  <tr><td>H4</td><td>11</td><td>Reportes PDF/Excel</td></tr>
+  <tr><td>H5</td><td>14</td><td>Piloto completado → MVP entregado</td></tr>
+</table>
+
+<h2>6. Distribución del equipo</h2>
+<h3>Equipo mínimo (2 personas)</h3>
+<table>
+  <tr><th>Persona</th><th>Fases principales</th></tr>
+  <tr><td>Dev A (full-stack)</td><td>Fase 0–1, backend, web contador, reportes</td></tr>
+  <tr><td>Dev B (full-stack)</td><td>Electron, ZPL, offline, web admin</td></tr>
+</table>
+<h3>Equipo ideal (3 personas)</h3>
+<table>
+  <tr><th>Persona</th><th>Rol</th><th>Fases</th></tr>
+  <tr><td>Dev A</td><td>Backend + Supabase + RLS</td><td>0, 1, 4</td></tr>
+  <tr><td>Dev B</td><td>Web Next.js</td><td>2, 4</td></tr>
+  <tr><td>Dev C</td><td>Electron + ZPL + offline</td><td>3, 5</td></tr>
+</table>
+
+<h2>7. Escalabilidad y costos</h2>
+<table>
+  <tr><th>Etapa</th><th>Volumen</th><th>Viabilidad</th></tr>
+  <tr><td>MVP actual</td><td>4–10 entidades, 500–2.000 activos</td><td>Sobrado</td></tr>
+  <tr><td>Crecimiento 1</td><td>20–50 entidades, 5.000–15.000 activos</td><td>Sin cambios arquitectura</td></tr>
+  <tr><td>Crecimiento 2</td><td>100+ entidades, 50.000+ activos</td><td>Supabase Pro/Team + optimizaciones</td></tr>
+  <tr><td>Enterprise</td><td>Integraciones SIAF/SAP</td><td>API propia sobre PostgreSQL</td></tr>
+</table>
+<table>
+  <tr><th>Servicio</th><th>Plan</th><th>Costo mensual</th></tr>
+  <tr><td>Supabase</td><td>Pro (recomendado)</td><td>~USD 25</td></tr>
+  <tr><td>Vercel</td><td>Hobby</td><td>USD 0</td></tr>
+  <tr><td>Dominio</td><td>.com / .pe</td><td>~USD 1/mes</td></tr>
+</table>
+
+<h2>8. Riesgos y mitigaciones</h2>
+<table>
+  <tr><th>Riesgo</th><th>Impacto</th><th>Mitigación</th></tr>
+  <tr><td>Formato código barras no definido</td><td>Bloquea Fase 3</td><td>Definir Semana 1</td></tr>
+  <tr><td>PC42E-T no calibrada</td><td>Etiquetas mal impresas</td><td>Configurar Semana 7</td></tr>
+  <tr><td>Fotos sin comprimir</td><td>Storage lleno</td><td>Compresión desde Fase 1</td></tr>
+  <tr><td>Conflictos sync offline</td><td>Datos duplicados</td><td>Cola + resolución Fase 3</td></tr>
+  <tr><td>Scope creep</td><td>Retraso</td><td>MVP estricto; backlog fase 2</td></tr>
+</table>
+
+<h2>9. Fuera del alcance del MVP</h2>
+<ul>
+  <li>App móvil Android/iOS · Escaneo por cámara</li>
+  <li>Integración SIAF / SAP · Notificaciones automáticas</li>
+  <li>Firma digital certificada · Multi-idioma</li>
+  <li>Nivel Piso como jerarquía formal</li>
+</ul>
+
+<h2>10. Próximos pasos inmediatos</h2>
+<ol>
+  <li>Aprobar plan con grupo de desarrollo y B&amp;D Consultores.</li>
+  <li>Definir formato código de barras (Code 128: catálogo-correlativo).</li>
+  <li>Asignar roles del equipo (Dev A, Dev B, QA, product owner).</li>
+  <li>Arrancar Fase 0: repositorio + Supabase + login base.</li>
+  <li>Agendar demo H1 para dentro de 3 semanas.</li>
+</ol>
+
+<h2>11. Aprobaciones</h2>
+<table>
+  <tr><th>Rol</th><th>Nombre</th><th>Firma</th><th>Fecha</th></tr>
+  <tr><td>Responsable del proyecto</td><td></td><td></td><td></td></tr>
+  <tr><td>Líder técnico / Desarrollador</td><td></td><td></td><td></td></tr>
+  <tr><td>Representante B&amp;D Consultores</td><td></td><td></td><td></td></tr>
+</table>
+
+<div class="confidential">
+  B&amp;D Consultores Global EIRL · RUC 20614326418 · Documento confidencial · Versión 1.0 · Junio 2026
+</div>
+
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "inventario-activos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de Inventario de Activos Fijos — B&D Consultores Global EIRL",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "dev:web": "pnpm --filter @inventario/web dev",
+    "dev:desktop": "pnpm --filter @inventario/desktop dev",
+    "build:web": "pnpm --filter @inventario/web build",
+    "build:desktop": "pnpm --filter @inventario/desktop build"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@10.34.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
+}
