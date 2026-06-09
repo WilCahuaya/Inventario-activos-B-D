@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
+import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
 
@@ -17,6 +17,7 @@ export interface CreateActivoInput {
   modelo?: string;
   serie?: string;
   color?: string;
+  medidas?: string;
   medida_largo?: number;
   medida_ancho?: number;
   medida_altura?: number;
@@ -29,6 +30,22 @@ export interface CreateActivoInput {
   vida_util_meses?: number;
   sede_id?: string;
   ambiente_id?: string;
+  comprobante_serie?: string;
+}
+
+export type UpdateActivoInput = Omit<CreateActivoInput, "entidad_id">;
+
+export interface ListActivosFilters {
+  entidadId?: string;
+  sedeId?: string;
+  ambienteId?: string;
+  estadoRegistro?: EstadoRegistro;
+}
+
+export interface ActivoListRow {
+  entidad_nombre?: string;
+  sede_nombre?: string;
+  ambiente_nombre?: string;
 }
 
 export async function previewCodigoBarras(entidadId: string, codigoCatalogo: string) {
@@ -50,8 +67,21 @@ export async function createActivo(input: CreateActivoInput) {
   if (!profile) return { error: "Sesión no válida." };
 
   const supabase = await createClient();
-  const payload = {
-    entidad_id: profile.rol === "ADMIN_ENTIDAD" ? profile.entidad_id! : input.entidad_id,
+
+  let responsable = input.responsable?.trim() || null;
+  if (!responsable && input.ambiente_id) {
+    const { data: ambiente } = await supabase
+      .from("ambientes")
+      .select("responsable")
+      .eq("id", input.ambiente_id)
+      .maybeSingle();
+    responsable = ambiente?.responsable?.trim() || null;
+  }
+
+  const esAdminEntidad = profile.rol === "ADMIN_ENTIDAD";
+
+  const payload: Record<string, unknown> = {
+    entidad_id: esAdminEntidad ? profile.entidad_id! : input.entidad_id,
     codigo_catalogo: input.codigo_catalogo.trim(),
     nombre: input.nombre.trim(),
     descripcion: input.descripcion?.trim() || null,
@@ -62,19 +92,28 @@ export async function createActivo(input: CreateActivoInput) {
     modelo: input.modelo?.trim() || null,
     serie: input.serie?.trim() || null,
     color: input.color?.trim() || null,
+    medidas: input.medidas?.trim() || null,
     medida_largo: input.medida_largo ?? null,
     medida_ancho: input.medida_ancho ?? null,
     medida_altura: input.medida_altura ?? null,
-    depreciacion: input.depreciacion?.trim() || null,
     observacion: input.observacion?.trim() || null,
-    responsable: input.responsable?.trim() || null,
+    responsable,
     valor_adquisicion: input.valor_adquisicion ?? null,
     valor_es_mercado: input.valor_es_mercado ?? false,
     fecha_adquisicion: input.fecha_adquisicion || null,
-    vida_util_meses: input.vida_util_meses ?? null,
     sede_id: input.sede_id || null,
     ambiente_id: input.ambiente_id || null,
   };
+
+  if (esAdminEntidad) {
+    payload.depreciacion = null;
+    payload.vida_util_meses = null;
+  } else {
+    payload.depreciacion = input.depreciacion?.trim() || null;
+    payload.vida_util_meses = input.vida_util_meses ?? null;
+  }
+  const comprobanteSerie = input.comprobante_serie?.trim();
+  if (comprobanteSerie) payload.comprobante_serie = comprobanteSerie;
 
   if (!payload.codigo_catalogo || !payload.nombre) {
     return { error: "Código catálogo y nombre son obligatorios." };
@@ -87,19 +126,352 @@ export async function createActivo(input: CreateActivoInput) {
   }
 
   revalidatePath("/contador/inventario");
+  revalidatePath("/contador/entidades");
+  if (payload.ambiente_id) {
+    revalidatePath(`/contador/entidades/${payload.entidad_id}/ambientes/${payload.ambiente_id}`);
+  }
   revalidatePath("/admin/activos");
   revalidatePath("/admin");
+  if (payload.ambiente_id) {
+    revalidatePath(`/admin/ambientes/${payload.ambiente_id}`);
+  }
   return { success: true, data };
 }
 
-export async function listActivos(entidadId?: string) {
+function revalidateActivoPaths(entidadId: string, ambienteId: string | null) {
+  revalidatePath("/contador/inventario");
+  revalidatePath("/contador/entidades");
+  if (ambienteId) {
+    revalidatePath(`/contador/entidades/${entidadId}/ambientes/${ambienteId}`);
+    revalidatePath(`/admin/ambientes/${ambienteId}`);
+  }
+  revalidatePath("/admin/activos");
+  revalidatePath("/admin");
+}
+
+export async function updateActivo(activoId: string, input: UpdateActivoInput) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+
+  const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id, estado_registro")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (profile.rol === "ADMIN_ENTIDAD" && existing.entidad_id !== profile.entidad_id) {
+    return { error: "No autorizado." };
+  }
+
+  const ambienteId = input.ambiente_id ?? existing.ambiente_id;
+  let responsable: string | null = null;
+
+  if (ambienteId) {
+    const { data: ambiente } = await supabase
+      .from("ambientes")
+      .select("responsable")
+      .eq("id", ambienteId)
+      .maybeSingle();
+    responsable = ambiente?.responsable?.trim() || null;
+  }
+
+  let payload: Record<string, unknown>;
+
+  if (profile.rol === "ADMIN_ENTIDAD") {
+    if (!input.sede_id || !ambienteId) {
+      return { error: "Seleccione sede y ambiente." };
+    }
+
+    const { data: sede } = await supabase
+      .from("sedes")
+      .select("entidad_id")
+      .eq("id", input.sede_id)
+      .maybeSingle();
+
+    if (!sede || sede.entidad_id !== profile.entidad_id) {
+      return { error: "La sede seleccionada no pertenece a su entidad." };
+    }
+
+    const { data: ambiente } = await supabase
+      .from("ambientes")
+      .select("sede_id")
+      .eq("id", ambienteId)
+      .maybeSingle();
+
+    if (!ambiente || ambiente.sede_id !== input.sede_id) {
+      return { error: "El ambiente no pertenece a la sede seleccionada." };
+    }
+
+    if (existing.estado_registro === "PREREGISTRADO") {
+      const codigo = input.codigo_catalogo.trim();
+      const nombre = input.nombre.trim();
+      if (!codigo || !nombre) {
+        return { error: "Código catálogo y nombre son obligatorios." };
+      }
+
+      payload = {
+        codigo_catalogo: codigo,
+        nombre,
+        descripcion: input.descripcion?.trim() || null,
+        caracteristicas: input.caracteristicas?.trim() || null,
+        categoria: input.categoria ?? "ACTIVO",
+        estado_bien: input.estado_bien ?? "BUENO",
+        marca: input.marca?.trim() || null,
+        modelo: input.modelo?.trim() || null,
+        serie: input.serie?.trim() || null,
+        color: input.color?.trim() || null,
+        medidas: input.medidas?.trim() || null,
+        medida_largo: input.medida_largo ?? null,
+        medida_ancho: input.medida_ancho ?? null,
+        medida_altura: input.medida_altura ?? null,
+        depreciacion: null,
+        observacion: input.observacion?.trim() || null,
+        responsable,
+        valor_adquisicion: input.valor_adquisicion ?? null,
+        valor_es_mercado: input.valor_es_mercado ?? false,
+        fecha_adquisicion: input.fecha_adquisicion || null,
+        vida_util_meses: null,
+        comprobante_serie: input.comprobante_serie?.trim() || null,
+        sede_id: input.sede_id,
+        ambiente_id: ambienteId,
+        updated_by: profile.id,
+      };
+    } else {
+      payload = {
+        sede_id: input.sede_id,
+        ambiente_id: ambienteId,
+        responsable,
+        updated_by: profile.id,
+      };
+    }
+  } else {
+    responsable = input.responsable?.trim() || responsable;
+
+    payload = {
+      codigo_catalogo: input.codigo_catalogo.trim(),
+      nombre: input.nombre.trim(),
+      descripcion: input.descripcion?.trim() || null,
+      caracteristicas: input.caracteristicas?.trim() || null,
+      categoria: input.categoria ?? "ACTIVO",
+      estado_bien: input.estado_bien ?? "BUENO",
+      marca: input.marca?.trim() || null,
+      modelo: input.modelo?.trim() || null,
+      serie: input.serie?.trim() || null,
+      color: input.color?.trim() || null,
+      medidas: input.medidas?.trim() || null,
+      medida_largo: input.medida_largo ?? null,
+      medida_ancho: input.medida_ancho ?? null,
+      medida_altura: input.medida_altura ?? null,
+      depreciacion: input.depreciacion?.trim() || null,
+      observacion: input.observacion?.trim() || null,
+      responsable,
+      valor_adquisicion: input.valor_adquisicion ?? null,
+      valor_es_mercado: input.valor_es_mercado ?? false,
+      fecha_adquisicion: input.fecha_adquisicion || null,
+      vida_util_meses: input.vida_util_meses ?? null,
+      sede_id: input.sede_id || null,
+      ambiente_id: ambienteId,
+      comprobante_serie: input.comprobante_serie?.trim() || null,
+      updated_by: profile.id,
+    };
+
+    const codigo = payload.codigo_catalogo as string;
+    const nombre = payload.nombre as string;
+    if (!codigo || !nombre) {
+      return { error: "Código catálogo y nombre son obligatorios." };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("activos")
+    .update(payload)
+    .eq("id", activoId)
+    .select()
+    .single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  const nuevoAmbienteId = (payload.ambiente_id as string | null) ?? existing.ambiente_id;
+  if (nuevoAmbienteId && nuevoAmbienteId !== existing.ambiente_id) {
+    revalidateActivoPaths(existing.entidad_id, nuevoAmbienteId);
+  }
+  return { success: true, data };
+}
+
+export async function cambiarUbicacionActivo(
+  activoId: string,
+  sedeId: string,
+  ambienteId: string,
+) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+
+  if (!sedeId || !ambienteId) {
+    return { error: "Seleccione sede y ambiente." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id, estado_registro")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (existing.estado_registro === "DADO_DE_BAJA") {
+    return { error: "No se puede mover un activo dado de baja." };
+  }
+
+  if (profile.rol === "ADMIN_ENTIDAD") {
+    if (existing.entidad_id !== profile.entidad_id) {
+      return { error: "No autorizado." };
+    }
+  } else if (profile.rol !== "CONTADOR") {
+    return { error: "No autorizado." };
+  }
+
+  const { data: sede } = await supabase
+    .from("sedes")
+    .select("entidad_id")
+    .eq("id", sedeId)
+    .maybeSingle();
+
+  if (!sede || sede.entidad_id !== existing.entidad_id) {
+    return { error: "La sede seleccionada no pertenece a la entidad del activo." };
+  }
+
+  const { data: ambiente } = await supabase
+    .from("ambientes")
+    .select("sede_id, responsable")
+    .eq("id", ambienteId)
+    .eq("activo", true)
+    .maybeSingle();
+
+  if (!ambiente || ambiente.sede_id !== sedeId) {
+    return { error: "El ambiente no pertenece a la sede seleccionada." };
+  }
+
+  const responsable = ambiente.responsable?.trim() || null;
+
+  const { error } = await supabase
+    .from("activos")
+    .update({
+      sede_id: sedeId,
+      ambiente_id: ambienteId,
+      responsable,
+      updated_by: profile.id,
+    })
+    .eq("id", activoId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  if (ambienteId !== existing.ambiente_id) {
+    revalidateActivoPaths(existing.entidad_id, ambienteId);
+  }
+  return { success: true };
+}
+
+export async function darDeBajaActivo(activoId: string, motivo: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") {
+    return { error: "Solo el contador puede dar de baja activos." };
+  }
+
+  const motivoBaja = motivo.trim();
+  if (!motivoBaja) {
+    return { error: "Indique el motivo de baja." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id, estado_registro")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (existing.estado_registro === "DADO_DE_BAJA") {
+    return { error: "El activo ya está inactivo." };
+  }
+
+  const { error } = await supabase
+    .from("activos")
+    .update({
+      estado_registro: "DADO_DE_BAJA" as EstadoRegistro,
+      motivo_baja: motivoBaja,
+      updated_by: profile.id,
+    })
+    .eq("id", activoId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  return { success: true };
+}
+
+export async function listActivosPorAmbiente(ambienteId: string) {
+  const profile = await getProfile();
+  if (!profile) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("activos")
+    .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .eq("ambiente_id", ambienteId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return mapActivoRows(data as Record<string, unknown>[]);
+}
+
+export type ActivoConUbicacion = Activo & ActivoListRow;
+
+function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicacion[] {
+  return (data ?? []).map((row) => {
+    const entidades = row.entidades as { nombre: string } | null;
+    const sedes = row.sedes as { nombre: string } | null;
+    const ambientes = row.ambientes as { nombre: string } | null;
+    const { entidades: _e, sedes: _s, ambientes: _a, ...activo } = row;
+    return {
+      ...(activo as unknown as Activo),
+      entidad_nombre: entidades?.nombre,
+      sede_nombre: sedes?.nombre,
+      ambiente_nombre: ambientes?.nombre,
+    };
+  });
+}
+
+export async function listActivos(entidadId?: string, filters?: ListActivosFilters) {
   const profile = await getProfile();
   if (!profile) return [];
 
   const supabase = await createClient();
   let query = supabase
     .from("activos")
-    .select("*, entidades(nombre)")
+    .select("*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
     .order("created_at", { ascending: false });
 
   if (profile.rol === "ADMIN_ENTIDAD") {
@@ -108,9 +480,23 @@ export async function listActivos(entidadId?: string) {
     query = query.eq("entidad_id", entidadId);
   }
 
+  const entidadFilter = filters?.entidadId;
+  if (profile.rol === "CONTADOR" && entidadFilter) {
+    query = query.eq("entidad_id", entidadFilter);
+  }
+  if (filters?.sedeId) {
+    query = query.eq("sede_id", filters.sedeId);
+  }
+  if (filters?.ambienteId) {
+    query = query.eq("ambiente_id", filters.ambienteId);
+  }
+  if (filters?.estadoRegistro) {
+    query = query.eq("estado_registro", filters.estadoRegistro);
+  }
+
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return data;
+  return mapActivoRows(data as Record<string, unknown>[]);
 }
 
 export async function registrarActivo(activoId: string) {
@@ -127,23 +513,45 @@ export async function registrarActivo(activoId: string) {
     return { error: error.message };
   }
 
-  revalidatePath("/contador/inventario");
-  revalidatePath("/admin/activos");
+  const { data: activo } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (activo) {
+    revalidateActivoPaths(activo.entidad_id, activo.ambiente_id);
+  } else {
+    revalidatePath("/contador/inventario");
+    revalidatePath("/admin/activos");
+  }
+
   return { success: true };
 }
 
 export async function updateActivoPaths(
   activoId: string,
-  paths: { foto_path?: string; comprobante_path?: string },
+  paths: { foto_path?: string; comprobante_path?: string; comprobante_serie?: string | null },
 ) {
   const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id")
+    .eq("id", activoId)
+    .maybeSingle();
+
   const { error } = await supabase.from("activos").update(paths).eq("id", activoId);
 
   if (error) {
     return { error: error.message };
   }
 
-  revalidatePath("/contador/inventario");
-  revalidatePath("/admin/activos");
+  if (existing) {
+    revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  } else {
+    revalidatePath("/contador/inventario");
+    revalidatePath("/admin/activos");
+  }
   return { success: true };
 }

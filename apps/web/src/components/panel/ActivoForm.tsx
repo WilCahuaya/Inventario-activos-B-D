@@ -1,19 +1,37 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Ambiente, CatalogoNacional, CategoriaBien, Entidad, Sede } from "@inventario/types";
+import type { Activo, Ambiente, CatalogoNacional, CategoriaBien, Entidad, Sede } from "@inventario/types";
 import {
   CATEGORIA_BIEN_LABELS,
   buildNombreConsolidado,
   calcDepreciacionAcumulada,
   calcPeriodoMeses,
   calcValorNeto,
+  formatFechaInputDDMMYYYY,
+  formatFechaISOToDDMMYYYY,
+  formatPorcentajeDepreciacion,
+  parseFechaDDMMYYYY,
+  parsePorcentajeDepreciacion,
+  porcentajeFromVidaUtilMeses,
+  validarFechaDDMMYYYY,
+  vidaUtilMesesFromPorcentaje,
 } from "@inventario/types";
 import { Button, Input, Label } from "@inventario/ui";
-import { createActivo, previewCodigoBarras, updateActivoPaths } from "@/lib/actions/activos";
+import {
+  createActivo,
+  previewCodigoBarras,
+  cambiarUbicacionActivo,
+  updateActivo,
+  updateActivoPaths,
+  type UpdateActivoInput,
+} from "@/lib/actions/activos";
+import { getCatalogoByCodigo } from "@/lib/actions/catalogo";
 import { createAmbiente, createSede, listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 import { uploadActivoFile } from "@/lib/upload-activo-file";
 import { CatalogoPicker } from "./CatalogoPicker";
+import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
+import { panelFieldsetClass, panelLegendClass } from "./panel-ui";
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
@@ -24,9 +42,17 @@ const textareaClass =
 interface ActivoFormProps {
   entidades: Entidad[];
   fixedEntidadId?: string;
+  fixedSedeId?: string;
+  fixedAmbienteId?: string;
+  activo?: Activo;
+  mode?: "create" | "edit";
   submitLabel?: string;
   /** Contador asigna correlativo al crear; admin preregistra sin código */
   asignaCodigoInmediato?: boolean;
+  /** Admin entidad: en edición solo puede cambiar sede/ambiente */
+  soloUbicacion?: boolean;
+  variant?: "page" | "modal";
+  onSuccess?: () => void;
 }
 
 function formatSoles(value: number | null) {
@@ -37,30 +63,41 @@ function formatSoles(value: number | null) {
 export function ActivoForm({
   entidades,
   fixedEntidadId,
+  fixedSedeId,
+  fixedAmbienteId,
+  activo,
+  mode = activo ? "edit" : "create",
   submitLabel = "Registrar activo",
   asignaCodigoInmediato = true,
+  soloUbicacion = false,
+  variant = "page",
+  onSuccess,
 }: ActivoFormProps) {
+  const isEdit = mode === "edit" && Boolean(activo);
+  const soloUbicacionEdit = isEdit && soloUbicacion;
+  /** Alta preregistro admin */
+  const esPreregistro = !asignaCodigoInmediato && !isEdit;
+  /** Preregistro admin (crear o editar PREREGISTRADO): sin depreciación ni vida útil */
+  const esPreregistroAdmin =
+    !asignaCodigoInmediato && (!isEdit || activo?.estado_registro === "PREREGISTRADO");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [catalogo, setCatalogo] = useState<CatalogoNacional | null>(null);
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
-  const [caracteristicas, setCaracteristicas] = useState("");
   const [categoria, setCategoria] = useState<CategoriaBien>("ACTIVO");
   const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">("BUENO");
   const [marca, setMarca] = useState("");
   const [modelo, setModelo] = useState("");
   const [serie, setSerie] = useState("");
   const [color, setColor] = useState("");
-  const [medidaLargo, setMedidaLargo] = useState("");
-  const [medidaAncho, setMedidaAncho] = useState("");
-  const [medidaAltura, setMedidaAltura] = useState("");
+  const [medidas, setMedidas] = useState("");
   const [depreciacion, setDepreciacion] = useState("");
   const [vidaUtilMeses, setVidaUtilMeses] = useState("");
   const [valor, setValor] = useState("");
   const [valorEsMercado, setValorEsMercado] = useState(false);
   const [fechaAdquisicion, setFechaAdquisicion] = useState("");
-  const [responsable, setResponsable] = useState("");
+  const [fechaAdquisicionError, setFechaAdquisicionError] = useState<string | null>(null);
   const [observacion, setObservacion] = useState("");
   const [entidadId, setEntidadId] = useState(fixedEntidadId ?? "");
   const [codigoBarrasPreview, setCodigoBarrasPreview] = useState<string | null>(null);
@@ -71,15 +108,74 @@ export function ActivoForm({
   const [nuevaSede, setNuevaSede] = useState("");
   const [nuevoAmbiente, setNuevoAmbiente] = useState("");
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
+  const [comprobanteSerie, setComprobanteSerie] = useState("");
+  const [serieDialogOpen, setSerieDialogOpen] = useState(false);
+  const [pendingComprobanteFile, setPendingComprobanteFile] = useState<File | null>(null);
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
 
   const entidadEfectiva = fixedEntidadId ?? entidadId;
 
   useEffect(() => {
+    if (!activo || !isEdit) return;
+
+    void getCatalogoByCodigo(activo.codigo_catalogo).then((item) => {
+      if (item) setCatalogo(item);
+    });
+
+    setNombre(activo.nombre);
+    setDescripcion(activo.descripcion ?? "");
+    setCategoria(activo.categoria);
+    setEstadoBien(activo.estado_bien);
+    setMarca(activo.marca ?? "");
+    setModelo(activo.modelo ?? "");
+    setSerie(activo.serie ?? "");
+    setColor(activo.color ?? "");
+    setMedidas(activo.medidas ?? "");
+    setDepreciacion(activo.depreciacion ?? "");
+    setVidaUtilMeses(activo.vida_util_meses != null ? String(activo.vida_util_meses) : "");
+    setValor(activo.valor_adquisicion != null ? String(activo.valor_adquisicion) : "");
+    setValorEsMercado(activo.valor_es_mercado);
+    setFechaAdquisicion(formatFechaISOToDDMMYYYY(activo.fecha_adquisicion));
+    setObservacion(activo.observacion ?? "");
+    setComprobanteSerie(activo.comprobante_serie ?? "");
+    setCodigoBarrasPreview(activo.codigo_barras);
+    if (activo.sede_id) setSedeId(activo.sede_id);
+    if (activo.ambiente_id) setAmbienteId(activo.ambiente_id);
+  }, [activo, isEdit]);
+
+  useEffect(() => {
     if (catalogo) {
       setNombre(catalogo.denominacion);
-      if (catalogo.depreciacion) setDepreciacion(catalogo.depreciacion);
+      if (!esPreregistroAdmin && catalogo.depreciacion) {
+        setDepreciacion(catalogo.depreciacion);
+        const pct = parsePorcentajeDepreciacion(catalogo.depreciacion);
+        if (pct) setVidaUtilMeses(String(vidaUtilMesesFromPorcentaje(pct)));
+      }
     }
-  }, [catalogo?.codigo]);
+  }, [catalogo?.codigo, esPreregistroAdmin]);
+
+  function handleDepreciacionChange(value: string) {
+    setDepreciacion(value);
+    const pct = parsePorcentajeDepreciacion(value);
+    if (pct) setVidaUtilMeses(String(vidaUtilMesesFromPorcentaje(pct)));
+  }
+
+  function handleVidaUtilChange(value: string) {
+    setVidaUtilMeses(value);
+    const meses = Number(value);
+    if (value && !Number.isNaN(meses) && meses > 0) {
+      setDepreciacion(formatPorcentajeDepreciacion(porcentajeFromVidaUtilMeses(meses)));
+    }
+  }
+
+  function handleFechaAdquisicionChange(value: string) {
+    setFechaAdquisicion(formatFechaInputDDMMYYYY(value));
+    if (fechaAdquisicionError) setFechaAdquisicionError(null);
+  }
+
+  function handleFechaAdquisicionBlur() {
+    setFechaAdquisicionError(validarFechaDDMMYYYY(fechaAdquisicion));
+  }
 
   useEffect(() => {
     if (!entidadEfectiva || !catalogo?.codigo || !asignaCodigoInmediato) {
@@ -90,27 +186,47 @@ export function ActivoForm({
   }, [entidadEfectiva, catalogo?.codigo, asignaCodigoInmediato]);
 
   useEffect(() => {
+    if (fixedSedeId && !soloUbicacionEdit) {
+      setSedeId(fixedSedeId);
+      return;
+    }
     if (!entidadEfectiva) {
       setSedes([]);
-      setSedeId("");
+      if (!soloUbicacionEdit) setSedeId("");
       return;
     }
     void listSedes(entidadEfectiva).then((data) => {
       setSedes(data);
-      if (data.length === 1) setSedeId(data[0].id);
+      if (data.length === 1 && !soloUbicacionEdit) setSedeId(data[0].id);
     });
-  }, [entidadEfectiva]);
+  }, [entidadEfectiva, fixedSedeId, soloUbicacionEdit]);
+
+  useEffect(() => {
+    if (fixedAmbienteId && !soloUbicacionEdit) setAmbienteId(fixedAmbienteId);
+  }, [fixedAmbienteId, soloUbicacionEdit]);
 
   useEffect(() => {
     if (!sedeId) {
       setAmbientes([]);
-      setAmbienteId("");
+      if (!soloUbicacionEdit) setAmbienteId("");
       return;
     }
-    void listAmbientes(sedeId).then(setAmbientes);
-  }, [sedeId]);
+    void listAmbientes(sedeId).then((data) => {
+      setAmbientes(data);
+      if (soloUbicacionEdit && ambienteId && !data.some((a) => a.id === ambienteId)) {
+        setAmbienteId("");
+      }
+    });
+  }, [sedeId, soloUbicacionEdit, ambienteId]);
 
-  const periodoMeses = useMemo(() => calcPeriodoMeses(fechaAdquisicion || null), [fechaAdquisicion]);
+  const fechaAdquisicionIso = useMemo(
+    () => (fechaAdquisicion.trim() ? parseFechaDDMMYYYY(fechaAdquisicion) : null),
+    [fechaAdquisicion],
+  );
+  const periodoMeses = useMemo(
+    () => calcPeriodoMeses(fechaAdquisicionIso),
+    [fechaAdquisicionIso],
+  );
   const valorNum = valor ? Number(valor) : null;
   const vidaUtilNum = vidaUtilMeses ? Number(vidaUtilMeses) : null;
   const depreciacionAcumulada = useMemo(
@@ -122,34 +238,56 @@ export function ActivoForm({
     [valorNum, depreciacionAcumulada],
   );
   const nombreConsolidado = useMemo(
-    () => buildNombreConsolidado(nombre, descripcion, caracteristicas),
-    [nombre, descripcion, caracteristicas],
+    () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas),
+    [nombre, marca, modelo, serie, color, medidas],
   );
 
   function resetFormulario() {
     setCatalogo(null);
     setNombre("");
     setDescripcion("");
-    setCaracteristicas("");
     setCategoria("ACTIVO");
     setEstadoBien("BUENO");
     setMarca("");
     setModelo("");
     setSerie("");
     setColor("");
-    setMedidaLargo("");
-    setMedidaAncho("");
-    setMedidaAltura("");
+    setMedidas("");
     setDepreciacion("");
     setVidaUtilMeses("");
     setValor("");
     setValorEsMercado(false);
     setFechaAdquisicion("");
-    setResponsable("");
+    setFechaAdquisicionError(null);
     setObservacion("");
     setAmbienteId("");
     setComprobanteFile(null);
+    setComprobanteSerie("");
+    setFotoFile(null);
     setCodigoBarrasPreview(null);
+  }
+
+  function handleComprobanteFileSelect(file: File | null) {
+    if (!file) {
+      setComprobanteFile(null);
+      return;
+    }
+    setPendingComprobanteFile(file);
+    setSerieDialogOpen(true);
+  }
+
+  function confirmComprobanteSerie(serie: string) {
+    setComprobanteSerie(serie);
+    if (pendingComprobanteFile) {
+      setComprobanteFile(pendingComprobanteFile);
+    }
+    setPendingComprobanteFile(null);
+    setSerieDialogOpen(false);
+  }
+
+  function cancelComprobanteSerie() {
+    setPendingComprobanteFile(null);
+    setSerieDialogOpen(false);
   }
 
   async function handleCrearSede() {
@@ -166,7 +304,10 @@ export function ActivoForm({
 
   async function handleCrearAmbiente() {
     if (!sedeId || !nuevoAmbiente.trim()) return;
-    const result = await createAmbiente(sedeId, nuevoAmbiente);
+    const result = await createAmbiente({
+      sedeId,
+      nombre: nuevoAmbiente,
+    });
     if (result.error) {
       setMessage(result.error);
       return;
@@ -178,8 +319,28 @@ export function ActivoForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setPending(true);
     setMessage(null);
+
+    if (soloUbicacionEdit && activo) {
+      if (!sedeId || !ambienteId) {
+        setPending(false);
+        setMessage("Seleccione sede y ambiente.");
+        return;
+      }
+
+      const result = await cambiarUbicacionActivo(activo.id, sedeId, ambienteId);
+
+      setPending(false);
+      if (result.error) {
+        setMessage(result.error);
+        return;
+      }
+      setMessage("Ubicación actualizada correctamente.");
+      onSuccess?.();
+      return;
+    }
 
     if (!catalogo) {
       setPending(false);
@@ -193,31 +354,49 @@ export function ActivoForm({
       return;
     }
 
-    const result = await createActivo({
-      entidad_id: entidadEfectiva,
+    const fechaError = validarFechaDDMMYYYY(fechaAdquisicion);
+    if (fechaError) {
+      setFechaAdquisicionError(fechaError);
+      setPending(false);
+      setMessage(fechaError);
+      return;
+    }
+
+    const payload: UpdateActivoInput = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
       descripcion: descripcion || undefined,
-      caracteristicas: caracteristicas || undefined,
       categoria,
       estado_bien: estadoBien,
       marca: marca || undefined,
       modelo: modelo || undefined,
       serie: serie || undefined,
       color: color || undefined,
-      medida_largo: medidaLargo ? Number(medidaLargo) : undefined,
-      medida_ancho: medidaAncho ? Number(medidaAncho) : undefined,
-      medida_altura: medidaAltura ? Number(medidaAltura) : undefined,
-      depreciacion: depreciacion || undefined,
+      medidas: medidas || undefined,
       observacion: observacion || undefined,
-      responsable: responsable || undefined,
       valor_adquisicion: valor ? Number(valor) : undefined,
       valor_es_mercado: valorEsMercado,
-      fecha_adquisicion: fechaAdquisicion || undefined,
-      vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
-      sede_id: sedeId || undefined,
-      ambiente_id: ambienteId || undefined,
+      fecha_adquisicion: fechaAdquisicionIso || undefined,
+      sede_id: (fixedSedeId ?? sedeId) || undefined,
+      ambiente_id: (fixedAmbienteId ?? ambienteId) || undefined,
+    };
+
+    Object.assign(payload, {
+      comprobante_serie: comprobanteSerie.trim() || undefined,
     });
+    if (!esPreregistroAdmin) {
+      Object.assign(payload, {
+        depreciacion: depreciacion || undefined,
+        vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
+      });
+    }
+
+    const result = isEdit && activo
+      ? await updateActivo(activo.id, payload)
+      : await createActivo({
+          entidad_id: entidadEfectiva,
+          ...payload,
+        });
 
     if (result.error) {
       setPending(false);
@@ -225,30 +404,95 @@ export function ActivoForm({
       return;
     }
 
-    if (comprobanteFile && result.data?.id) {
-      const upload = await uploadActivoFile(entidadEfectiva, result.data.id, comprobanteFile, "comprobante");
-      if (upload.path) {
-        await updateActivoPaths(result.data.id, { comprobante_path: upload.path });
+    const activoId = isEdit && activo ? activo.id : result.data?.id;
+    if (activoId && entidadEfectiva) {
+      if (comprobanteFile) {
+        const upload = await uploadActivoFile(entidadEfectiva, activoId, comprobanteFile, "comprobante");
+        if (upload.path) {
+          await updateActivoPaths(activoId, {
+            comprobante_path: upload.path,
+            comprobante_serie: comprobanteSerie.trim() || null,
+          });
+        }
+      } else if (comprobanteSerie.trim()) {
+        await updateActivoPaths(activoId, { comprobante_serie: comprobanteSerie.trim() });
+      }
+
+      if (fotoFile) {
+        const uploadFoto = await uploadActivoFile(entidadEfectiva, activoId, fotoFile, "foto");
+        if (uploadFoto.path) {
+          await updateActivoPaths(activoId, { foto_path: uploadFoto.path });
+        }
       }
     }
 
     setPending(false);
-    setMessage(
-      result.data?.estado_registro === "REGISTRADO"
-        ? `Activo registrado. Código: ${result.data.codigo_barras ?? codigoBarrasPreview ?? "—"}`
-        : "Activo preregistrado. Pendiente de validación del contador.",
-    );
-    resetFormulario();
-    event.currentTarget.reset();
+    if (isEdit) {
+      setMessage("Activo actualizado correctamente.");
+    } else {
+      setMessage(
+        result.data?.estado_registro === "REGISTRADO"
+          ? `Activo registrado. Código: ${result.data.codigo_barras ?? codigoBarrasPreview ?? "—"}`
+          : "Activo preregistrado. Pendiente de validación del contador.",
+      );
+      resetFormulario();
+      form.reset();
+    }
+    onSuccess?.();
   }
 
-  return (
-    <form onSubmit={handleSubmit} className="relative space-y-6 overflow-visible rounded-lg border bg-card p-4">
-      <p className="text-sm font-medium">Nuevo activo</p>
+  const hideUbicacion = !soloUbicacionEdit && Boolean(fixedAmbienteId && fixedSedeId);
+  const formGridClass =
+    variant === "modal"
+      ? soloUbicacionEdit
+        ? "grid grid-cols-1 gap-4"
+        : "grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2"
+      : "space-y-6";
+  const fieldsetCompact = variant === "modal" ? `${panelFieldsetClass} lg:col-span-1` : panelFieldsetClass;
+  const fieldsetWide = variant === "modal" ? `${panelFieldsetClass} col-span-1 lg:col-span-2` : panelFieldsetClass;
+  const categoriaGridClass = variant === "modal" ? "grid gap-3 sm:grid-cols-2" : "space-y-3";
+  const detalleGridClass =
+    variant === "modal"
+      ? "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4"
+      : "grid gap-4 sm:grid-cols-2 lg:grid-cols-4";
+  const textareaModalClass =
+    variant === "modal" ? `${textareaClass} min-h-[100px] sm:min-h-[120px] lg:min-h-[160px] lg:flex-1` : textareaClass;
+  const fieldsetNotasClass =
+    variant === "modal" ? `${fieldsetCompact} lg:flex lg:flex-col` : fieldsetWide;
 
+  return (
+    <>
+    <form
+      onSubmit={handleSubmit}
+      className={
+        variant === "modal"
+          ? `${formGridClass} relative max-h-[85vh] overflow-y-auto pr-0.5 sm:max-h-[78vh] sm:pr-1`
+          : "relative space-y-6 overflow-visible rounded-xl border border-border/70 bg-card p-6 shadow-sm"
+      }
+    >
+      {variant === "page" && (
+        <p className="text-sm font-medium">
+          {soloUbicacionEdit ? "Editar ubicación" : isEdit ? "Editar activo" : "Nuevo activo"}
+        </p>
+      )}
+
+      {soloUbicacionEdit && activo && (
+        <div className="col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 lg:col-span-2">
+          <p className="font-semibold text-foreground">{activo.nombre}</p>
+          <p className="font-mono text-xs text-muted-foreground">
+            {activo.codigo_barras ?? activo.codigo_catalogo}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Seleccione la sede y el ambiente de destino. El bien se moverá dentro de su entidad.
+          </p>
+        </div>
+      )}
+
+      {!soloUbicacionEdit && (
+      <>
       {/* Identificación */}
-      <fieldset className="space-y-4 rounded-md border border-border/60 p-4">
-        <legend className="px-1 text-sm font-medium">Identificación</legend>
+      <fieldset className={fieldsetCompact}>
+        <legend className={panelLegendClass}>Identificación</legend>
 
         {!fixedEntidadId && (
           <div className="space-y-2">
@@ -278,6 +522,7 @@ export function ActivoForm({
             setCatalogo(null);
             setNombre("");
             setDepreciacion("");
+            setVidaUtilMeses("");
           }}
         />
 
@@ -294,10 +539,13 @@ export function ActivoForm({
           />
         </div>
 
-        <div className="space-y-3">
-          <Label>Categoría</Label>
+        <div className={categoriaGridClass}>
+          <Label className={variant === "modal" ? "sm:col-span-2" : undefined}>Categoría</Label>
           {(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => (
-            <label key={key} className="flex cursor-pointer gap-3 rounded-md border p-3 has-[:checked]:border-primary">
+            <label
+              key={key}
+              className="flex cursor-pointer gap-3 rounded-md border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+            >
               <input
                 type="radio"
                 name="categoria"
@@ -325,44 +573,12 @@ export function ActivoForm({
             onChange={(e) => setNombre(e.target.value)}
           />
         </div>
-
-        <div className="space-y-2">
-          <Label>Nombre consolidado</Label>
-          <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-            {nombreConsolidado || "—"}
-          </p>
-        </div>
-      </fieldset>
-
-      {/* Descripción */}
-      <fieldset className="space-y-4 rounded-md border border-border/60 p-4">
-        <legend className="px-1 text-sm font-medium">Descripción y características (opcional)</legend>
-        <div className="space-y-2">
-          <Label htmlFor="descripcion">Descripción</Label>
-          <textarea
-            id="descripcion"
-            className={textareaClass}
-            value={descripcion}
-            onChange={(e) => setDescripcion(e.target.value)}
-            placeholder="Uso, ubicación física, detalle general…"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="caracteristicas">Características del bien</Label>
-          <textarea
-            id="caracteristicas"
-            className={textareaClass}
-            value={caracteristicas}
-            onChange={(e) => setCaracteristicas(e.target.value)}
-            placeholder="Material, capacidad, accesorios…"
-          />
-        </div>
       </fieldset>
 
       {/* Detalle físico */}
-      <fieldset className="space-y-4 rounded-md border border-border/60 p-4">
-        <legend className="px-1 text-sm font-medium">Detalle del bien</legend>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <fieldset className={fieldsetCompact}>
+        <legend className={panelLegendClass}>Detalle del bien</legend>
+        <div className={detalleGridClass}>
           <div className="space-y-2">
             <Label htmlFor="marca">Marca</Label>
             <Input id="marca" value={marca} onChange={(e) => setMarca(e.target.value)} />
@@ -381,33 +597,13 @@ export function ActivoForm({
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Medidas (Largo × Ancho × Altura) cm</Label>
-          <div className="grid grid-cols-3 gap-2">
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="Largo"
-              value={medidaLargo}
-              onChange={(e) => setMedidaLargo(e.target.value)}
-            />
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="Ancho"
-              value={medidaAncho}
-              onChange={(e) => setMedidaAncho(e.target.value)}
-            />
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="Altura"
-              value={medidaAltura}
-              onChange={(e) => setMedidaAltura(e.target.value)}
-            />
-          </div>
+          <Label htmlFor="medidas">Medidas</Label>
+          <Input
+            id="medidas"
+            value={medidas}
+            onChange={(e) => setMedidas(e.target.value)}
+            placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="estado_bien">Estado del bien</Label>
@@ -422,11 +618,27 @@ export function ActivoForm({
             <option value="MALO">Malo</option>
           </select>
         </div>
+        <div className="space-y-2 border-t border-border/50 pt-4">
+          <Label>Nombre consolidado</Label>
+          <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+            {nombreConsolidado || "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Se forma con: nombre, marca, modelo, serie, color y medidas.
+          </p>
+        </div>
       </fieldset>
 
       {/* Valoración */}
-      <fieldset className="space-y-4 rounded-md border border-border/60 p-4">
-        <legend className="px-1 text-sm font-medium">Valoración y depreciación</legend>
+      <fieldset className={fieldsetCompact}>
+        <legend className={panelLegendClass}>
+          {esPreregistroAdmin ? "Valoración (opcional)" : "Valoración y depreciación"}
+        </legend>
+        {esPreregistroAdmin && (
+          <p className="text-sm text-muted-foreground">
+            La depreciación y vida útil las completará el contador al validar el preregistro.
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="valor">
@@ -457,62 +669,144 @@ export function ActivoForm({
             <Label htmlFor="fecha_adquisicion">Fecha de adquisición</Label>
             <Input
               id="fecha_adquisicion"
-              type="date"
+              inputMode="numeric"
               value={fechaAdquisicion}
-              onChange={(e) => setFechaAdquisicion(e.target.value)}
+              onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
+              onBlur={handleFechaAdquisicionBlur}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+              aria-invalid={Boolean(fechaAdquisicionError)}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="comprobante">Comprobante de adquisición</Label>
-            <Input
-              id="comprobante"
-              type="file"
-              accept="application/pdf,image/jpeg,image/png"
-              onChange={(e) => setComprobanteFile(e.target.files?.[0] ?? null)}
-            />
+            {fechaAdquisicionError && (
+              <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+            )}
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="depreciacion">Depreciación (catálogo, editable)</Label>
+            <Label htmlFor="comprobante_serie">Serie del comprobante</Label>
             <Input
-              id="depreciacion"
-              value={depreciacion}
-              onChange={(e) => setDepreciacion(e.target.value)}
-              placeholder="Del catálogo nacional"
+              id="comprobante_serie"
+              value={comprobanteSerie}
+              onChange={(e) => setComprobanteSerie(e.target.value)}
+              placeholder="Ej. F/E001-129 (puede ir sin PDF)"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="vida_util_meses">Vida útil (meses)</Label>
+            <Label htmlFor="comprobante">PDF del comprobante</Label>
             <Input
-              id="vida_util_meses"
-              type="number"
-              min="1"
-              value={vidaUtilMeses}
-              onChange={(e) => setVidaUtilMeses(e.target.value)}
+              id="comprobante"
+              type="file"
+              accept="application/pdf,image/jpeg,image/png"
+              onChange={(e) => handleComprobanteFileSelect(e.target.files?.[0] ?? null)}
+            />
+            {comprobanteFile && (
+              <p className="text-xs text-primary">Archivo listo: {comprobanteFile.name}</p>
+            )}
+            {isEdit && activo?.comprobante_path && !comprobanteFile && (
+              <p className="text-xs text-muted-foreground">Ya hay un PDF adjunto</p>
+            )}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="foto_activo">Foto del activo</Label>
+          <Input
+            id="foto_activo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setFotoFile(e.target.files?.[0] ?? null)}
+          />
+          {fotoFile && <p className="text-xs text-primary">Foto lista: {fotoFile.name}</p>}
+          {isEdit && activo?.foto_path && !fotoFile && (
+            <p className="text-xs text-muted-foreground">Ya hay una foto adjunta</p>
+          )}
+        </div>
+        {!esPreregistroAdmin && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="depreciacion">Depreciación anual (%)</Label>
+                <Input
+                  id="depreciacion"
+                  value={depreciacion}
+                  onChange={(e) => handleDepreciacionChange(e.target.value)}
+                  placeholder="Ej. 10 %"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Al ingresar el % se calcula la vida útil en meses
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vida_util_meses">Vida útil (meses)</Label>
+                <Input
+                  id="vida_util_meses"
+                  type="number"
+                  min="1"
+                  value={vidaUtilMeses}
+                  onChange={(e) => handleVidaUtilChange(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Al ingresar meses se calcula el % anual equivalente
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 rounded-md bg-muted/50 p-3 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Periodo (meses)</p>
+                <p className="font-medium">{fechaAdquisicionIso ? periodoMeses : "—"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Meses desde la fecha de adquisición</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Depreciación acumulada</p>
+                <p className="font-medium">{formatSoles(depreciacionAcumulada)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  (Valor ÷ vida útil) × periodo, sin superar el valor
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Valor neto</p>
+                <p className="font-medium">{formatSoles(valorNeto)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Valor menos depreciación acumulada</p>
+              </div>
+            </div>
+          </>
+        )}
+      </fieldset>
+
+      {/* Descripción y observación — columna derecha en modal */}
+      <fieldset className={fieldsetNotasClass}>
+        <legend className={panelLegendClass}>Descripción y observación (opcional)</legend>
+        <div className={variant === "modal" ? "flex flex-col gap-4 lg:flex-1 lg:flex-col" : "grid gap-4 lg:grid-cols-2"}>
+          <div className={variant === "modal" ? "space-y-2 lg:flex lg:flex-1 lg:flex-col" : "space-y-2"}>
+            <Label htmlFor="descripcion">Descripción</Label>
+            <textarea
+              id="descripcion"
+              className={textareaModalClass}
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              placeholder="Uso, ubicación física, detalle general…"
+            />
+          </div>
+          <div className={variant === "modal" ? "space-y-2 lg:flex lg:flex-1 lg:flex-col" : "space-y-2"}>
+            <Label htmlFor="observacion">Observación</Label>
+            <textarea
+              id="observacion"
+              className={textareaModalClass}
+              value={observacion}
+              onChange={(e) => setObservacion(e.target.value)}
+              placeholder="Notas adicionales, incidencias, condiciones especiales…"
             />
           </div>
         </div>
-        <div className="grid gap-4 rounded-md bg-muted/50 p-3 sm:grid-cols-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Periodo (meses)</p>
-            <p className="font-medium">{fechaAdquisicion ? periodoMeses : "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Depreciación acumulada</p>
-            <p className="font-medium">{formatSoles(depreciacionAcumulada)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Valor neto</p>
-            <p className="font-medium">{formatSoles(valorNeto)}</p>
-          </div>
-        </div>
       </fieldset>
+      </>
+      )}
 
-      {/* Ubicación y responsable */}
-      <fieldset className="space-y-4 rounded-md border border-border/60 p-4">
-        <legend className="px-1 text-sm font-medium">Ubicación y responsable</legend>
-        {sedes.length === 0 ? (
+      {/* Ubicación */}
+      {!hideUbicacion && (
+      <fieldset className={fieldsetWide}>
+        <legend className={panelLegendClass}>Ubicación</legend>
+        {!soloUbicacionEdit && sedes.length === 0 ? (
           <div className="flex flex-wrap gap-2">
             <Input
               placeholder="Nombre de sede (ej. Sede principal)"
@@ -529,9 +823,14 @@ export function ActivoForm({
             <Label htmlFor="sede_id">Sede</Label>
             <select
               id="sede_id"
+              required={soloUbicacionEdit}
               className={selectClass}
               value={sedeId}
-              onChange={(e) => setSedeId(e.target.value)}
+              onChange={(e) => {
+                const nextSede = e.target.value;
+                setSedeId(nextSede);
+                if (soloUbicacionEdit) setAmbienteId("");
+              }}
             >
               <option value="">Seleccione…</option>
               {sedes.map((s) => (
@@ -548,6 +847,7 @@ export function ActivoForm({
             <Label htmlFor="ambiente_id">Ambiente</Label>
             <select
               id="ambiente_id"
+              required={soloUbicacionEdit}
               className={selectClass}
               value={ambienteId}
               onChange={(e) => setAmbienteId(e.target.value)}
@@ -559,52 +859,46 @@ export function ActivoForm({
                 </option>
               ))}
             </select>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Input
-                placeholder="Nuevo ambiente"
-                value={nuevoAmbiente}
-                onChange={(e) => setNuevoAmbiente(e.target.value)}
-                className="max-w-xs"
-              />
-              <Button type="button" variant="outline" size="sm" onClick={handleCrearAmbiente}>
-                Agregar ambiente
-              </Button>
-            </div>
+            {!soloUbicacionEdit && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Input
+                  placeholder="Nuevo ambiente"
+                  value={nuevoAmbiente}
+                  onChange={(e) => setNuevoAmbiente(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={handleCrearAmbiente}>
+                  Agregar ambiente
+                </Button>
+              </div>
+            )}
           </div>
         )}
-
-        <div className="space-y-2">
-          <Label htmlFor="responsable">Responsable</Label>
-          <Input
-            id="responsable"
-            value={responsable}
-            onChange={(e) => setResponsable(e.target.value)}
-            placeholder="Persona a cargo del bien"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="observacion">Observación</Label>
-          <textarea
-            id="observacion"
-            className={textareaClass}
-            value={observacion}
-            onChange={(e) => setObservacion(e.target.value)}
-          />
-        </div>
       </fieldset>
+      )}
 
       {message && (
         <p
-          className={`text-sm ${message.includes("Error") || message.includes("obligator") || message.includes("Seleccione") ? "text-destructive" : "text-primary"}`}
+          className={`text-sm col-span-1 lg:col-span-2 ${message.includes("Error") || message.includes("obligator") || message.includes("Seleccione") ? "text-destructive" : "text-primary"}`}
         >
           {message}
         </p>
       )}
 
-      <Button type="submit" disabled={pending || !catalogo}>
-        {pending ? "Guardando…" : submitLabel}
-      </Button>
+      <div className={variant === "modal" ? "col-span-1 lg:col-span-2" : undefined}>
+        <Button type="submit" disabled={pending || (!catalogo && !soloUbicacionEdit)}>
+          {pending ? "Guardando…" : submitLabel}
+        </Button>
+      </div>
     </form>
+
+    <ComprobanteSerieDialog
+      open={serieDialogOpen}
+      fileName={pendingComprobanteFile?.name}
+      initialSerie={comprobanteSerie}
+      onConfirm={confirmComprobanteSerie}
+      onCancel={cancelComprobanteSerie}
+    />
+    </>
   );
 }

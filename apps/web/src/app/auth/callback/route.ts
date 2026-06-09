@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { provisionProfileFromEntidad } from "@/lib/auth/entidad-admin";
 import { homePathForRole } from "@inventario/types";
 import { NextResponse } from "next/server";
 
@@ -25,11 +26,18 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=auth`);
   }
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
     .select("rol, activo")
     .eq("id", user.id)
     .maybeSingle();
+
+  if (!profile?.activo) {
+    const provisioned = await provisionProfileFromEntidad(user);
+    if (provisioned?.activo) {
+      profile = provisioned;
+    }
+  }
 
   if (!profile?.activo) {
     await supabase.auth.signOut();

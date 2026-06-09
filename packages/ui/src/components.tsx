@@ -1,4 +1,8 @@
+"use client";
+
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -62,7 +66,7 @@ export function Label({
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)}>
+    <div className={cn("rounded-xl border border-border/70 bg-card text-card-foreground shadow-sm", className)}>
       {children}
     </div>
   );
@@ -82,6 +86,67 @@ export function CardDescription({ className, children }: { className?: string; c
 
 export function CardContent({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cn("p-6 pt-0", className)}>{children}</div>;
+}
+
+export function Dialog({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  className,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  description?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open || !mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 p-2 sm:items-center sm:p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        className={cn(
+          "max-h-[92vh] w-full overflow-y-auto rounded-xl border border-border/70 bg-card p-4 shadow-lg sm:max-h-[90vh] sm:p-6",
+          className ?? "max-w-lg",
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 space-y-1">
+          <h2 id="dialog-title" className="text-lg font-semibold">
+            {title}
+          </h2>
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        </div>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 export { cn };

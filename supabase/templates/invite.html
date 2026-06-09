@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invitación — B&amp;D Consultores</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f7f9;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f7f9;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.08);">
+          <!-- Cabecera marca -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#2d8fad 0%,#3ba3c4 50%,#2d8fad 100%);padding:28px 32px;text-align:center;">
+              <p style="margin:0 0 6px;font-size:28px;font-weight:700;letter-spacing:0.02em;color:#ffffff;line-height:1;">B&amp;D</p>
+              <p style="margin:0;font-size:12px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.9);">Consultores Global EIRL</p>
+            </td>
+          </tr>
+          <!-- Cuerpo -->
+          <tr>
+            <td style="padding:32px 32px 24px;">
+              <p style="margin:0 0 8px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#2d8fad;">Inventario de Activos Fijos</p>
+              <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;line-height:1.35;color:#0f172a;">Ha sido invitado al sistema</h1>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#475569;">
+                <strong style="color:#0f172a;">B&amp;D Consultores Global EIRL</strong> le ha designado como
+                <strong style="color:#0f172a;">administrador de entidad</strong> en nuestra plataforma de inventario de activos fijos.
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.65;color:#475569;">
+                Acepte la invitación con el botón inferior e inicie sesión con su cuenta de <strong>Google</strong> usando el mismo correo al que llegó este mensaje.
+              </p>
+              <!-- Botón CTA -->
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 24px;">
+                <tr>
+                  <td style="border-radius:8px;background-color:#2d8fad;">
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
+                      Aceptar invitación e ingresar
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#94a3b8;">
+                Si el botón no funciona, copie y pegue este enlace en su navegador:
+              </p>
+              <p style="margin:0;font-size:12px;line-height:1.5;word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color:#2d8fad;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+          <!-- Pie -->
+          <tr>
+            <td style="padding:20px 32px 28px;border-top:1px solid #e2e8f0;background-color:#f8fafc;">
+              <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#64748b;">B&amp;D Consultores Global EIRL</p>
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#94a3b8;">
+                RUC 20614326418 · Sistema de Inventario de Activos Fijos
+              </p>
+              <p style="margin:12px 0 0;font-size:11px;color:#cbd5e1;">
+                Este correo fue enviado a {{ .Email }}. Si no esperaba esta invitación, puede ignorar el mensaje.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

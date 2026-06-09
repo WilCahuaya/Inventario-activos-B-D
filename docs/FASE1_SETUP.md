@@ -14,6 +14,7 @@
    - `supabase/migrations/20260608100000_fase1_schema.sql`
    - `supabase/migrations/20260609100000_catalogo_nacional.sql`
    - `supabase/migrations/20260610100000_activos_campos_extendidos.sql`
+   - `supabase/migrations/20260611100000_fase2_entidad_sede_ambiente.sql`
 
 3. Cargar catálogo nacional (~4.726 ítems):
 

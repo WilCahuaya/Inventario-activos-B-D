@@ -1,33 +1,20 @@
-import Link from "next/link";
-import { APP_CLIENT, APP_NAME } from "@inventario/types";
-import { PanelSidebar } from "@/components/panel/PanelSidebar";
-import { LogoutButton } from "@/components/shared/LogoutButton";
+import { PanelLayout } from "@/components/panel/PanelLayout";
+import type { PanelNavItem } from "@/components/panel/panel-nav-icons";
 
-const ADMIN_LINKS = [
-  { href: "/admin", label: "Mi inventario" },
-  { href: "/admin/activos", label: "Activos" },
+const ADMIN_LINKS: PanelNavItem[] = [
+  { href: "/admin", label: "Mi inventario", icon: "dashboard" },
+  { href: "/admin/activos", label: "Ambientes", icon: "inventory" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <header className="border-b bg-card">
-        <div className="flex items-center justify-between px-4 py-4">
-          <div>
-            <Link href="/admin">
-              <p className="text-lg font-semibold text-primary">{APP_NAME}</p>
-              <p className="text-xs text-muted-foreground">
-                Panel entidad — {APP_CLIENT}
-              </p>
-            </Link>
-          </div>
-          <LogoutButton />
-        </div>
-      </header>
-      <div className="flex flex-1">
-        <PanelSidebar title="Administrador" links={ADMIN_LINKS} />
-        <main className="flex-1 p-6">{children}</main>
-      </div>
-    </div>
+    <PanelLayout
+      panelLabel="Panel entidad"
+      homeHref="/admin"
+      sidebarTitle="Administrador"
+      links={ADMIN_LINKS}
+    >
+      {children}
+    </PanelLayout>
   );
 }

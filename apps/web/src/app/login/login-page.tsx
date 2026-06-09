@@ -18,7 +18,7 @@ export default function LoginPage() {
       setError("No se pudo completar el inicio de sesión con Google. Intente nuevamente.");
     } else if (err === "no_profile") {
       setError(
-        "Su cuenta de Google no está autorizada. Contacte al administrador para que active su perfil en el sistema.",
+        "Su cuenta de Google no está autorizada. Debe ser invitado como administrador al crear una entidad, o tener un perfil de contador.",
       );
     }
   }, [searchParams]);
@@ -57,7 +57,7 @@ export default function LoginPage() {
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md rounded-xl border-border/70 shadow-lg">
         <CardHeader className="items-center space-y-4 text-center">
           <BrandLogo size="large" />
           <CardDescription>Inventario de Activos Fijos</CardDescription>
