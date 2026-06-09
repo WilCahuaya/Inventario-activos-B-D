@@ -2,36 +2,23 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Input } from "@inventario/ui";
+import {
+  panelCardClass,
+} from "@inventario/ui/panel";
 
-export const panelCardClass =
-  "overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm";
-export const panelFieldsetClass =
-  "space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm";
-export const panelLegendClass = "px-1 text-sm font-semibold text-foreground";
-
-/** Ancho responsive para modales de formulario (móvil → desktop) */
-export const panelModalClass =
-  "w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:w-[95vw] sm:max-w-[95vw] md:w-[88vw] md:max-w-[88vw] lg:w-[70vw] lg:max-w-[70vw]";
-
-export function SearchIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-      aria-hidden
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z"
-      />
-    </svg>
-  );
-}
+export {
+  PanelBanner,
+  PanelCountLabel,
+  PanelEmptyState,
+  PanelSearchInput,
+  PanelToolbar,
+  SearchIcon,
+  StatusBadge,
+  panelCardClass,
+  panelFieldsetClass,
+  panelLegendClass,
+  panelModalClass,
+} from "@inventario/ui/panel";
 
 export function EditIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
@@ -95,63 +82,6 @@ export function PanelPageHeader({
   );
 }
 
-export function PanelBanner({
-  label,
-  title,
-  subtitle,
-}: {
-  label: string;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-primary/80">{label}</p>
-      <p className="font-semibold text-primary">{title}</p>
-      {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
-    </div>
-  );
-}
-
-export function PanelSearchInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-        <SearchIcon />
-      </span>
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? "Buscar…"}
-        className="pl-9"
-      />
-    </div>
-  );
-}
-
-export function PanelEmptyState({
-  message,
-  action,
-}: {
-  message: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-6 py-12 text-center">
-      <p className="font-medium text-muted-foreground">{message}</p>
-      {action && <div className="mt-4">{action}</div>}
-    </div>
-  );
-}
-
 export function PanelStatCard({
   label,
   value,
@@ -176,56 +106,4 @@ export function PanelStatCard({
     );
   }
   return content;
-}
-
-export function PanelCountLabel({
-  count,
-  singular,
-  plural,
-}: {
-  count: number;
-  singular: string;
-  plural: string;
-}) {
-  return (
-    <p className="text-sm text-muted-foreground">
-      {count} {count === 1 ? singular : plural}
-    </p>
-  );
-}
-
-export function StatusBadge({
-  children,
-  variant = "default",
-}: {
-  children: ReactNode;
-  variant?: "active" | "pending" | "default";
-}) {
-  const classes =
-    variant === "active"
-      ? "bg-emerald-100 text-emerald-700"
-      : variant === "pending"
-        ? "bg-amber-100 text-amber-800"
-        : "bg-muted text-muted-foreground";
-
-  return (
-    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${classes}`}>
-      {children}
-    </span>
-  );
-}
-
-export function PanelToolbar({
-  left,
-  right,
-}: {
-  left?: ReactNode;
-  right?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      {left}
-      {right}
-    </div>
-  );
 }

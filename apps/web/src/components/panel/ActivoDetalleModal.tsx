@@ -10,6 +10,7 @@ import {
   calcPeriodoMeses,
   calcValorNeto,
   categoriaBienCorto,
+  formatCorrelativoCompleto,
   formatCorrelativoDisplay,
   formatFechaISOToDDMMYYYY,
   formatMonedaPE,
@@ -124,7 +125,15 @@ export function ActivoDetalleModal({
           <section className="space-y-2 rounded-lg border border-border/50 bg-muted/20 p-4">
             <h3 className="text-sm font-semibold text-primary">Identificación</h3>
             <DetalleRow label="Código catálogo" value={activo.codigo_catalogo} />
-            <DetalleRow label="Correlativo" value={formatCorrelativoDisplay(activo.correlativo)} />
+            <DetalleRow
+              label="Correlativo"
+              value={
+                activo.codigo_barras ??
+                (formatCorrelativoCompleto(activo.codigo_catalogo, activo.correlativo) ||
+                  formatCorrelativoDisplay(activo.correlativo) ||
+                  undefined)
+              }
+            />
             <DetalleRow label="Código de barras" value={activo.codigo_barras} />
             <DetalleRow
               label="Categoría"

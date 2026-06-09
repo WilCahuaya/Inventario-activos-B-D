@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { Activo } from "@inventario/types";
+import { TablePagination, useTablePagination } from "@inventario/ui/panel";
 import {
   buildDescripcionBien,
   calcDepreciacionAcumulada,
@@ -84,6 +85,22 @@ export function ActivosInventarioExcelView({
   emptyActionLabel = "+ Nuevo activo",
   modoAdmin = false,
 }: ActivosInventarioExcelViewProps) {
+  const paginationKey = useMemo(
+    () => `${activos.length}:${activos[0]?.id ?? ""}`,
+    [activos],
+  );
+  const {
+    paginated,
+    page,
+    setPage,
+    totalPages,
+    total,
+    rangeStart,
+    rangeEnd,
+    pageSize,
+    rowOffset,
+  } = useTablePagination(activos, paginationKey);
+
   const accionesProps = {
     puedeDarDeBaja,
     puedeValidarPreregistro,
@@ -97,7 +114,7 @@ export function ActivosInventarioExcelView({
     <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
       <div className="lg:hidden">
         <ActivosInventarioMobileCards
-          activos={activos}
+          activos={paginated}
           onEditActivo={onEditActivo}
           {...accionesProps}
         />
@@ -175,7 +192,8 @@ export function ActivosInventarioExcelView({
                 </td>
               </tr>
             )}
-            {activos.map((activo, index) => {
+            {paginated.map((activo, index) => {
+              const rowIndex = rowOffset + index;
               const descripcion = buildDescripcionBien(
                 activo.marca,
                 activo.modelo,
@@ -200,13 +218,13 @@ export function ActivosInventarioExcelView({
                 ? "bg-muted/40 opacity-60"
                 : preregistrado
                   ? "bg-amber-500/10 hover:bg-amber-500/15"
-                  : index % 2 === 0
+                  : rowIndex % 2 === 0
                     ? "bg-card"
                     : "bg-muted/20 hover:bg-muted/30";
 
               return (
                 <tr key={activo.id} className={rowClass}>
-                  <Cell center>{index + 1}</Cell>
+                  <Cell center>{rowIndex + 1}</Cell>
                   <Cell center>1</Cell>
                   <Cell center>Und.</Cell>
                   <Cell center>{categoriaBienCorto(activo.categoria)}</Cell>
@@ -260,6 +278,16 @@ export function ActivosInventarioExcelView({
           </tbody>
         </table>
       </div>
+
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        pageSize={pageSize}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

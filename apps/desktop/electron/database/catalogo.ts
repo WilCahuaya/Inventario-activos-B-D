@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { app } from "electron";
+import { initOfflineSchema } from "./offline";
 
 export interface CatalogoRow {
   codigo: string;
@@ -49,6 +50,7 @@ export function initCatalogDatabase(): void {
       value TEXT NOT NULL
     );
   `);
+  initOfflineSchema(db);
 }
 
 export function replaceCatalog(rows: CatalogoRow[]): CatalogoMeta {
@@ -78,11 +80,25 @@ export function replaceCatalog(rows: CatalogoRow[]): CatalogoMeta {
   return { count: rows.length, syncedAt };
 }
 
+export function getCatalogByCodigo(codigo: string): CatalogoRow | null {
+  if (!db) throw new Error("Base de datos no inicializada");
+
+  const trimmed = codigo.trim();
+  if (!trimmed) return null;
+
+  const row = db
+    .prepare("SELECT * FROM catalogo_nacional WHERE codigo = @codigo LIMIT 1")
+    .get({ codigo: trimmed }) as CatalogoRow | undefined;
+
+  return row ?? null;
+}
+
 export function searchCatalog(query: string, limit = 20): CatalogoRow[] {
   if (!db) throw new Error("Base de datos no inicializada");
 
   const trimmed = query.trim();
-  if (trimmed.length < 2) return [];
+  const isDigits = /^\d+$/.test(trimmed);
+  if (trimmed.length < (isDigits ? 1 : 2)) return [];
 
   const pattern = `%${trimmed}%`;
   const prefix = `${trimmed}%`;

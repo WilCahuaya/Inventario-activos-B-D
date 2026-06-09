@@ -1,12 +1,28 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
+import { loadDesktopEnvFiles } from "./env";
+import { inviteEntidadAdmin } from "./invite";
 import {
+  getCatalogByCodigo,
   getCatalogMeta,
   initCatalogDatabase,
   replaceCatalog,
   searchCatalog,
   type CatalogoRow,
 } from "./database/catalogo";
+import {
+  cacheMeta,
+  enqueueSyncItem,
+  findCachedActivo,
+  listCachedActivos,
+  listSyncQueue,
+  removeSyncItem,
+  replaceActivosCache,
+  setSyncItemError,
+  syncQueueCount,
+  upsertCachedActivo,
+} from "./database/offline";
+import { buildLabelZpl, listSystemPrinters, saveZplDialog, sendZplToPrinter } from "./print";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -100,11 +116,45 @@ ipcMain.handle("catalog:search", (_event, query: string, limit?: number) => {
   return searchCatalog(query, limit);
 });
 
+ipcMain.handle("catalog:getByCodigo", (_event, codigo: string) => {
+  return getCatalogByCodigo(codigo);
+});
+
 ipcMain.handle("catalog:meta", () => {
   return getCatalogMeta();
 });
 
+ipcMain.handle("offline:enqueue", (_event, item) => enqueueSyncItem(item));
+ipcMain.handle("offline:queue", () => listSyncQueue());
+ipcMain.handle("offline:queueCount", () => syncQueueCount());
+ipcMain.handle("offline:remove", (_event, id: string) => removeSyncItem(id));
+ipcMain.handle("offline:setError", (_event, id: string, error: string) => setSyncItemError(id, error));
+ipcMain.handle("offline:cacheReplace", (_event, entidadId: string, items: unknown[]) =>
+  replaceActivosCache(entidadId, items),
+);
+ipcMain.handle("offline:cacheFind", (_event, entidadId: string, codigo: string) =>
+  findCachedActivo(entidadId, codigo),
+);
+ipcMain.handle("offline:cacheUpsert", (_event, entidadId: string, activo: unknown) =>
+  upsertCachedActivo(entidadId, activo),
+);
+ipcMain.handle("offline:cacheMeta", (_event, entidadId: string) => cacheMeta(entidadId));
+ipcMain.handle("offline:cacheList", (_event, entidadId: string) => listCachedActivos(entidadId));
+
+ipcMain.handle("print:buildZpl", (_event, options) => buildLabelZpl(options));
+ipcMain.handle("print:saveDialog", (event, zpl: string) => {
+  const parent = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  return saveZplDialog(zpl, parent);
+});
+ipcMain.handle("print:send", (_event, zpl: string, printerName?: string) =>
+  sendZplToPrinter(zpl, printerName),
+);
+ipcMain.handle("print:listPrinters", () => listSystemPrinters());
+
+ipcMain.handle("invite:entidadAdmin", (_event, input) => inviteEntidadAdmin(input));
+
 app.whenReady().then(() => {
+  loadDesktopEnvFiles();
   initCatalogDatabase();
   createWindow();
 });

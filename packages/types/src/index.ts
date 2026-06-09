@@ -150,9 +150,19 @@ export function formatFechaISOToDDMMYYYY(iso: string | null | undefined): string
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
-export function formatCorrelativoDisplay(correlativo: number | null, digits = 4): string {
+/** Correlativo con ceros (6 dígitos por defecto, ej. 000001). */
+export function formatCorrelativoDisplay(correlativo: number | null, digits = 6): string {
   if (correlativo == null) return "";
   return String(correlativo).padStart(digits, "0");
+}
+
+/** Código completo catálogo-correlativo (ej. 74080500-000001). */
+export function formatCorrelativoCompleto(
+  codigoCatalogo: string,
+  correlativo: number | null,
+): string {
+  if (correlativo == null || !codigoCatalogo.trim()) return "";
+  return formatCodigoBarras({ codigo_catalogo: codigoCatalogo.trim(), correlativo });
 }
 
 export function formatMonedaPE(value: number | null | undefined): string {

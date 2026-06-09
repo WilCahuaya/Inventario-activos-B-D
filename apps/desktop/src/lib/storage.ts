@@ -1,0 +1,31 @@
+import { getSupabaseClient } from "./supabase";
+
+export async function uploadActivoFile(
+  entidadId: string,
+  activoId: string,
+  file: File,
+  kind: "foto" | "comprobante",
+): Promise<{ path?: string; error?: string }> {
+  const bucket = kind === "foto" ? "fotos-activos" : "comprobantes-activos";
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+  const path = `${entidadId}/${activoId}/${kind}.${ext}`;
+
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.storage.from(bucket).upload(path, file, {
+    upsert: true,
+    contentType: file.type,
+  });
+
+  if (error) return { error: error.message };
+  return { path };
+}
+
+export async function updateActivoPaths(
+  activoId: string,
+  paths: { foto_path?: string; comprobante_path?: string; comprobante_serie?: string | null },
+): Promise<{ error?: string }> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.from("activos").update(paths).eq("id", activoId);
+  if (error) return { error: error.message };
+  return {};
+}

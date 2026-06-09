@@ -35,7 +35,9 @@ export async function syncCatalogToLocalDb(): Promise<{ count: number; syncedAt:
 
   const rows = await fetchCatalogoFromSupabase();
   if (rows.length === 0) {
-    throw new Error("El catálogo en Supabase está vacío. Aplique migración e importación.");
+    throw new Error(
+      "Sin catálogo en el servidor. Ejecute «pnpm import:catalogo» en el proyecto y vuelva a sincronizar.",
+    );
   }
 
   return window.electronAPI.syncCatalog(rows);
