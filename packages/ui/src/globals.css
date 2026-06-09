@@ -2,26 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Paleta AZUL OCÉANO (#3a91b5)
+ * Tema claro: fondo #f4f9fc · tarjetas #ffffff · acento #3a91b5 · texto #1c2d37 · secundario #5a7380
+ * Tema oscuro: fondo #0f171c · tarjetas #1a262f · acento #56add1 · texto #e2ecef · secundario #8fa3ad
+ */
+
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    --background: 200 33% 97%;
+    --foreground: 203 33% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 213 56% 22%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 20% 94%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 20% 94%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 20% 94%;
-    --accent-foreground: 222 47% 11%;
+    --card-foreground: 203 33% 16%;
+    --primary: 198 51% 47%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 28% 93%;
+    --secondary-foreground: 203 33% 16%;
+    --muted: 200 30% 94%;
+    --muted-foreground: 200 17% 43%;
+    --accent: 200 35% 92%;
+    --accent-foreground: 203 33% 16%;
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 20% 88%;
-    --input: 214 20% 88%;
-    --ring: 213 56% 22%;
-    --radius: 0.5rem;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 25% 89%;
+    --input: 200 25% 89%;
+    --ring: 198 51% 47%;
+    --brand: 198 51% 47%;
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 200 30% 8%;
+    --foreground: 192 29% 91%;
+    --card: 203 29% 14%;
+    --card-foreground: 192 29% 91%;
+    --primary: 198 56% 58%;
+    --primary-foreground: 200 30% 8%;
+    --secondary: 203 22% 18%;
+    --secondary-foreground: 192 29% 91%;
+    --muted: 203 22% 17%;
+    --muted-foreground: 200 16% 62%;
+    --accent: 203 24% 20%;
+    --accent-foreground: 192 29% 91%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 205 10% 16%;
+    --input: 205 8% 18%;
+    --ring: 198 56% 58%;
+    --brand: 198 51% 47%;
+  }
+}
+
+@layer components {
+  .dark :where(.border, .border-b, .border-t, .border-r, .border-l, .border-x, .border-y) {
+    border-color: hsl(192 18% 88% / 0.07);
+  }
+
+  .dark .border-dashed {
+    border-color: hsl(192 18% 88% / 0.1);
+  }
+}
+
+@layer utilities {
+  .dark .border-input {
+    border-color: hsl(192 18% 88% / 0.08);
   }
 }
 

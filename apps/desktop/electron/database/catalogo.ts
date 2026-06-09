@@ -1,0 +1,131 @@
+import Database from "better-sqlite3";
+import path from "path";
+import { app } from "electron";
+
+export interface CatalogoRow {
+  codigo: string;
+  denominacion: string;
+  grupo: string | null;
+  clase: string | null;
+  cuenta_codigo: string | null;
+  contabilidad: string | null;
+  depreciacion: string | null;
+  resolucion: string | null;
+  estado: string | null;
+}
+
+export interface CatalogoMeta {
+  count: number;
+  syncedAt: string | null;
+}
+
+let db: Database.Database | null = null;
+
+function getDbPath(): string {
+  return path.join(app.getPath("userData"), "inventario.db");
+}
+
+export function initCatalogDatabase(): void {
+  if (db) return;
+
+  db = new Database(getDbPath());
+  db.pragma("journal_mode = WAL");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS catalogo_nacional (
+      codigo TEXT PRIMARY KEY NOT NULL,
+      denominacion TEXT NOT NULL,
+      grupo TEXT,
+      clase TEXT,
+      cuenta_codigo TEXT,
+      contabilidad TEXT,
+      depreciacion TEXT,
+      resolucion TEXT,
+      estado TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_catalogo_denominacion
+      ON catalogo_nacional (denominacion);
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+}
+
+export function replaceCatalog(rows: CatalogoRow[]): CatalogoMeta {
+  if (!db) throw new Error("Base de datos no inicializada");
+
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO catalogo_nacional (
+      codigo, denominacion, grupo, clase, cuenta_codigo,
+      contabilidad, depreciacion, resolucion, estado
+    ) VALUES (
+      @codigo, @denominacion, @grupo, @clase, @cuenta_codigo,
+      @contabilidad, @depreciacion, @resolucion, @estado
+    )
+  `);
+
+  const syncedAt = new Date().toISOString();
+  const tx = db.transaction((items: CatalogoRow[]) => {
+    db!.exec("DELETE FROM catalogo_nacional");
+    for (const row of items) insert.run(row);
+    db!.prepare(
+      "INSERT OR REPLACE INTO meta (key, value) VALUES ('catalogo_synced_at', @value)",
+    ).run({ value: syncedAt });
+  });
+
+  tx(rows);
+
+  return { count: rows.length, syncedAt };
+}
+
+export function searchCatalog(query: string, limit = 20): CatalogoRow[] {
+  if (!db) throw new Error("Base de datos no inicializada");
+
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const pattern = `%${trimmed}%`;
+  const prefix = `${trimmed}%`;
+
+  return db
+    .prepare(
+      `
+      SELECT *
+      FROM catalogo_nacional
+      WHERE codigo LIKE @prefix OR denominacion LIKE @pattern
+      ORDER BY
+        CASE WHEN codigo = @exact THEN 0 ELSE 1 END,
+        CASE WHEN codigo LIKE @prefix THEN 0 ELSE 1 END,
+        length(denominacion),
+        denominacion
+      LIMIT @limit
+    `,
+    )
+    .all({
+      exact: trimmed,
+      prefix,
+      pattern,
+      limit: Math.min(Math.max(limit, 1), 50),
+    }) as CatalogoRow[];
+}
+
+export function getCatalogMeta(): CatalogoMeta {
+  if (!db) throw new Error("Base de datos no inicializada");
+
+  const countRow = db.prepare("SELECT COUNT(*) AS count FROM catalogo_nacional").get() as {
+    count: number;
+  };
+  const syncedRow = db
+    .prepare("SELECT value FROM meta WHERE key = 'catalogo_synced_at'")
+    .get() as { value: string } | undefined;
+
+  return {
+    count: countRow?.count ?? 0,
+    syncedAt: syncedRow?.value ?? null,
+  };
+}
+
+export function closeCatalogDatabase(): void {
+  db?.close();
+  db = null;
+}

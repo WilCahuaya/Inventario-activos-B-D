@@ -1,45 +1,63 @@
 import { redirect } from "next/navigation";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@inventario/ui";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@inventario/ui";
+import { getProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ContadorDashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const profile = await getProfile();
+  if (!profile || profile.rol !== "CONTADOR") redirect("/login");
 
-  if (!user) {
-    redirect("/login");
-  }
+  const supabase = await createClient();
+  const [{ count: entidades }, { count: activos }, { count: preregistrados }] = await Promise.all([
+    supabase.from("entidades").select("*", { count: "exact", head: true }).eq("activo", true),
+    supabase.from("activos").select("*", { count: "exact", head: true }),
+    supabase
+      .from("activos")
+      .select("*", { count: "exact", head: true })
+      .eq("estado_registro", "PREREGISTRADO"),
+  ]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Dashboard — Contador</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Sesión iniciada. Los módulos completos se implementarán en Fase 2. La validación
-          de rol se agregará en Fase 1.
-        </p>
-        <dl className="grid gap-2 rounded-lg border bg-muted/30 p-4 text-sm">
-          <div className="flex gap-2">
-            <dt className="font-medium text-muted-foreground">Usuario:</dt>
-            <dd>{user.email}</dd>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Dashboard — Contador</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Bienvenido, <strong>{profile.nombre}</strong> ({profile.email})
+          </p>
+          <dl className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <dt className="text-xs text-muted-foreground">Entidades</dt>
+              <dd className="text-2xl font-bold text-primary">{entidades ?? 0}</dd>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <dt className="text-xs text-muted-foreground">Activos totales</dt>
+              <dd className="text-2xl font-bold text-primary">{activos ?? 0}</dd>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <dt className="text-xs text-muted-foreground">Por validar</dt>
+              <dd className="text-2xl font-bold text-primary">{preregistrados ?? 0}</dd>
+            </div>
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/contador/entidades"
+              className="inline-flex h-10 items-center justify-center rounded-md bg-secondary px-4 text-sm font-medium text-secondary-foreground hover:opacity-90"
+            >
+              Gestionar entidades
+            </Link>
+            <Link
+              href="/contador/inventario"
+              className="inline-flex h-10 items-center justify-center rounded-md bg-secondary px-4 text-sm font-medium text-secondary-foreground hover:opacity-90"
+            >
+              Ver inventario
+            </Link>
           </div>
-        </dl>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" disabled>
-            Entidades (Fase 2)
-          </Button>
-          <Button variant="secondary" disabled>
-            Inventario (Fase 2)
-          </Button>
-          <Button variant="secondary" disabled>
-            Reportes (Fase 4)
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

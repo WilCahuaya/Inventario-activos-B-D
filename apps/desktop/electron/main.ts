@@ -1,5 +1,12 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
+import {
+  getCatalogMeta,
+  initCatalogDatabase,
+  replaceCatalog,
+  searchCatalog,
+  type CatalogoRow,
+} from "./database/catalogo";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -85,7 +92,22 @@ ipcMain.handle("auth:google", async (_event, oauthUrl: string) => {
   });
 });
 
-app.whenReady().then(createWindow);
+ipcMain.handle("catalog:replace", (_event, rows: CatalogoRow[]) => {
+  return replaceCatalog(rows);
+});
+
+ipcMain.handle("catalog:search", (_event, query: string, limit?: number) => {
+  return searchCatalog(query, limit);
+});
+
+ipcMain.handle("catalog:meta", () => {
+  return getCatalogMeta();
+});
+
+app.whenReady().then(() => {
+  initCatalogDatabase();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

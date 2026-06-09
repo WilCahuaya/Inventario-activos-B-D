@@ -1,21 +1,47 @@
 import { PublicPageHeader } from "@/components/public/PublicPageHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "@inventario/ui";
+import { CLIENTES } from "@/lib/content/public";
 
 export default function ClientesPage() {
+  const { sectores } = CLIENTES;
+
   return (
-    <section>
-      <PublicPageHeader
-        title="Clientes"
-        description="Entidades que confían en nuestros servicios de inventario."
-      />
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-        {["Municipalidad", "Entidad pública", "Empresa privada"].map((cliente) => (
-          <div
-            key={cliente}
-            className="flex h-24 items-center justify-center rounded-lg border bg-muted/30 text-sm text-muted-foreground"
-          >
-            {cliente} — próximamente
-          </div>
-        ))}
+    <section className="space-y-8">
+      <PublicPageHeader title="Clientes" description={CLIENTES.heading} />
+      <p className="max-w-2xl text-muted-foreground">{CLIENTES.intro}</p>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg text-primary">{sectores.publico.title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {sectores.publico.items.map((item) => (
+                <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg text-primary">{sectores.privado.title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {sectores.privado.items.map((item) => (
+                <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       </div>
     </section>
   );

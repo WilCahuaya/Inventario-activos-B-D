@@ -1,6 +1,6 @@
 # Especificación código de barras v1
 
-**Estado:** Propuesta Fase 0 — pendiente validación contadores  
+**Estado:** Acordado Fase 1 — catálogo nacional 8 dígitos  
 **Simbología:** Code 128  
 **Impresora:** Honeywell PC42E-T (ZSim / ZPL II)
 
@@ -10,14 +10,14 @@
 {CODIGO_CATALOGO}-{CORRELATIVO}
 
 Ejemplos:
-  33521-000001
-  3361-000042
-  3369-001234
+  74080001-000001
+  04220050-000042
+  33690101-001234
 ```
 
 | Parte | Descripción | Ejemplo |
 |---|---|---|
-| Código catálogo | Código oficial del catálogo nacional | `33521` |
+| Código catálogo | Código oficial del catálogo nacional SBN (8 dígitos) | `74080001` |
 | Separador | Guión `-` | `-` |
 | Correlativo | Secuencial por entidad, 6 dígitos con ceros | `000001` |
 
@@ -27,6 +27,7 @@ Ejemplos:
 2. Unicidad: `(entidad_id, correlativo)` en base de datos.
 3. La pistola USB envía el string completo + Enter.
 4. La app parsea con `parseCodigoBarras()` de `@inventario/types`.
+5. `codigo_catalogo` debe existir en `catalogo_nacional` (FK).
 
 ## ZPL de referencia (etiqueta 50×25 mm)
 
@@ -46,5 +47,6 @@ Ejemplos:
 
 ## Implementación
 
+- **Catálogo:** `catalogo_nacional` en Supabase + réplica SQLite desktop
 - **Generación:** ZPL en Fase 3 (`apps/desktop`)
 - **Parsing:** `@inventario/types` — `formatCodigoBarras` / `parseCodigoBarras`

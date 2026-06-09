@@ -67,9 +67,16 @@ Ver [docs/PLAN_DESARROLLO_MVP_v1.md](./docs/PLAN_DESARROLLO_MVP_v1.md)
 | 5 — Piloto | Pendiente |
 | 6 — Cierre MVP | Pendiente |
 
+## Deploy (Vercel)
+
+Ver guía paso a paso: [docs/DEPLOY_VERCEL.md](./docs/DEPLOY_VERCEL.md)
+
+Resumen: importar repo en Vercel, **Root Directory** = `apps/web`, rama `main`, variables `NEXT_PUBLIC_SUPABASE_*`.
+
 ## Documentación
 
 - [Plan de desarrollo](./docs/PLAN_DESARROLLO_MVP_v1.md)
+- [Deploy Vercel](./docs/DEPLOY_VERCEL.md)
 - [Arquitectura v1](./docs/ARQUITECTURA_v1.md)
 - [Código de barras v1](./docs/CODIGO_BARRAS_v1.md)
 - [Login con Google](./docs/AUTH_GOOGLE.md)

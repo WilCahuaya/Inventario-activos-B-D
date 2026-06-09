@@ -35,3 +35,5 @@ Resumen:
 ## Fase 1
 
 Migraciones de tablas, RLS, roles y storage.
+
+👉 **[docs/FASE1_SETUP.md](../docs/FASE1_SETUP.md)**

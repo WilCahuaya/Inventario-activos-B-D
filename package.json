@@ -11,9 +11,11 @@
     "dev:web": "pnpm --filter @inventario/web dev",
     "dev:desktop": "pnpm --filter @inventario/desktop dev",
     "build:web": "pnpm --filter @inventario/web build",
-    "build:desktop": "pnpm --filter @inventario/desktop build"
+    "build:desktop": "pnpm --filter @inventario/desktop build",
+    "import:catalogo": "node scripts/import-catalogo.mjs"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.47.10",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   },
@@ -23,6 +25,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "better-sqlite3",
       "electron",
       "esbuild"
     ]

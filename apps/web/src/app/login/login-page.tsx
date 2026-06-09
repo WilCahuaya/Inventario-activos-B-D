@@ -2,15 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { APP_CLIENT, APP_NAME } from "@inventario/types";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@inventario/ui";
+import { Button, Card, CardContent, CardDescription, CardHeader } from "@inventario/ui";
+import { BrandLogo } from "@/components/public/BrandLogo";
+import { ThemeToggle } from "@/components/public/ThemeToggle";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -19,8 +13,13 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (searchParams.get("error") === "auth") {
+    const err = searchParams.get("error");
+    if (err === "auth") {
       setError("No se pudo completar el inicio de sesión con Google. Intente nuevamente.");
+    } else if (err === "no_profile") {
+      setError(
+        "Su cuenta de Google no está autorizada. Contacte al administrador para que active su perfil en el sistema.",
+      );
     }
   }, [searchParams]);
 
@@ -54,18 +53,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-muted to-primary/15 p-4">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-primary">{APP_NAME}</CardTitle>
-          <CardDescription>{APP_CLIENT}</CardDescription>
+        <CardHeader className="items-center space-y-4 text-center">
+          <BrandLogo size="large" />
+          <CardDescription>Inventario de Activos Fijos</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-sm text-muted-foreground">
             Inicie sesión con su cuenta corporativa de Google
           </p>
           {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           )}
           <Button
             type="button"

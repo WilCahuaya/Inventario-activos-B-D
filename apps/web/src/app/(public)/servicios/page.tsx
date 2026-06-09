@@ -1,26 +1,19 @@
 import { PublicPageHeader } from "@/components/public/PublicPageHeader";
-
-const SERVICIOS = [
-  "Inventario físico de activos fijos",
-  "Auditoría y verificación en campo",
-  "Valorización y depreciación",
-  "Reportes institucionales PDF/Excel",
-];
+import { ServiceCard } from "@/components/public/ServiceCard";
+import { SERVICIOS } from "@/lib/content/public";
 
 export default function ServiciosPage() {
   return (
     <section>
       <PublicPageHeader
         title="Servicios"
-        description="Soluciones de inventario y control patrimonial para su entidad."
+        description="Asesoría contable, tributaria y servicios especializados de control patrimonial."
       />
-      <ul className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {SERVICIOS.map((servicio) => (
-          <li key={servicio} className="rounded-lg border bg-card p-4 text-sm">
-            {servicio}
-          </li>
+          <ServiceCard key={servicio.title} title={servicio.title} description={servicio.description} />
         ))}
-      </ul>
+      </div>
     </section>
   );
 }

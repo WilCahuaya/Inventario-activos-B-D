@@ -1,0 +1,21 @@
+import { createClient } from "@/lib/supabase/client";
+
+export async function uploadActivoFile(
+  entidadId: string,
+  activoId: string,
+  file: File,
+  kind: "foto" | "comprobante",
+): Promise<{ path?: string; error?: string }> {
+  const bucket = kind === "foto" ? "fotos-activos" : "comprobantes-activos";
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+  const path = `${entidadId}/${activoId}/${kind}.${ext}`;
+
+  const supabase = createClient();
+  const { error } = await supabase.storage.from(bucket).upload(path, file, {
+    upsert: true,
+    contentType: file.type,
+  });
+
+  if (error) return { error: error.message };
+  return { path };
+}

@@ -11,4 +11,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("auth-callback", listener);
     return () => ipcRenderer.removeListener("auth-callback", listener);
   },
+  syncCatalog: (rows: unknown[]) => ipcRenderer.invoke("catalog:replace", rows),
+  searchCatalogLocal: (query: string, limit?: number) =>
+    ipcRenderer.invoke("catalog:search", query, limit),
+  getCatalogMeta: () => ipcRenderer.invoke("catalog:meta"),
 });
