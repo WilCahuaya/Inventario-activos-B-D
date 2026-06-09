@@ -531,7 +531,11 @@ export async function registrarActivo(activoId: string) {
 
 export async function updateActivoPaths(
   activoId: string,
-  paths: { foto_path?: string; comprobante_path?: string; comprobante_serie?: string | null },
+  paths: {
+    foto_path?: string | null;
+    comprobante_path?: string | null;
+    comprobante_serie?: string | null;
+  },
 ) {
   const supabase = await createClient();
 

@@ -22,7 +22,11 @@ export async function uploadActivoFile(
 
 export async function updateActivoPaths(
   activoId: string,
-  paths: { foto_path?: string; comprobante_path?: string; comprobante_serie?: string | null },
+  paths: {
+    foto_path?: string | null;
+    comprobante_path?: string | null;
+    comprobante_serie?: string | null;
+  },
 ): Promise<{ error?: string }> {
   const supabase = getSupabaseClient();
   const { error } = await supabase.from("activos").update(paths).eq("id", activoId);

@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("catalog:search", query, limit),
   getCatalogByCodigo: (codigo: string) => ipcRenderer.invoke("catalog:getByCodigo", codigo),
   getCatalogMeta: () => ipcRenderer.invoke("catalog:meta"),
+  syncAtributoVocab: (rows: unknown[]) => ipcRenderer.invoke("atributoVocab:replace", rows),
+  searchAtributoVocabLocal: (campo: string, query: string, limit?: number) =>
+    ipcRenderer.invoke("atributoVocab:search", campo, query, limit),
+  upsertAtributoVocabLocal: (campo: string, valor: string) =>
+    ipcRenderer.invoke("atributoVocab:upsert", campo, valor),
+  getAtributoVocabMeta: () => ipcRenderer.invoke("atributoVocab:meta"),
   offlineEnqueue: (item: unknown) => ipcRenderer.invoke("offline:enqueue", item),
   offlineQueue: () => ipcRenderer.invoke("offline:queue"),
   offlineQueueCount: () => ipcRenderer.invoke("offline:queueCount") as Promise<number>,

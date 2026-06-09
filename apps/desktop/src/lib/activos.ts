@@ -3,6 +3,7 @@ import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
 
 export type ActivoConUbicacion = Activo & {
+  entidad_nombre?: string;
   sede_nombre?: string;
   ambiente_nombre?: string;
 };
@@ -33,11 +34,13 @@ export interface CreateActivoInput {
 export type UpdateActivoInput = Omit<CreateActivoInput, "entidad_id">;
 
 function mapActivoRow(row: Record<string, unknown>): ActivoConUbicacion {
+  const entidades = row.entidades as { nombre: string } | null;
   const sedes = row.sedes as { nombre: string } | null;
   const ambientes = row.ambientes as { nombre: string } | null;
-  const { sedes: _s, ambientes: _a, ...activo } = row;
+  const { entidades: _e, sedes: _s, ambientes: _a, ...activo } = row;
   return {
     ...(activo as unknown as Activo),
+    entidad_nombre: entidades?.nombre,
     sede_nombre: sedes?.nombre,
     ambiente_nombre: ambientes?.nombre,
   };
@@ -104,6 +107,29 @@ export async function listActivosForEntidad(entidadId: string): Promise<ActivoCo
     .from("activos")
     .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
     .eq("entidad_id", entidadId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return mapActivoRows(data as Record<string, unknown>[]);
+}
+
+export async function listActivosPorAmbiente(ambienteId: string): Promise<ActivoConUbicacion[]> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("activos")
+    .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .eq("ambiente_id", ambienteId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return mapActivoRows(data as Record<string, unknown>[]);
+}
+
+export async function listActivosGlobal(): Promise<ActivoConUbicacion[]> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("activos")
+    .select("*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);

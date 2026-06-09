@@ -6,6 +6,7 @@ const CONTADOR_LINKS: PanelNavItem[] = [
   { href: "/contador/entidades", label: "Entidades", icon: "entities" },
   { href: "/contador/inventario", label: "Inventario", icon: "inventory" },
   { href: "/contador/usuarios", label: "Usuarios", icon: "users" },
+  { href: "/contador/reportes", label: "Reportes", icon: "reports" },
 ];
 
 export default function ContadorLayout({ children }: { children: React.ReactNode }) {

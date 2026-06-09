@@ -30,14 +30,19 @@ const FILTROS_ESTADO: { value: "" | EstadoRegistro; label: string }[] = [
   { value: "DADO_DE_BAJA", label: "Dados de baja" },
 ];
 
+type ActivosListVariant = "entity" | "global" | "ambiente";
+
 interface ActivosCampoListProps {
   className?: string;
+  variant?: ActivosListVariant;
   entidades: Entidad[];
   entidadId: string;
-  onEntidadChange: (id: string) => void;
+  onEntidadChange?: (id: string) => void;
   activos: ActivoConUbicacion[];
   loading: boolean;
   online: boolean;
+  fixedSedeId?: string;
+  fixedAmbienteId?: string;
   ambienteFilter?: { id: string; nombre: string };
   onClearAmbienteFilter?: () => void;
   onOpenFicha: (activo: ActivoConUbicacion) => void;
@@ -68,12 +73,15 @@ function estadoLabel(estado: EstadoRegistro): string {
 
 export function ActivosCampoList({
   className,
+  variant = "entity",
   entidades,
   entidadId,
   onEntidadChange,
   activos,
   loading,
   online,
+  fixedSedeId,
+  fixedAmbienteId,
   ambienteFilter,
   onClearAmbienteFilter,
   onOpenFicha,
@@ -81,24 +89,40 @@ export function ActivosCampoList({
   onPrintBatch,
   onActivoUpdated,
 }: ActivosCampoListProps) {
+  const isGlobal = variant === "global";
+  const isAmbiente = variant === "ambiente";
+  const hideUbicacionFilters = isAmbiente;
   const [filter, setFilter] = useState("");
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>("");
-  const [sedeId, setSedeId] = useState("");
-  const [ambienteId, setAmbienteId] = useState("");
+  const [filterEntidadId, setFilterEntidadId] = useState("");
+  const [sedeId, setSedeId] = useState(fixedSedeId ?? "");
+  const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? ambienteFilter?.id ?? "");
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [ambientes, setAmbientes] = useState<Ambiente[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
+  const sedesEntidadId = isGlobal ? filterEntidadId : entidadId;
+
   useEffect(() => {
-    if (!entidadId) {
-      setSedes([]);
-      setSedeId("");
-      setAmbienteId("");
-      setAmbientes([]);
+    if (fixedSedeId) setSedeId(fixedSedeId);
+  }, [fixedSedeId]);
+
+  useEffect(() => {
+    if (fixedAmbienteId) setAmbienteId(fixedAmbienteId);
+  }, [fixedAmbienteId]);
+
+  useEffect(() => {
+    if (!sedesEntidadId) {
+      if (!isAmbiente) {
+        setSedes([]);
+        if (!fixedSedeId) setSedeId("");
+        if (!fixedAmbienteId) setAmbienteId("");
+        setAmbientes([]);
+      }
       return;
     }
-    void listSedes(entidadId).then(setSedes);
-  }, [entidadId]);
+    void listSedes(sedesEntidadId).then(setSedes);
+  }, [sedesEntidadId, isAmbiente, fixedSedeId, fixedAmbienteId]);
 
   useEffect(() => {
     if (!sedeId) {
@@ -125,9 +149,13 @@ export function ActivosCampoList({
   }, [ambienteFilter, entidadId, activos]);
 
   async function handleEntidadFilterChange(value: string) {
-    onEntidadChange(value);
-    setSedeId("");
-    setAmbienteId("");
+    if (isGlobal) {
+      setFilterEntidadId(value);
+    } else {
+      onEntidadChange?.(value);
+    }
+    if (!fixedSedeId) setSedeId("");
+    if (!fixedAmbienteId) setAmbienteId("");
     setAmbientes([]);
     onClearAmbienteFilter?.();
     if (!value) {
@@ -151,8 +179,9 @@ export function ActivosCampoList({
   }
 
   function limpiarFiltros() {
-    setSedeId("");
-    setAmbienteId("");
+    if (isGlobal) setFilterEntidadId("");
+    if (!fixedSedeId) setSedeId("");
+    if (!fixedAmbienteId) setAmbienteId("");
     setEstadoRegistro("");
     setFilter("");
     setAmbientes([]);
@@ -162,14 +191,19 @@ export function ActivosCampoList({
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return activos.filter((a) => {
-      if (sedeId && a.sede_id !== sedeId) return false;
-      if (ambienteId && a.ambiente_id !== ambienteId) return false;
+      if (isGlobal && filterEntidadId && a.entidad_id !== filterEntidadId) return false;
+      if (!isGlobal && !isAmbiente && entidadId && a.entidad_id !== entidadId) return false;
+      const sedeFiltro = fixedSedeId ?? sedeId;
+      const ambienteFiltro = fixedAmbienteId ?? ambienteId;
+      if (sedeFiltro && a.sede_id !== sedeFiltro) return false;
+      if (ambienteFiltro && a.ambiente_id !== ambienteFiltro) return false;
       if (estadoRegistro && a.estado_registro !== estadoRegistro) return false;
       if (!q) return true;
       const haystack = [
         a.nombre,
         a.codigo_barras,
         a.codigo_catalogo,
+        a.entidad_nombre,
         a.ambiente_nombre,
         a.sede_nombre,
         a.marca,
@@ -181,7 +215,19 @@ export function ActivosCampoList({
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [activos, sedeId, ambienteId, estadoRegistro, filter]);
+  }, [
+    activos,
+    sedeId,
+    ambienteId,
+    fixedSedeId,
+    fixedAmbienteId,
+    estadoRegistro,
+    filter,
+    isGlobal,
+    isAmbiente,
+    filterEntidadId,
+    entidadId,
+  ]);
 
   const paginationKey = useMemo(
     () =>
@@ -226,13 +272,25 @@ export function ActivosCampoList({
     });
   }
 
-  const emptyMessage = !entidadId
-    ? "Seleccione una entidad para ver el inventario de activos."
-    : activos.length === 0
-      ? "Aún no hay activos en esta entidad. Use «Registrar activo» o espere la sincronización."
+  const emptyMessage = isAmbiente
+    ? activos.length === 0
+      ? "Aún no hay activos en este ambiente. Use «Nuevo activo» para registrar el primero."
       : filtered.length === 0
         ? "No hay activos que coincidan con los filtros aplicados."
-        : "No hay activos que coincidan con la búsqueda.";
+        : "No hay activos que coincidan con la búsqueda."
+    : isGlobal
+      ? activos.length === 0
+        ? "No hay activos cargados. Sincronice o espere la conexión."
+        : filtered.length === 0
+          ? "No hay activos que coincidan con los filtros aplicados."
+          : "No hay activos que coincidan con la búsqueda."
+      : !entidadId
+        ? "Seleccione una entidad para ver el inventario de activos."
+        : activos.length === 0
+          ? "Aún no hay activos en esta entidad. Use «Registrar activo» o espere la sincronización."
+          : filtered.length === 0
+            ? "No hay activos que coincidan con los filtros aplicados."
+            : "No hay activos que coincidan con la búsqueda.";
 
   return (
     <div className={`space-y-3 ${className ?? ""}`}>
@@ -268,77 +326,83 @@ export function ActivosCampoList({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1">
-          <label htmlFor="filtro_entidad" className="text-xs font-medium text-muted-foreground">
-            Entidad
-          </label>
-          <select
-            id="filtro_entidad"
-            className={selectClass}
-            value={entidadId}
-            onChange={(e) => void handleEntidadFilterChange(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {entidades.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.nombre}
-              </option>
-            ))}
-          </select>
+      {!hideUbicacionFilters && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1">
+            <label htmlFor="filtro_entidad" className="text-xs font-medium text-muted-foreground">
+              Entidad
+            </label>
+            <select
+              id="filtro_entidad"
+              className={selectClass}
+              value={isGlobal ? filterEntidadId : entidadId}
+              onChange={(e) => void handleEntidadFilterChange(e.target.value)}
+            >
+              <option value="">{isGlobal ? "Todas" : "Seleccione…"}</option>
+              {entidades.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="filtro_sede" className="text-xs font-medium text-muted-foreground">
+              Sede
+            </label>
+            <select
+              id="filtro_sede"
+              className={selectClass}
+              value={sedeId}
+              disabled={!sedesEntidadId}
+              onChange={(e) => void handleSedeFilterChange(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {sedes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="filtro_ambiente" className="text-xs font-medium text-muted-foreground">
+              Ambiente
+            </label>
+            <select
+              id="filtro_ambiente"
+              className={selectClass}
+              value={ambienteId}
+              disabled={!sedeId}
+              onChange={(e) => {
+                setAmbienteId(e.target.value);
+                onClearAmbienteFilter?.();
+              }}
+            >
+              <option value="">Todos</option>
+              {ambientes.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end sm:col-span-2 lg:col-span-1">
+            <Button type="button" variant="outline" className="w-full" onClick={limpiarFiltros}>
+              Limpiar filtros
+            </Button>
+          </div>
         </div>
-        <div className="space-y-1">
-          <label htmlFor="filtro_sede" className="text-xs font-medium text-muted-foreground">
-            Sede
-          </label>
-          <select
-            id="filtro_sede"
-            className={selectClass}
-            value={sedeId}
-            disabled={!entidadId}
-            onChange={(e) => void handleSedeFilterChange(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {sedes.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="filtro_ambiente" className="text-xs font-medium text-muted-foreground">
-            Ambiente
-          </label>
-          <select
-            id="filtro_ambiente"
-            className={selectClass}
-            value={ambienteId}
-            disabled={!sedeId}
-            onChange={(e) => {
-              setAmbienteId(e.target.value);
-              onClearAmbienteFilter?.();
-            }}
-          >
-            <option value="">Todos</option>
-            {ambientes.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-end sm:col-span-2 lg:col-span-1">
-          <Button type="button" variant="outline" className="w-full" onClick={limpiarFiltros}>
-            Limpiar filtros
-          </Button>
-        </div>
-      </div>
+      )}
 
       <PanelSearchInput
         value={filter}
         onChange={setFilter}
-        placeholder="Buscar por código, nombre, sede o ambiente…"
+        placeholder={
+          isGlobal
+            ? "Buscar por código, nombre, entidad, sede o ambiente…"
+            : "Buscar por código, nombre, sede o ambiente…"
+        }
       />
 
       <div className="overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm">
@@ -389,7 +453,7 @@ export function ActivosCampoList({
                       </div>
                       <div className="border-t border-border/50 bg-muted/20 px-3 py-2">
                         <ActivosCampoAcciones
-                          entidadId={entidadId}
+                          entidadId={entidadId || activo.entidad_id}
                           activo={activo}
                           online={online}
                           onOpenFicha={onOpenFicha}
@@ -490,7 +554,7 @@ export function ActivosCampoList({
                         <td className={`${tdBase} text-muted-foreground`}>{ubicacionLabel(activo)}</td>
                         <td className={`${tdBase} text-center`}>
                           <ActivosCampoAcciones
-                            entidadId={entidadId}
+                            entidadId={entidadId || activo.entidad_id}
                             activo={activo}
                             online={online}
                             onOpenFicha={onOpenFicha}

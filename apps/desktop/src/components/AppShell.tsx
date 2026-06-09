@@ -5,7 +5,7 @@ import { ThemeToggle } from "@inventario/ui/theme-toggle";
 import { signOut } from "../hooks/useAuth";
 import { ConnectionBadge } from "./ConnectionBadge";
 
-export type MainNav = "activos" | "ambientes" | "entidad" | "usuarios";
+export type MainNav = "entidades" | "inventario" | "usuarios";
 
 export interface AppSubheader {
   title: string;
@@ -15,9 +15,8 @@ export interface AppSubheader {
 }
 
 const NAV_ITEMS: { id: MainNav; label: string }[] = [
-  { id: "activos", label: "Activo" },
-  { id: "ambientes", label: "Ambiente" },
-  { id: "entidad", label: "Entidad" },
+  { id: "entidades", label: "Entidades" },
+  { id: "inventario", label: "Inventario" },
   { id: "usuarios", label: "Usuarios" },
 ];
 

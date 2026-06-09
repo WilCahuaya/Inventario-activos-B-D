@@ -10,6 +10,11 @@ export type EstadoBien = "BUENO" | "REGULAR" | "MALO";
 /** Categoría contable del bien */
 export type CategoriaBien = "ACTIVO" | "CUENTA_ORDEN";
 
+/** Campos con vocabulario global para autocompletado */
+export type ActivoAtributoCampo = "marca" | "modelo" | "serie" | "color";
+
+export const ACTIVO_ATRIBUTO_CAMPOS = ["marca", "modelo", "serie", "color"] as const;
+
 /** Perfil de usuario (tabla profiles) */
 export interface Profile {
   id: string;
@@ -99,19 +104,25 @@ export interface Activo {
   updated_at: string;
 }
 
+export const CATEGORIA_BIEN_AYUDA =
+  "Ambos duran más de un año. La diferencia es el valor: si es importante para el patrimonio contable, elija Activo; si es bajo pero igual conviene controlarlo, elija Cuenta de orden.";
+
 export const CATEGORIA_BIEN_LABELS: Record<
   CategoriaBien,
-  { titulo: string; descripcion: string }
+  { titulo: string; descripcion: string; ejemplos: string }
 > = {
-  CUENTA_ORDEN: {
-    titulo: "Cta. Orden",
-    descripcion:
-      "Bienes menores que duran más de un año, pero por su valor no califican como activo. Ej.: silla de plástico, sartén, tacho de basura, balón de gas.",
-  },
   ACTIVO: {
     titulo: "Activo",
     descripcion:
-      "Bien con vida útil mayor a 1 año y potencial de servicio; costo importante. Ej.: equipo de cómputo, horno a gas, cocina, escritorio.",
+      "Bien importante que la institución usa varios años. Tiene valor económico relevante, forma parte del patrimonio y se registra en contabilidad (se deprecia).",
+    ejemplos:
+      "Computadoras, impresoras, vehículos, equipos médicos, mobiliario de oficina, maquinaria.",
+  },
+  CUENTA_ORDEN: {
+    titulo: "Cuenta de orden",
+    descripcion:
+      "Bien que también dura más de un año y debe controlarse, pero por su bajo valor no se considera patrimonio contable importante.",
+    ejemplos: "Sillas plásticas, escobas, tachos, baldes, sartenes, herramientas pequeñas.",
   },
 };
 
@@ -199,12 +210,17 @@ function parseFechaToDate(fecha: string | null): Date | null {
 
 /** Meses transcurridos desde la fecha de adquisición hasta hoy */
 export function calcPeriodoMeses(fechaAdquisicion: string | null): number {
+  return calcPeriodoMesesHasta(fechaAdquisicion, new Date());
+}
+
+/** Meses transcurridos desde la fecha de adquisición hasta una fecha de corte */
+export function calcPeriodoMesesHasta(fechaAdquisicion: string | null, fechaHasta: Date): number {
   const start = parseFechaToDate(fechaAdquisicion);
   if (!start) return 0;
-  const now = new Date();
+  const end = new Date(fechaHasta.getFullYear(), fechaHasta.getMonth(), fechaHasta.getDate());
   return Math.max(
     0,
-    (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()),
+    (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()),
   );
 }
 

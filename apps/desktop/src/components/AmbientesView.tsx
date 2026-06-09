@@ -28,7 +28,8 @@ interface AmbientesViewProps {
   entidades: Entidad[];
   entidad: Entidad;
   entidadId: string;
-  onEntidadChange: (id: string) => void;
+  onEntidadChange?: (id: string) => void;
+  drillDown?: boolean;
   online: boolean;
   onViewActivos: (ambiente: AmbienteConSede) => void;
 }
@@ -94,6 +95,7 @@ export function AmbientesView({
   entidad,
   entidadId,
   onEntidadChange,
+  drillDown = false,
   online,
   onViewActivos,
 }: AmbientesViewProps) {
@@ -279,7 +281,7 @@ export function AmbientesView({
         }
       />
 
-      {entidades.length > 1 ? (
+      {!drillDown && entidades.length > 1 && onEntidadChange ? (
         <div className="grid gap-4 md:grid-cols-2 md:items-stretch">
           <fieldset className={panelFieldsetClass}>
             <legend className="px-1 text-sm font-semibold text-foreground">Entidad de trabajo</legend>

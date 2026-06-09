@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Activo, Ambiente, CatalogoNacional, CategoriaBien, Entidad, Sede } from "@inventario/types";
 import {
+  CATEGORIA_BIEN_AYUDA,
   CATEGORIA_BIEN_LABELS,
   buildNombreConsolidado,
   calcDepreciacionAcumulada,
@@ -17,7 +18,13 @@ import {
   validarFechaDDMMYYYY,
   vidaUtilMesesFromPorcentaje,
 } from "@inventario/types";
-import { Button, Input, Label } from "@inventario/ui";
+import {
+  ActivoAtributoAutocomplete,
+  Button,
+  CategoriaBienSelector,
+  Input,
+  Label,
+} from "@inventario/ui";
 import {
   createActivo,
   previewCodigoBarras,
@@ -26,6 +33,7 @@ import {
   updateActivoPaths,
   type UpdateActivoInput,
 } from "@/lib/actions/activos";
+import { suggestActivoAtributo } from "@/lib/actions/atributo-vocab";
 import { getCatalogoByCodigo } from "@/lib/actions/catalogo";
 import { createAmbiente, createSede, listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 import { uploadActivoFile } from "@/lib/upload-activo-file";
@@ -110,6 +118,12 @@ export function ActivoForm({
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [comprobanteSerie, setComprobanteSerie] = useState("");
   const [serieDialogOpen, setSerieDialogOpen] = useState(false);
+
+  const searchAtributo = useCallback(
+    (campo: "marca" | "modelo" | "serie" | "color", query: string) =>
+      suggestActivoAtributo(campo, query),
+    [],
+  );
   const [pendingComprobanteFile, setPendingComprobanteFile] = useState<File | null>(null);
   const [fotoFile, setFotoFile] = useState<File | null>(null);
 
@@ -290,6 +304,16 @@ export function ActivoForm({
     setSerieDialogOpen(false);
   }
 
+  function handleValorEsMercadoChange(checked: boolean) {
+    setValorEsMercado(checked);
+    if (checked) {
+      setComprobanteSerie("");
+      setComprobanteFile(null);
+      setPendingComprobanteFile(null);
+      setSerieDialogOpen(false);
+    }
+  }
+
   async function handleCrearSede() {
     if (!entidadEfectiva || !nuevaSede.trim()) return;
     const result = await createSede(entidadEfectiva, nuevaSede);
@@ -381,9 +405,11 @@ export function ActivoForm({
       ambiente_id: (fixedAmbienteId ?? ambienteId) || undefined,
     };
 
-    Object.assign(payload, {
-      comprobante_serie: comprobanteSerie.trim() || undefined,
-    });
+    if (!valorEsMercado) {
+      Object.assign(payload, {
+        comprobante_serie: comprobanteSerie.trim() || undefined,
+      });
+    }
     if (!esPreregistroAdmin) {
       Object.assign(payload, {
         depreciacion: depreciacion || undefined,
@@ -406,7 +432,14 @@ export function ActivoForm({
 
     const activoId = isEdit && activo ? activo.id : result.data?.id;
     if (activoId && entidadEfectiva) {
-      if (comprobanteFile) {
+      if (valorEsMercado) {
+        if (activo?.comprobante_path || activo?.comprobante_serie) {
+          await updateActivoPaths(activoId, {
+            comprobante_path: null,
+            comprobante_serie: null,
+          });
+        }
+      } else if (comprobanteFile) {
         const upload = await uploadActivoFile(entidadEfectiva, activoId, comprobanteFile, "comprobante");
         if (upload.path) {
           await updateActivoPaths(activoId, {
@@ -539,30 +572,17 @@ export function ActivoForm({
           />
         </div>
 
-        <div className={categoriaGridClass}>
-          <Label className={variant === "modal" ? "sm:col-span-2" : undefined}>Categoría</Label>
-          {(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => (
-            <label
-              key={key}
-              className="flex cursor-pointer gap-3 rounded-md border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-            >
-              <input
-                type="radio"
-                name="categoria"
-                value={key}
-                checked={categoria === key}
-                onChange={() => setCategoria(key)}
-                className="mt-1"
-              />
-              <span className="text-sm">
-                <strong>{CATEGORIA_BIEN_LABELS[key].titulo}</strong>
-                <span className="mt-1 block text-muted-foreground">
-                  {CATEGORIA_BIEN_LABELS[key].descripcion}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
+        <CategoriaBienSelector
+          value={categoria}
+          onChange={setCategoria}
+          ayuda={CATEGORIA_BIEN_AYUDA}
+          opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
+            key,
+            ...CATEGORIA_BIEN_LABELS[key],
+          }))}
+          className={categoriaGridClass}
+          headerClassName={variant === "modal" ? "sm:col-span-2" : ""}
+        />
 
         <div className="space-y-2">
           <Label htmlFor="nombre">Nombre del bien</Label>
@@ -579,22 +599,38 @@ export function ActivoForm({
       <fieldset className={fieldsetCompact}>
         <legend className={panelLegendClass}>Detalle del bien</legend>
         <div className={detalleGridClass}>
-          <div className="space-y-2">
-            <Label htmlFor="marca">Marca</Label>
-            <Input id="marca" value={marca} onChange={(e) => setMarca(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="modelo">Modelo</Label>
-            <Input id="modelo" value={modelo} onChange={(e) => setModelo(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="serie">Serie</Label>
-            <Input id="serie" value={serie} onChange={(e) => setSerie(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="color">Color</Label>
-            <Input id="color" value={color} onChange={(e) => setColor(e.target.value)} />
-          </div>
+          <ActivoAtributoAutocomplete
+            id="marca"
+            label="Marca"
+            campo="marca"
+            value={marca}
+            onChange={setMarca}
+            onSearch={searchAtributo}
+          />
+          <ActivoAtributoAutocomplete
+            id="modelo"
+            label="Modelo"
+            campo="modelo"
+            value={modelo}
+            onChange={setModelo}
+            onSearch={searchAtributo}
+          />
+          <ActivoAtributoAutocomplete
+            id="serie"
+            label="Serie"
+            campo="serie"
+            value={serie}
+            onChange={setSerie}
+            onSearch={searchAtributo}
+          />
+          <ActivoAtributoAutocomplete
+            id="color"
+            label="Color"
+            campo="color"
+            value={color}
+            onChange={setColor}
+            onSearch={searchAtributo}
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="medidas">Medidas</Label>
@@ -658,7 +694,7 @@ export function ActivoForm({
               <input
                 type="checkbox"
                 checked={valorEsMercado}
-                onChange={(e) => setValorEsMercado(e.target.checked)}
+                onChange={(e) => handleValorEsMercadoChange(e.target.checked)}
               />
               Usar valor de mercado (sin factura)
             </label>
@@ -682,32 +718,34 @@ export function ActivoForm({
             )}
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="comprobante_serie">Serie del comprobante</Label>
-            <Input
-              id="comprobante_serie"
-              value={comprobanteSerie}
-              onChange={(e) => setComprobanteSerie(e.target.value)}
-              placeholder="Ej. F/E001-129 (puede ir sin PDF)"
-            />
+        {!valorEsMercado && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="comprobante_serie">Serie del comprobante</Label>
+              <Input
+                id="comprobante_serie"
+                value={comprobanteSerie}
+                onChange={(e) => setComprobanteSerie(e.target.value)}
+                placeholder="Ej. F/E001-129 (puede ir sin PDF)"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="comprobante">PDF del comprobante</Label>
+              <Input
+                id="comprobante"
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                onChange={(e) => handleComprobanteFileSelect(e.target.files?.[0] ?? null)}
+              />
+              {comprobanteFile && (
+                <p className="text-xs text-primary">Archivo listo: {comprobanteFile.name}</p>
+              )}
+              {isEdit && activo?.comprobante_path && !comprobanteFile && (
+                <p className="text-xs text-muted-foreground">Ya hay un PDF adjunto</p>
+              )}
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="comprobante">PDF del comprobante</Label>
-            <Input
-              id="comprobante"
-              type="file"
-              accept="application/pdf,image/jpeg,image/png"
-              onChange={(e) => handleComprobanteFileSelect(e.target.files?.[0] ?? null)}
-            />
-            {comprobanteFile && (
-              <p className="text-xs text-primary">Archivo listo: {comprobanteFile.name}</p>
-            )}
-            {isEdit && activo?.comprobante_path && !comprobanteFile && (
-              <p className="text-xs text-muted-foreground">Ya hay un PDF adjunto</p>
-            )}
-          </div>
-        </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="foto_activo">Foto del activo</Label>
           <Input

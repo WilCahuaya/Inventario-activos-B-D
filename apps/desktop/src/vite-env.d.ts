@@ -46,6 +46,16 @@ interface Window {
       estado: string | null;
     } | null>;
     getCatalogMeta: () => Promise<{ count: number; syncedAt: string | null }>;
+    syncAtributoVocab: (
+      rows: unknown[],
+    ) => Promise<{ count: number; syncedAt: string | null }>;
+    searchAtributoVocabLocal: (
+      campo: string,
+      query: string,
+      limit?: number,
+    ) => Promise<string[]>;
+    upsertAtributoVocabLocal: (campo: string, valor: string) => Promise<void>;
+    getAtributoVocabMeta: () => Promise<{ count: number; syncedAt: string | null }>;
     offlineEnqueue: (item: unknown) => Promise<unknown>;
     offlineQueue: () => Promise<unknown[]>;
     offlineQueueCount: () => Promise<number>;

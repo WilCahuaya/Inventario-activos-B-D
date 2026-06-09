@@ -3,6 +3,14 @@ import path from "path";
 import { loadDesktopEnvFiles } from "./env";
 import { inviteEntidadAdmin } from "./invite";
 import {
+  getAtributoVocabMeta,
+  initAtributoVocabSchema,
+  replaceAtributoVocab,
+  searchAtributoVocab,
+  upsertAtributoVocabLocal,
+  type AtributoVocabRow,
+} from "./database/atributo-vocab";
+import {
   getCatalogByCodigo,
   getCatalogMeta,
   initCatalogDatabase,
@@ -124,6 +132,25 @@ ipcMain.handle("catalog:meta", () => {
   return getCatalogMeta();
 });
 
+ipcMain.handle("atributoVocab:replace", (_event, rows: AtributoVocabRow[]) => {
+  return replaceAtributoVocab(rows);
+});
+
+ipcMain.handle(
+  "atributoVocab:search",
+  (_event, campo: string, query: string, limit?: number) => {
+    return searchAtributoVocab(campo, query, limit);
+  },
+);
+
+ipcMain.handle("atributoVocab:upsert", (_event, campo: string, valor: string) => {
+  upsertAtributoVocabLocal(campo, valor);
+});
+
+ipcMain.handle("atributoVocab:meta", () => {
+  return getAtributoVocabMeta();
+});
+
 ipcMain.handle("offline:enqueue", (_event, item) => enqueueSyncItem(item));
 ipcMain.handle("offline:queue", () => listSyncQueue());
 ipcMain.handle("offline:queueCount", () => syncQueueCount());
@@ -156,6 +183,7 @@ ipcMain.handle("invite:entidadAdmin", (_event, input) => inviteEntidadAdmin(inpu
 app.whenReady().then(() => {
   loadDesktopEnvFiles();
   initCatalogDatabase();
+  initAtributoVocabSchema();
   createWindow();
 });
 

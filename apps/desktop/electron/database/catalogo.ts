@@ -53,6 +53,12 @@ export function initCatalogDatabase(): void {
   initOfflineSchema(db);
 }
 
+export function getCatalogDb(): Database.Database {
+  if (!db) initCatalogDatabase();
+  if (!db) throw new Error("Base de datos no inicializada");
+  return db;
+}
+
 export function replaceCatalog(rows: CatalogoRow[]): CatalogoMeta {
   if (!db) throw new Error("Base de datos no inicializada");
 
