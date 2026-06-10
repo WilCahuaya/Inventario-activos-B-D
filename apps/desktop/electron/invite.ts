@@ -132,3 +132,108 @@ export async function inviteEntidadAdmin(
     message: `Invitación enviada a ${emailNorm}. El administrador podrá ingresar con Google usando ese correo.`,
   };
 }
+
+export interface InviteContadorInput {
+  email: string;
+  nombre: string;
+}
+
+export interface InviteContadorResult {
+  success?: boolean;
+  invited?: boolean;
+  message?: string;
+  warning?: string;
+  error?: string;
+}
+
+async function upsertContadorProfile(
+  admin: SupabaseClient,
+  userId: string,
+  email: string,
+  nombre: string,
+): Promise<{ error?: string }> {
+  const { data: existing } = await admin
+    .from("profiles")
+    .select("id, rol, activo")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (existing?.activo && existing.rol === ("ADMIN_ENTIDAD" as RolUsuario)) {
+    return { error: "Este usuario ya es administrador de una entidad." };
+  }
+
+  const payload = {
+    id: userId,
+    email: normalizeEmail(email),
+    nombre: nombre.trim(),
+    rol: "CONTADOR" as RolUsuario,
+    entidad_id: null,
+    activo: true,
+  };
+
+  if (existing) {
+    const { error } = await admin.from("profiles").update(payload).eq("id", userId);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await admin.from("profiles").insert(payload);
+    if (error) return { error: error.message };
+  }
+
+  return {};
+}
+
+export async function inviteContador(input: InviteContadorInput): Promise<InviteContadorResult> {
+  const emailNorm = normalizeEmail(input.email);
+  const nombreTrim = input.nombre.trim();
+
+  if (!emailNorm) return { error: "El correo es obligatorio." };
+  if (!nombreTrim) return { error: "El nombre es obligatorio." };
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return {
+      success: true,
+      invited: false,
+      warning:
+        "Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local para enviar la invitación por correo; el contador podrá ingresar con Google usando ese correo.",
+    };
+  }
+
+  const existingUser = await findAuthUserByEmail(admin, emailNorm);
+
+  if (existingUser) {
+    const result = await upsertContadorProfile(
+      admin,
+      existingUser.id,
+      emailNorm,
+      nombreTrim,
+    );
+    if (result.error) return { error: result.error };
+    return {
+      success: true,
+      invited: false,
+      message: "Perfil de contador actualizado. Ya puede ingresar al sistema.",
+    };
+  }
+
+  const { data, error } = await admin.auth.admin.inviteUserByEmail(emailNorm, {
+    data: {
+      nombre: nombreTrim,
+      rol: "CONTADOR",
+    },
+    redirectTo: `${getSiteOrigin()}/auth/callback`,
+  });
+
+  if (error) return { error: error.message };
+
+  if (data.user) {
+    const result = await upsertContadorProfile(admin, data.user.id, emailNorm, nombreTrim);
+    if (result.error) return { error: result.error };
+  }
+
+  return {
+    success: true,
+    invited: true,
+    message: `Invitación enviada a ${emailNorm}. El contador podrá ingresar con Google usando ese correo.`,
+  };
+}

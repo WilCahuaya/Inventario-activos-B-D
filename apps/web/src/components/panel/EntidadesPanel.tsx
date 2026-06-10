@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Entidad } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
+import {
+  PanelDataTable,
+  PanelViewToggle,
+  panelTableBodyRowClass,
+  panelTableHeadRowClass,
+  panelTableTdClass,
+  panelTableThClass,
+  useStoredViewMode,
+} from "@inventario/ui/panel";
 import { createEntidad, deleteEntidad, updateEntidad } from "@/lib/actions/entidades";
 import {
   EditIcon,
@@ -93,6 +102,7 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-entidades");
 
   const filtradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -183,6 +193,7 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
         left={
           <PanelCountLabel count={filtradas.length} singular="entidad" plural="entidades" />
         }
+        right={<PanelViewToggle value={viewMode} onChange={setViewMode} />}
       />
 
       <PanelSearchInput
@@ -216,6 +227,66 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
             ) : undefined
           }
         />
+      ) : viewMode === "list" ? (
+        <PanelDataTable minWidth={960}>
+          <thead>
+            <tr className={panelTableHeadRowClass}>
+              <th className={panelTableThClass}>Razón social</th>
+              <th className={panelTableThClass}>RUC</th>
+              <th className={panelTableThClass}>Administrador</th>
+              <th className={panelTableThClass}>Dirección</th>
+              <th className={panelTableThClass}>Estado</th>
+              <th className={`${panelTableThClass} text-right`}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtradas.map((entidad) => (
+              <tr key={entidad.id} className={panelTableBodyRowClass}>
+                <td className={`${panelTableTdClass} font-medium text-primary`}>{entidad.nombre}</td>
+                <td className={`${panelTableTdClass} text-muted-foreground`}>{entidad.ruc ?? "—"}</td>
+                <td className={panelTableTdClass}>{entidad.admin_nombre ?? "—"}</td>
+                <td className={`${panelTableTdClass} max-w-[200px] truncate text-muted-foreground`}>
+                  {entidad.direccion ?? "—"}
+                </td>
+                <td className={panelTableTdClass}>
+                  <StatusBadge variant="active">Activa</StatusBadge>
+                </td>
+                <td className={`${panelTableTdClass} text-right`}>
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => {
+                        setError(null);
+                        setEditEntidad(entidad);
+                      }}
+                    >
+                      <EditIcon />
+                      Editar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(entidad)}
+                    >
+                      Eliminar
+                    </Button>
+                    <Link
+                      href={`/contador/entidades/${entidad.id}`}
+                      className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90"
+                    >
+                      Ambientes →
+                    </Link>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </PanelDataTable>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtradas.map((entidad) => (

@@ -123,13 +123,15 @@ function ubicacionLabel(activo: ActivoReporte): string {
 function valoresFila(activo: ActivoReporte, fechaCorte: Date): string[] {
   const precioAdq = !activo.valor_es_mercado ? activo.valor_adquisicion : null;
   const valorMercado = activo.valor_es_mercado ? activo.valor_adquisicion : null;
+  const dadoDeBaja = activo.estado_registro === "DADO_DE_BAJA";
   const periodo = calcPeriodoMesesHasta(activo.fecha_adquisicion, fechaCorte);
   const depAcum = calcDepreciacionAcumulada(
     activo.valor_adquisicion,
     activo.vida_util_meses,
     periodo,
+    dadoDeBaja,
   );
-  const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum);
+  const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum, dadoDeBaja);
 
   return [
     precioAdq != null ? `S/ ${formatMonedaPE(precioAdq)}` : "—",

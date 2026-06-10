@@ -21,8 +21,8 @@ Reportes institucionales con membrete B&D Consultores Global EIRL.
 |---|---------|-----|-------|-------|
 | 1 | Inventario por ambiente (sin valores) | ✓ | ✓ | Contador, Admin |
 | 2 | Inventario general por entidad (sin valores) | ✓ | ✓ | Contador, Admin |
-| 3 | Inventario valorizado por ambiente | ✓ | ✓ | Contador, Admin |
-| 4 | Inventario valorizado por entidad | ✓ | ✓ | Contador, Admin |
+| 3 | Inventario valorizado por ambiente | ✓ | ✓ | Solo contador |
+| 4 | Inventario valorizado por entidad | ✓ | ✓ | Solo contador |
 | 5 | Acta de inventario (firmas) | ✓ | — | Solo contador |
 | 6 | Reporte de bajas | ✓ | ✓ | Solo contador |
 

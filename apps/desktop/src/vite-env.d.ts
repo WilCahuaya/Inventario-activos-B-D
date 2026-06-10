@@ -46,6 +46,17 @@ interface Window {
       estado: string | null;
     } | null>;
     getCatalogMeta: () => Promise<{ count: number; syncedAt: string | null }>;
+    upsertCatalogRow: (row: {
+      codigo: string;
+      denominacion: string;
+      grupo: string | null;
+      clase: string | null;
+      cuenta_codigo: string | null;
+      contabilidad: string | null;
+      depreciacion: string | null;
+      resolucion: string | null;
+      estado: string | null;
+    }) => Promise<void>;
     syncAtributoVocab: (
       rows: unknown[],
     ) => Promise<{ count: number; syncedAt: string | null }>;
@@ -82,6 +93,13 @@ interface Window {
       nombre: string;
       entidadNombre?: string;
     }) => Promise<{
+      success?: boolean;
+      invited?: boolean;
+      message?: string;
+      warning?: string;
+      error?: string;
+    }>;
+    inviteContador: (input: { email: string; nombre: string }) => Promise<{
       success?: boolean;
       invited?: boolean;
       message?: string;

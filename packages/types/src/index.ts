@@ -224,19 +224,34 @@ export function calcPeriodoMesesHasta(fechaAdquisicion: string | null, fechaHast
   );
 }
 
+/** Valor neto mínimo mientras el activo está vigente (no dado de baja). */
+export const VALOR_NETO_MINIMO_ACTIVO = 1;
+
 export function calcDepreciacionAcumulada(
   valor: number | null,
   vidaUtilMeses: number | null,
   periodoMeses: number,
+  dadoDeBaja = false,
 ): number | null {
   if (valor == null || vidaUtilMeses == null || vidaUtilMeses <= 0) return null;
   const mensual = valor / vidaUtilMeses;
-  return Math.min(valor, mensual * periodoMeses);
+  const topeDepreciacion = dadoDeBaja
+    ? valor
+    : Math.max(0, valor - VALOR_NETO_MINIMO_ACTIVO);
+  return Math.min(topeDepreciacion, mensual * periodoMeses);
 }
 
-export function calcValorNeto(valor: number | null, depreciacionAcumulada: number | null): number | null {
-  if (valor == null || depreciacionAcumulada == null) return null;
-  return Math.max(0, valor - depreciacionAcumulada);
+export function calcValorNeto(
+  valor: number | null,
+  depreciacionAcumulada: number | null,
+  dadoDeBaja = false,
+): number | null {
+  if (valor == null) return null;
+  if (dadoDeBaja) return 0;
+  if (depreciacionAcumulada == null) return null;
+  const neto = valor - depreciacionAcumulada;
+  if (valor <= VALOR_NETO_MINIMO_ACTIVO) return valor;
+  return Math.max(VALOR_NETO_MINIMO_ACTIVO, neto);
 }
 
 /** Extrae el % anual de textos como "10 %", "10%" o "10,5 %". */
@@ -340,6 +355,116 @@ export interface CatalogoNacional {
   resolucion: string | null;
   estado: string | null;
   created_at?: string;
+}
+
+export type CatalogoEstadoSbn = "ACTIVO" | "EXCLUIDO";
+
+export interface CreateCatalogoNacionalInput {
+  codigo: string;
+  denominacion: string;
+  grupo?: string;
+  clase?: string;
+  cuenta_codigo?: string;
+  contabilidad?: string;
+  depreciacion?: string;
+  resolucion?: string;
+  estado: CatalogoEstadoSbn;
+}
+
+export interface CatalogoPlantilla {
+  id: string;
+  label: string;
+  values: Omit<CreateCatalogoNacionalInput, "codigo" | "denominacion">;
+}
+
+export const CATALOGO_PLANTILLAS: CatalogoPlantilla[] = [
+  {
+    id: "cocina_enseres_excluido",
+    label: "Cocina — enseres menores (cuenta de orden)",
+    values: {
+      grupo: "32 COCINA Y COMEDOR",
+      clase: "64 MOBILIARIO",
+      cuenta_codigo: "33522",
+      contabilidad: "33522 Enseres de cocina",
+      resolucion: "0158-97/SBN",
+      estado: "EXCLUIDO",
+    },
+  },
+  {
+    id: "cocina_enseres_activo",
+    label: "Cocina — enseres (activo fijo, 10%)",
+    values: {
+      grupo: "32 COCINA Y COMEDOR",
+      clase: "64 MOBILIARIO",
+      cuenta_codigo: "33522",
+      contabilidad: "33522 Enseres de cocina",
+      depreciacion: "10 %",
+      resolucion: "0158-97/SBN",
+      estado: "ACTIVO",
+    },
+  },
+  {
+    id: "cocina_equipo",
+    label: "Cocina — equipo (10%)",
+    values: {
+      grupo: "32 COCINA Y COMEDOR",
+      clase: "22 EQUIPO",
+      cuenta_codigo: "33690",
+      contabilidad: "336901 Otros equipos - de cocina",
+      depreciacion: "10 %",
+      resolucion: "0158-97/SBN",
+      estado: "ACTIVO",
+    },
+  },
+  {
+    id: "aseo_excluido",
+    label: "Aseo — artículo menor (cuenta de orden)",
+    values: {
+      grupo: "25 ASEO Y LIMPIEZA",
+      clase: "64 MOBILIARIO",
+      resolucion: "0158-97/SBN",
+      estado: "EXCLUIDO",
+    },
+  },
+];
+
+export function normalizeCatalogoDenominacion(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+export function validarCreateCatalogoInput(input: CreateCatalogoNacionalInput): string | null {
+  const codigo = input.codigo.trim();
+  if (!/^\d{8}$/.test(codigo)) {
+    return "El código debe tener exactamente 8 dígitos numéricos.";
+  }
+  if (!normalizeCatalogoDenominacion(input.denominacion)) {
+    return "La denominación es obligatoria.";
+  }
+  if (input.estado !== "ACTIVO" && input.estado !== "EXCLUIDO") {
+    return "Seleccione un estado válido (ACTIVO o EXCLUIDO).";
+  }
+  return null;
+}
+
+export function buildCreateCatalogoPayload(
+  input: CreateCatalogoNacionalInput,
+): Omit<CatalogoNacional, "created_at"> {
+  const trimOrNull = (v?: string) => {
+    const t = v?.trim();
+    return t ? t : null;
+  };
+
+  return {
+    codigo: input.codigo.trim(),
+    denominacion: normalizeCatalogoDenominacion(input.denominacion),
+    grupo: trimOrNull(input.grupo),
+    clase: trimOrNull(input.clase),
+    cuenta_codigo: trimOrNull(input.cuenta_codigo),
+    contabilidad: trimOrNull(input.contabilidad),
+    depreciacion: trimOrNull(input.depreciacion),
+    resolucion: trimOrNull(input.resolucion),
+    estado: input.estado,
+  };
 }
 
 export interface HistorialCambio {

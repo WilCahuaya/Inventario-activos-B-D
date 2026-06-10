@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { CatalogoNacional } from "@inventario/types";
 import { Input, Label } from "@inventario/ui";
 import { searchCatalogo } from "@/lib/actions/catalogo";
@@ -125,7 +126,15 @@ export function CatalogoPicker({
       )}
 
       {!selectedCodigo && query.length >= 2 && !loading && results.length === 0 && open && (
-        <p className="text-xs text-muted-foreground">Sin coincidencias en el catálogo nacional.</p>
+        <div className="space-y-1 text-xs text-muted-foreground">
+          <p>Sin coincidencias en el catálogo nacional.</p>
+          <Link
+            href={`/contador/catalogo?q=${encodeURIComponent(query.trim())}`}
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Agregar «{query.trim()}» al catálogo
+          </Link>
+        </div>
       )}
     </div>
   );

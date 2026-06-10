@@ -18,6 +18,7 @@ import { EntidadesView } from "./components/EntidadesView";
 import { InventarioGlobalView } from "./components/InventarioGlobalView";
 import { PrintBatchLabelDialog } from "./components/PrintBatchLabelDialog";
 import { PrintLabelDialog } from "./components/PrintLabelDialog";
+import { CatalogoView } from "./components/CatalogoView";
 import { UsuariosView } from "./components/UsuariosView";
 import { signInWithGoogle, signOut, useAuth } from "./hooks/useAuth";
 import { useActivosCache } from "./hooks/useActivosCache";
@@ -129,6 +130,12 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
   const [inventarioFlow, setInventarioFlow] = useState<InventarioFlow>({ type: "list" });
   const [printTarget, setPrintTarget] = useState<ActivoConUbicacion | null>(null);
   const [batchPrintTargets, setBatchPrintTargets] = useState<ActivoConUbicacion[] | null>(null);
+  const [catalogoPrefill, setCatalogoPrefill] = useState({ denominacion: "", codigo: "" });
+
+  function openCatalogoFromSearch(query: string) {
+    setCatalogoPrefill({ denominacion: query, codigo: "" });
+    setMainNav("catalogo");
+  }
 
   const drillEntidadId = entidadIdFromFlow(entidadesFlow);
   const activosEntidadId = drillEntidadId || entidadId;
@@ -168,6 +175,8 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
       setEntidadesFlow({ type: "list" });
     } else if (nav === "inventario") {
       setInventarioFlow({ type: "list" });
+    } else if (nav === "catalogo") {
+      setCatalogoPrefill({ denominacion: "", codigo: "" });
     }
   }
 
@@ -361,6 +370,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           fixedSedeId={entidadesFlow.context.sedeId}
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           initialCatalogoCodigo={entidadesFlow.initialCodigo}
+          onAddCatalogoMissing={openCatalogoFromSearch}
           onSuccess={(activo) =>
             setEntidadesFlow({ type: "ficha", activo, context: entidadesFlow.context })
           }
@@ -374,6 +384,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           fixedSedeId={entidadesFlow.context.sedeId}
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           activo={entidadesFlow.activo}
+          onAddCatalogoMissing={openCatalogoFromSearch}
           onSuccess={(activo) =>
             setEntidadesFlow({ type: "ficha", activo, context: entidadesFlow.context })
           }
@@ -423,8 +434,16 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           fixedSedeId={inventarioFlow.activo.sede_id ?? undefined}
           fixedAmbienteId={inventarioFlow.activo.ambiente_id ?? undefined}
           activo={inventarioFlow.activo}
+          onAddCatalogoMissing={openCatalogoFromSearch}
           onSuccess={(activo) => setInventarioFlow({ type: "ficha", activo })}
           onCancel={() => setInventarioFlow({ type: "ficha", activo: inventarioFlow.activo })}
+        />
+      )}
+
+      {mainNav === "catalogo" && (
+        <CatalogoView
+          initialDenominacion={catalogoPrefill.denominacion}
+          initialCodigo={catalogoPrefill.codigo}
         />
       )}
 

@@ -57,6 +57,7 @@ export function ActivosAmbientePanel({
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <InventarioExportButtons
               activos={activos}
+              sinValores={isAdmin}
               meta={{
                 ambienteNombre,
                 responsable: ambienteResponsable,

@@ -6,6 +6,7 @@ import { getCatalogoByCodigo, searchCatalogo } from "../lib/catalogo";
 interface CatalogoPickerLocalProps {
   onSelect: (item: CatalogoNacional) => void;
   onClear?: () => void;
+  onAddMissing?: (query: string) => void;
   selectedCodigo?: string;
   selectedDenominacion?: string;
   disabled?: boolean;
@@ -18,6 +19,7 @@ function minQueryLength(query: string): number {
 export function CatalogoPickerLocal({
   onSelect,
   onClear,
+  onAddMissing,
   selectedCodigo,
   selectedDenominacion,
   disabled,
@@ -185,7 +187,18 @@ export function CatalogoPickerLocal({
         !loading &&
         results.length === 0 &&
         open && (
-          <p className="text-xs text-muted-foreground">Sin coincidencias en el catálogo nacional.</p>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p>Sin coincidencias en el catálogo nacional.</p>
+            {onAddMissing && (
+              <button
+                type="button"
+                className="font-medium text-primary underline-offset-2 hover:underline"
+                onClick={() => onAddMissing(query.trim())}
+              >
+                Agregar «{query.trim()}» al catálogo
+              </button>
+            )}
+          </div>
         )}
     </div>
   );

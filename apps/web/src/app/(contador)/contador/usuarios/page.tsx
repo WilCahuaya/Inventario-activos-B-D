@@ -17,7 +17,7 @@ export default async function ContadorUsuariosPage() {
     <div className="space-y-6">
       <PanelPageHeader
         title="Usuarios"
-        subtitle="Listado de usuarios del sistema. Los administradores se invitan al crear una entidad."
+        subtitle="Gestione contadores del estudio e invíte administradores al crear una entidad."
       />
       <UsuariosPanel usuarios={usuarios} />
     </div>

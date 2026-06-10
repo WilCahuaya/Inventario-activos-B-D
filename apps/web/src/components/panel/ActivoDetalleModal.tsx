@@ -94,8 +94,9 @@ export function ActivoDetalleModal({
     activo.valor_adquisicion,
     activo.vida_util_meses,
     periodo,
+    inactivo,
   );
-  const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum);
+  const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum, inactivo);
   const pctDep = activo.depreciacion?.trim() || null;
 
   const precioAdq =

@@ -1,8 +1,12 @@
 "use server";
 
-import type { CatalogoNacional } from "@inventario/types";
+import type { CatalogoNacional, CreateCatalogoNacionalInput } from "@inventario/types";
+import {
+  buildCreateCatalogoPayload,
+  validarCreateCatalogoInput,
+} from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/lib/auth/profile";
+import { getProfile, requireProfile } from "@/lib/auth/profile";
 
 export async function searchCatalogo(query: string, limit = 20): Promise<CatalogoNacional[]> {
   const profile = await getProfile();
@@ -38,4 +42,35 @@ export async function getCatalogoByCodigo(codigo: string): Promise<CatalogoNacio
 
   if (error || !data) return null;
   return data as CatalogoNacional;
+}
+
+export async function createCatalogoNacional(
+  input: CreateCatalogoNacionalInput,
+): Promise<{ data?: CatalogoNacional; error?: string }> {
+  await requireProfile("CONTADOR");
+
+  const validationError = validarCreateCatalogoInput(input);
+  if (validationError) return { error: validationError };
+
+  const payload = buildCreateCatalogoPayload(input);
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("catalogo_nacional")
+    .select("codigo")
+    .eq("codigo", payload.codigo)
+    .maybeSingle();
+
+  if (existing) {
+    return { error: `El código ${payload.codigo} ya existe en el catálogo.` };
+  }
+
+  const { data, error } = await supabase
+    .from("catalogo_nacional")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+  return { data: data as CatalogoNacional };
 }

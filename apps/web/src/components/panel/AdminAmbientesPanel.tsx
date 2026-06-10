@@ -5,6 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Entidad, SedeConConteo } from "@inventario/types";
 import { Button, Dialog } from "@inventario/ui";
+import {
+  PanelDataTable,
+  PanelToolbar,
+  PanelViewToggle,
+  panelTableBodyRowClass,
+  panelTableHeadRowClass,
+  panelTableTdClass,
+  panelTableThClass,
+  useStoredViewMode,
+} from "@inventario/ui/panel";
 import type { AmbienteConSede } from "@/lib/actions/ubicacion";
 import { createAmbiente, updateAmbiente } from "@/lib/actions/ubicacion";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
@@ -37,6 +47,7 @@ export function AdminAmbientesPanel({
   const [editAmbiente, setEditAmbiente] = useState<AmbienteConSede | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes");
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -162,7 +173,10 @@ export function AdminAmbientesPanel({
         </p>
       )}
 
-      <PanelCountLabel count={filtrados.length} singular="ambiente" plural="ambientes" />
+      <PanelToolbar
+        left={<PanelCountLabel count={filtrados.length} singular="ambiente" plural="ambientes" />}
+        right={<PanelViewToggle value={viewMode} onChange={setViewMode} />}
+      />
 
       <PanelSearchInput
         value={busqueda}
@@ -180,6 +194,55 @@ export function AdminAmbientesPanel({
               : "No hay ambientes configurados. Cree uno con «+ Nuevo ambiente»."
           }
         />
+      ) : viewMode === "list" ? (
+        <PanelDataTable minWidth={900}>
+          <thead>
+            <tr className={panelTableHeadRowClass}>
+              <th className={panelTableThClass}>Ambiente</th>
+              <th className={panelTableThClass}>Responsable</th>
+              <th className={panelTableThClass}>Descripción</th>
+              <th className={panelTableThClass}>Sucursal</th>
+              <th className={panelTableThClass}>Activos</th>
+              <th className={`${panelTableThClass} text-right`}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtrados.map((amb) => {
+              const totalActivos = activosPorAmbiente[amb.id] ?? 0;
+              return (
+                <tr key={amb.id} className={panelTableBodyRowClass}>
+                  <td className={`${panelTableTdClass} font-medium text-foreground`}>{amb.nombre}</td>
+                  <td className={panelTableTdClass}>{amb.responsable ?? "—"}</td>
+                  <td className={`${panelTableTdClass} max-w-[220px] truncate text-muted-foreground`}>
+                    {amb.descripcion ?? "—"}
+                  </td>
+                  <td className={panelTableTdClass}>{amb.sede_nombre}</td>
+                  <td className={panelTableTdClass}>{totalActivos}</td>
+                  <td className={`${panelTableTdClass} text-right`}>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => setEditAmbiente(amb)}
+                      >
+                        <EditIcon />
+                        Editar
+                      </Button>
+                      <Link
+                        href={`/admin/ambientes/${amb.id}`}
+                        className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90"
+                      >
+                        Inventario →
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </PanelDataTable>
       ) : (
         <div className="space-y-8">
           {gruposPorSede.map(({ sedeId, sedeNombre, ambientes: lista }) => (

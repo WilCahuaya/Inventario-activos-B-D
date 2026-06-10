@@ -199,3 +199,5 @@ export function PanelToolbar({
 }
 
 export { TABLE_PAGE_SIZE, TablePagination, useTablePagination } from "./table-pagination";
+export * from "./panel-view-toggle";
+export * from "./panel-list-table";

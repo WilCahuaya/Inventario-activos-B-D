@@ -6,6 +6,15 @@ import { useRouter } from "next/navigation";
 import type { Entidad } from "@inventario/types";
 import type { SedeConConteo } from "@inventario/types";
 import { Button, Dialog } from "@inventario/ui";
+import {
+  PanelDataTable,
+  PanelViewToggle,
+  panelTableBodyRowClass,
+  panelTableHeadRowClass,
+  panelTableTdClass,
+  panelTableThClass,
+  useStoredViewMode,
+} from "@inventario/ui/panel";
 import type { AmbienteConSede } from "@/lib/actions/ubicacion";
 import { createAmbiente, deleteAmbiente, updateAmbiente } from "@/lib/actions/ubicacion";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
@@ -93,6 +102,7 @@ export function AmbientesPanel({ entidad, ambientes: initial, sedes: initialSede
   const [editAmbiente, setEditAmbiente] = useState<AmbienteRow | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes");
 
   const ambientesFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -239,9 +249,12 @@ export function AmbientesPanel({ entidad, ambientes: initial, sedes: initialSede
           </p>
         }
         right={
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            + Crear ambiente
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <PanelViewToggle value={viewMode} onChange={setViewMode} />
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              + Crear ambiente
+            </Button>
+          </div>
         }
       />
 
@@ -270,6 +283,66 @@ export function AmbientesPanel({ entidad, ambientes: initial, sedes: initialSede
             ) : undefined
           }
         />
+      ) : viewMode === "list" ? (
+        <PanelDataTable minWidth={960}>
+          <thead>
+            <tr className={panelTableHeadRowClass}>
+              <th className={panelTableThClass}>Ambiente</th>
+              <th className={panelTableThClass}>Responsable</th>
+              <th className={panelTableThClass}>Descripción</th>
+              <th className={panelTableThClass}>Sucursal</th>
+              <th className={panelTableThClass}>Estado</th>
+              <th className={`${panelTableThClass} text-right`}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ambientesFiltrados.map((amb) => (
+              <tr key={amb.id} className={panelTableBodyRowClass}>
+                <td className={`${panelTableTdClass} font-medium text-primary`}>{amb.nombre}</td>
+                <td className={panelTableTdClass}>{amb.responsable ?? "—"}</td>
+                <td className={`${panelTableTdClass} max-w-[220px] truncate text-muted-foreground`}>
+                  {amb.descripcion ?? "—"}
+                </td>
+                <td className={panelTableTdClass}>{amb.sede_nombre}</td>
+                <td className={panelTableTdClass}>
+                  <StatusBadge variant="active">Activo</StatusBadge>
+                </td>
+                <td className={`${panelTableTdClass} text-right`}>
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => {
+                        setError(null);
+                        setEditAmbiente(amb);
+                      }}
+                    >
+                      <EditIcon />
+                      Editar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteAmbiente(amb)}
+                    >
+                      Eliminar
+                    </Button>
+                    <Link
+                      href={`/contador/entidades/${entidad.id}/ambientes/${amb.id}`}
+                      className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90"
+                    >
+                      Activos →
+                    </Link>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </PanelDataTable>
       ) : (
         <div className="space-y-8">
           {gruposPorSede.map(({ sede, ambientes: lista }) => (

@@ -64,16 +64,17 @@ export function ActivosInventarioMobileCards({
           activo.color,
           activo.medidas,
         );
+        const inactivo = activo.estado_registro === "DADO_DE_BAJA";
         const periodo = calcPeriodoMeses(activo.fecha_adquisicion);
         const depAcum = calcDepreciacionAcumulada(
           activo.valor_adquisicion,
           activo.vida_util_meses,
           periodo,
+          inactivo,
         );
-        const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum);
+        const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum, inactivo);
         const precioAdq = !activo.valor_es_mercado ? activo.valor_adquisicion : null;
         const valorMercado = activo.valor_es_mercado ? activo.valor_adquisicion : null;
-        const inactivo = activo.estado_registro === "DADO_DE_BAJA";
         const preregistrado = activo.estado_registro === "PREREGISTRADO";
 
         return (

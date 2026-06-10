@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { provisionProfileFromContador } from "@/lib/auth/contador-invite";
 import { provisionProfileFromEntidad } from "@/lib/auth/entidad-admin";
 import { homePathForRole } from "@inventario/types";
 import { NextResponse } from "next/server";
@@ -33,7 +34,8 @@ export async function GET(request: Request) {
     .maybeSingle();
 
   if (!profile?.activo) {
-    const provisioned = await provisionProfileFromEntidad(user);
+    const provisioned =
+      (await provisionProfileFromEntidad(user)) ?? (await provisionProfileFromContador(user));
     if (provisioned?.activo) {
       profile = provisioned;
     }

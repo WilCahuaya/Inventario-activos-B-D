@@ -4,7 +4,7 @@ import type { EstadoRegistro } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
 import type { ActivoReporte } from "@/lib/reportes/types";
-import { REPORTES } from "@/lib/reportes/types";
+import { REPORTES, reportePermitidoParaRol, type ReporteId } from "@/lib/reportes/types";
 
 function esReportePorAmbiente(reporteId: string): boolean {
   const def = REPORTES.find((r) => r.id === reporteId);
@@ -50,6 +50,10 @@ export async function cargarActivosReporte(
 
   if (profile.rol === "ADMIN_ENTIDAD" && profile.entidad_id !== input.entidadId) {
     return { error: "No autorizado para esta entidad." };
+  }
+
+  if (!reportePermitidoParaRol(input.reporteId as ReporteId, profile.rol)) {
+    return { error: "Los administradores solo pueden generar reportes sin valores." };
   }
 
   const supabase = await createClient();

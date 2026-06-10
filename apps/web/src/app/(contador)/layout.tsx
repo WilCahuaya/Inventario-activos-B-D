@@ -5,6 +5,7 @@ const CONTADOR_LINKS: PanelNavItem[] = [
   { href: "/contador", label: "Dashboard", icon: "dashboard" },
   { href: "/contador/entidades", label: "Entidades", icon: "entities" },
   { href: "/contador/inventario", label: "Inventario", icon: "inventory" },
+  { href: "/contador/catalogo", label: "Catálogo", icon: "assets" },
   { href: "/contador/usuarios", label: "Usuarios", icon: "users" },
   { href: "/contador/reportes", label: "Reportes", icon: "reports" },
 ];

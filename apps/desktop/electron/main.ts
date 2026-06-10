@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
 import { loadDesktopEnvFiles } from "./env";
-import { inviteEntidadAdmin } from "./invite";
+import { inviteContador, inviteEntidadAdmin } from "./invite";
 import {
   getAtributoVocabMeta,
   initAtributoVocabSchema,
@@ -16,6 +16,7 @@ import {
   initCatalogDatabase,
   replaceCatalog,
   searchCatalog,
+  upsertCatalogRow,
   type CatalogoRow,
 } from "./database/catalogo";
 import {
@@ -132,6 +133,10 @@ ipcMain.handle("catalog:meta", () => {
   return getCatalogMeta();
 });
 
+ipcMain.handle("catalog:upsert", (_event, row: CatalogoRow) => {
+  upsertCatalogRow(row);
+});
+
 ipcMain.handle("atributoVocab:replace", (_event, rows: AtributoVocabRow[]) => {
   return replaceAtributoVocab(rows);
 });
@@ -179,6 +184,7 @@ ipcMain.handle("print:send", (_event, zpl: string, printerName?: string) =>
 ipcMain.handle("print:listPrinters", () => listSystemPrinters());
 
 ipcMain.handle("invite:entidadAdmin", (_event, input) => inviteEntidadAdmin(input));
+ipcMain.handle("invite:contador", (_event, input) => inviteContador(input));
 
 app.whenReady().then(() => {
   loadDesktopEnvFiles();

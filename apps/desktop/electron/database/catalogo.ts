@@ -86,6 +86,22 @@ export function replaceCatalog(rows: CatalogoRow[]): CatalogoMeta {
   return { count: rows.length, syncedAt };
 }
 
+export function upsertCatalogRow(row: CatalogoRow): void {
+  if (!db) throw new Error("Base de datos no inicializada");
+
+  db.prepare(
+    `
+    INSERT OR REPLACE INTO catalogo_nacional (
+      codigo, denominacion, grupo, clase, cuenta_codigo,
+      contabilidad, depreciacion, resolucion, estado
+    ) VALUES (
+      @codigo, @denominacion, @grupo, @clase, @cuenta_codigo,
+      @contabilidad, @depreciacion, @resolucion, @estado
+    )
+  `,
+  ).run(row);
+}
+
 export function getCatalogByCodigo(codigo: string): CatalogoRow | null {
   if (!db) throw new Error("Base de datos no inicializada");
 

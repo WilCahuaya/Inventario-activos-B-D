@@ -14,10 +14,16 @@ export function buildValorizacionTotales(
   let valorNeto = 0;
 
   for (const activo of activos) {
+    const dadoDeBaja = activo.estado_registro === "DADO_DE_BAJA";
     const periodo = calcPeriodoMesesHasta(activo.fecha_adquisicion, fechaCorte);
     const depAcum =
-      calcDepreciacionAcumulada(activo.valor_adquisicion, activo.vida_util_meses, periodo) ?? 0;
-    const neto = calcValorNeto(activo.valor_adquisicion, depAcum) ?? 0;
+      calcDepreciacionAcumulada(
+        activo.valor_adquisicion,
+        activo.vida_util_meses,
+        periodo,
+        dadoDeBaja,
+      ) ?? 0;
+    const neto = calcValorNeto(activo.valor_adquisicion, depAcum, dadoDeBaja) ?? 0;
     valorAdquisicion += activo.valor_adquisicion ?? 0;
     depreciacionAcumulada += depAcum;
     valorNeto += neto;
@@ -41,10 +47,16 @@ export function buildClasificacionResumen(
     const cuenta = activo.cuenta_contable?.trim() || "Sin clasificar";
     const grupo = activo.grupo_contable?.trim() || "—";
     const key = `${cuenta}::${grupo}`;
+    const dadoDeBaja = activo.estado_registro === "DADO_DE_BAJA";
     const periodo = calcPeriodoMesesHasta(activo.fecha_adquisicion, fechaCorte);
     const depAcum =
-      calcDepreciacionAcumulada(activo.valor_adquisicion, activo.vida_util_meses, periodo) ?? 0;
-    const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum) ?? 0;
+      calcDepreciacionAcumulada(
+        activo.valor_adquisicion,
+        activo.vida_util_meses,
+        periodo,
+        dadoDeBaja,
+      ) ?? 0;
+    const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum, dadoDeBaja) ?? 0;
     const valor = activo.valor_adquisicion ?? 0;
 
     const existing = map.get(key);

@@ -1,4 +1,4 @@
-import type { Activo } from "@inventario/types";
+import type { Activo, RolUsuario } from "@inventario/types";
 
 export type ReporteId =
   | "inventario_ambiente_sin_valores"
@@ -46,6 +46,7 @@ export const REPORTES: ReporteDefinicion[] = [
     scope: "ambiente",
     valorizado: true,
     formatos: ["pdf", "excel"],
+    soloContador: true,
   },
   {
     id: "inventario_entidad_valorizado",
@@ -54,6 +55,7 @@ export const REPORTES: ReporteDefinicion[] = [
     scope: "entidad",
     valorizado: true,
     formatos: ["pdf", "excel"],
+    soloContador: true,
   },
   {
     id: "acta_inventario",
@@ -74,6 +76,17 @@ export const REPORTES: ReporteDefinicion[] = [
     soloContador: true,
   },
 ];
+
+export function reportesDisponiblesParaRol(rol: RolUsuario): ReporteDefinicion[] {
+  if (rol === "ADMIN_ENTIDAD") {
+    return REPORTES.filter((r) => !r.soloContador && !r.valorizado);
+  }
+  return REPORTES;
+}
+
+export function reportePermitidoParaRol(reporteId: ReporteId, rol: RolUsuario): boolean {
+  return reportesDisponiblesParaRol(rol).some((r) => r.id === reporteId);
+}
 
 export interface ActivoReporte extends Activo {
   entidad_nombre?: string;

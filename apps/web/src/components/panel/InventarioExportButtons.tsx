@@ -12,9 +12,15 @@ import {
 interface InventarioExportButtonsProps {
   activos: Activo[];
   meta: InventarioExportMeta;
+  /** Administradores exportan sin columnas monetarias */
+  sinValores?: boolean;
 }
 
-export function InventarioExportButtons({ activos, meta }: InventarioExportButtonsProps) {
+export function InventarioExportButtons({
+  activos,
+  meta,
+  sinValores = false,
+}: InventarioExportButtonsProps) {
   const [pending, setPending] = useState<"excel" | "pdf" | null>(null);
 
   async function handleExport(kind: "excel" | "pdf") {
@@ -24,10 +30,11 @@ export function InventarioExportButtons({ activos, meta }: InventarioExportButto
     }
     setPending(kind);
     try {
+      const valorizado = !sinValores;
       if (kind === "excel") {
-        await exportInventarioExcel(activos, meta);
+        await exportInventarioExcel(activos, meta, valorizado);
       } else {
-        await exportInventarioPdf(activos, meta);
+        await exportInventarioPdf(activos, meta, valorizado);
       }
     } catch (err) {
       console.error(err);

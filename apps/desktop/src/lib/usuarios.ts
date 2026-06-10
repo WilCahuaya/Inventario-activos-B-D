@@ -31,3 +31,23 @@ export async function listUsuarios(): Promise<{ data?: ProfileConEntidad[]; erro
 
   return { data: usuarios };
 }
+
+export async function inviteContador(input: {
+  email: string;
+  nombre: string;
+}): Promise<{ message?: string; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+
+  if (!window.electronAPI?.inviteContador) {
+    return {
+      error:
+        "Invitación no disponible. Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local.",
+    };
+  }
+
+  const result = await window.electronAPI.inviteContador(input);
+  if (result.error) return { error: result.error };
+  return { message: result.message ?? result.warning ?? "Contador agregado correctamente." };
+}

@@ -1,8 +1,10 @@
 "use server";
 
 import type { Profile } from "@inventario/types";
-import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import { inviteContador as inviteContadorAuth } from "@/lib/auth/contador-invite";
 import { requireProfile } from "@/lib/auth/profile";
+import { createClient } from "@/lib/supabase/server";
 
 export interface ProfileConEntidad extends Profile {
   entidad_nombre?: string | null;
@@ -28,4 +30,19 @@ export async function listUsuarios(): Promise<ProfileConEntidad[]> {
       entidad_nombre: entidades?.nombre ?? null,
     };
   });
+}
+
+export async function inviteContador(input: { email: string; nombre: string }) {
+  await requireProfile("CONTADOR");
+
+  const result = await inviteContadorAuth(input.email, input.nombre);
+  if (result.error) return { error: result.error };
+
+  revalidatePath("/contador/usuarios");
+
+  return {
+    success: true,
+    invited: result.invited,
+    message: result.message ?? result.warning ?? null,
+  };
 }

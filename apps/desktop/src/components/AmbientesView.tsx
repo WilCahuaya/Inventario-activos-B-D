@@ -5,12 +5,19 @@ import { Button, Dialog } from "@inventario/ui";
 import {
   EditIcon,
   PanelBanner,
+  PanelDataTable,
   PanelEmptyState,
   PanelPageHeader,
   PanelSearchInput,
   PanelToolbar,
+  PanelViewToggle,
   StatusBadge,
   panelCardClass,
+  panelTableBodyRowClass,
+  panelTableHeadRowClass,
+  panelTableTdClass,
+  panelTableThClass,
+  useStoredViewMode,
 } from "@inventario/ui/panel";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -108,6 +115,7 @@ export function AmbientesView({
   const [deleteTarget, setDeleteTarget] = useState<AmbienteConSede | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -328,15 +336,18 @@ export function AmbientesView({
               </p>
             }
             right={
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={loading}
-                onClick={() => void loadData()}
-              >
-                Actualizar
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <PanelViewToggle value={viewMode} onChange={setViewMode} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                  onClick={() => void loadData()}
+                >
+                  Actualizar
+                </Button>
+              </div>
             }
           />
 
@@ -367,6 +378,66 @@ export function AmbientesView({
                 ) : undefined
               }
             />
+          ) : viewMode === "list" ? (
+            <PanelDataTable minWidth={960}>
+              <thead>
+                <tr className={panelTableHeadRowClass}>
+                  <th className={panelTableThClass}>Ambiente</th>
+                  <th className={panelTableThClass}>Responsable</th>
+                  <th className={panelTableThClass}>Descripción</th>
+                  <th className={panelTableThClass}>Sucursal</th>
+                  <th className={panelTableThClass}>Estado</th>
+                  <th className={`${panelTableThClass} text-right`}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ambientesFiltrados.map((amb) => (
+                  <tr key={amb.id} className={panelTableBodyRowClass}>
+                    <td className={`${panelTableTdClass} font-medium text-primary`}>{amb.nombre}</td>
+                    <td className={panelTableTdClass}>{amb.responsable ?? "—"}</td>
+                    <td className={`${panelTableTdClass} max-w-[220px] truncate text-muted-foreground`}>
+                      {amb.descripcion ?? "—"}
+                    </td>
+                    <td className={panelTableTdClass}>{amb.sede_nombre}</td>
+                    <td className={panelTableTdClass}>
+                      <StatusBadge variant="active">Activo</StatusBadge>
+                    </td>
+                    <td className={`${panelTableTdClass} text-right`}>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => {
+                            setError(null);
+                            setEditAmbiente(amb);
+                          }}
+                        >
+                          <EditIcon />
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            setError(null);
+                            setDeleteTarget(amb);
+                          }}
+                        >
+                          Eliminar
+                        </Button>
+                        <Button type="button" size="sm" onClick={() => onViewActivos(amb)}>
+                          Activos →
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </PanelDataTable>
           ) : (
             <div className="space-y-8">
               {gruposPorSede.map(({ sede, ambientes: lista }) => (

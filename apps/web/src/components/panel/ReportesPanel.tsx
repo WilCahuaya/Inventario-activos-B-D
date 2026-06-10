@@ -35,7 +35,7 @@ export function ReportesPanel({
   esAdmin = false,
 }: ReportesPanelProps) {
   const reportesDisponibles = useMemo(
-    () => REPORTES.filter((r) => !r.soloContador || !esAdmin),
+    () => (esAdmin ? REPORTES.filter((r) => !r.soloContador && !r.valorizado) : REPORTES),
     [esAdmin],
   );
 
@@ -326,8 +326,14 @@ export function ReportesPanel({
         <ul className="mt-2 list-inside list-disc space-y-1">
           <li>Membrete con razón social, RUC y fecha de corte</li>
           <li>Usuario generador y numeración de páginas en PDF</li>
-          <li>Resumen por clasificación contable en reportes valorizados</li>
-          <li>Acta con espacios para firmas (solo contador)</li>
+          {esAdmin ? (
+            <li>Solo reportes físicos sin columnas monetarias (valores reservados al contador)</li>
+          ) : (
+            <>
+              <li>Resumen por clasificación contable en reportes valorizados</li>
+              <li>Acta con espacios para firmas (solo contador)</li>
+            </>
+          )}
         </ul>
       </div>
     </div>

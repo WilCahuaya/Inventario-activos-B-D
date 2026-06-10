@@ -65,6 +65,7 @@ interface ActivoFormDesktopProps {
   fixedAmbienteId?: string;
   activo?: ActivoConUbicacion;
   initialCatalogoCodigo?: string;
+  onAddCatalogoMissing?: (query: string) => void;
   onSuccess: (activo: ActivoConUbicacion) => void;
   onCancel: () => void;
 }
@@ -75,6 +76,7 @@ export function ActivoFormDesktop({
   fixedAmbienteId,
   activo,
   initialCatalogoCodigo,
+  onAddCatalogoMissing,
   onSuccess,
   onCancel,
 }: ActivoFormDesktopProps) {
@@ -454,6 +456,7 @@ export function ActivoFormDesktop({
         <CatalogoPickerLocal
           onSelect={handleCatalogoSelect}
           onClear={handleCatalogoClear}
+          onAddMissing={onAddCatalogoMissing}
           selectedCodigo={catalogo?.codigo ?? activo?.codigo_catalogo}
           selectedDenominacion={catalogo?.denominacion}
           disabled={pending}

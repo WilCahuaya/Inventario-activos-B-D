@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("catalog:search", query, limit),
   getCatalogByCodigo: (codigo: string) => ipcRenderer.invoke("catalog:getByCodigo", codigo),
   getCatalogMeta: () => ipcRenderer.invoke("catalog:meta"),
+  upsertCatalogRow: (row: unknown) => ipcRenderer.invoke("catalog:upsert", row),
   syncAtributoVocab: (rows: unknown[]) => ipcRenderer.invoke("atributoVocab:replace", rows),
   searchAtributoVocabLocal: (campo: string, query: string, limit?: number) =>
     ipcRenderer.invoke("atributoVocab:search", campo, query, limit),
@@ -65,6 +66,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     entidadNombre?: string;
   }) =>
     ipcRenderer.invoke("invite:entidadAdmin", input) as Promise<{
+      success?: boolean;
+      invited?: boolean;
+      message?: string;
+      warning?: string;
+      error?: string;
+    }>,
+  inviteContador: (input: { email: string; nombre: string }) =>
+    ipcRenderer.invoke("invite:contador", input) as Promise<{
       success?: boolean;
       invited?: boolean;
       message?: string;

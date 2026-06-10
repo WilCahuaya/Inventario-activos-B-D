@@ -1,4 +1,9 @@
-import type { CatalogoNacional } from "@inventario/types";
+import type { CatalogoNacional, CreateCatalogoNacionalInput } from "@inventario/types";
+import {
+  buildCreateCatalogoPayload,
+  validarCreateCatalogoInput,
+} from "@inventario/types";
+import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
 
 type LocalCatalogRow = {
@@ -74,4 +79,51 @@ export async function getCatalogoByCodigo(codigo: string): Promise<CatalogoNacio
 
   if (error || !data) return null;
   return data as CatalogoNacional;
+}
+
+export async function createCatalogoNacional(
+  input: CreateCatalogoNacionalInput,
+): Promise<{ data?: CatalogoNacional; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+
+  const validationError = validarCreateCatalogoInput(input);
+  if (validationError) return { error: validationError };
+
+  const payload = buildCreateCatalogoPayload(input);
+  const supabase = getSupabaseClient();
+
+  const { data: existing } = await supabase
+    .from("catalogo_nacional")
+    .select("codigo")
+    .eq("codigo", payload.codigo)
+    .maybeSingle();
+
+  if (existing) {
+    return { error: `El código ${payload.codigo} ya existe en el catálogo.` };
+  }
+
+  const { data, error } = await supabase
+    .from("catalogo_nacional")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  const row = data as CatalogoNacional;
+  await window.electronAPI?.upsertCatalogRow?.({
+    codigo: row.codigo,
+    denominacion: row.denominacion,
+    grupo: row.grupo,
+    clase: row.clase,
+    cuenta_codigo: row.cuenta_codigo,
+    contabilidad: row.contabilidad,
+    depreciacion: row.depreciacion,
+    resolucion: row.resolucion,
+    estado: row.estado,
+  });
+
+  return { data: row };
 }
