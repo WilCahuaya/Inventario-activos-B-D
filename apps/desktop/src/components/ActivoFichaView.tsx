@@ -7,10 +7,11 @@ import {
   formatFechaISOToDDMMYYYY,
   formatMonedaPE,
 } from "@inventario/types";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@inventario/ui";
 import { StatusBadge } from "@inventario/ui/panel";
 import { getActivoById, type ActivoConUbicacion } from "../lib/activos";
+import { activoPrintSource, labelZplInputFromActivo } from "../lib/label-print";
 import { FotoPreviewDialog, PdfPreviewDialog } from "./ActivoMediaDialogs";
 import { CambiarAmbienteDialog } from "./CambiarAmbienteDialog";
 import { DarDeBajaDialog } from "./DarDeBajaDialog";
@@ -30,6 +31,7 @@ interface ActivoFichaViewProps {
   activo: ActivoConUbicacion;
   entidadId: string;
   entidadNombre: string;
+  entidadNombreEtiqueta?: string | null;
   online: boolean;
   onEdit: () => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
@@ -39,6 +41,7 @@ export function ActivoFichaView({
   activo,
   entidadId,
   entidadNombre,
+  entidadNombreEtiqueta,
   online,
   onEdit,
   onActivoUpdated,
@@ -60,6 +63,14 @@ export function ActivoFichaView({
     activo.serie,
     activo.color,
     activo.medidas,
+  );
+  const labelPrint = useMemo(
+    () =>
+      labelZplInputFromActivo(activoPrintSource(activo), {
+        nombre: entidadNombre,
+        nombre_etiqueta: entidadNombreEtiqueta,
+      }),
+    [activo, entidadNombre, entidadNombreEtiqueta],
   );
 
   const estadoRegistro =
@@ -101,6 +112,9 @@ export function ActivoFichaView({
         </CardHeader>
         <CardContent className="space-y-3">
           <Row label="Consolidado" value={nombreConsolidado} />
+          {activo.nombre_etiqueta?.trim() && (
+            <Row label="Nombre en etiqueta" value={activo.nombre_etiqueta} />
+          )}
           <Row label="Estado" value={estadoRegistro} />
           <Row label="Categoría" value={`${categoriaBienCorto(activo.categoria)} — ${CATEGORIA_BIEN_LABELS[activo.categoria].titulo}`} />
           <Row
@@ -189,9 +203,7 @@ export function ActivoFichaView({
         <PrintLabelDialog
           open={printOpen}
           onClose={() => setPrintOpen(false)}
-          entidadNombre={entidadNombre}
-          codigoBarras={codigoEtiqueta}
-          nombreBien={activo.nombre}
+          label={labelPrint}
         />
       )}
 

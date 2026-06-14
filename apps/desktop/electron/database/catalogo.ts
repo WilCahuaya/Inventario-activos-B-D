@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { app } from "electron";
+import { minCatalogoQueryLength } from "@inventario/types";
 import { initOfflineSchema } from "./offline";
 
 export interface CatalogoRow {
@@ -13,6 +14,18 @@ export interface CatalogoRow {
   depreciacion: string | null;
   resolucion: string | null;
   estado: string | null;
+  origen: string;
+}
+
+function ensureCatalogoOrigenColumn(database: Database.Database): void {
+  const cols = database
+    .prepare("PRAGMA table_info(catalogo_nacional)")
+    .all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "origen")) {
+    database.exec(
+      `ALTER TABLE catalogo_nacional ADD COLUMN origen TEXT NOT NULL DEFAULT 'NACIONAL'`,
+    );
+  }
 }
 
 export interface CatalogoMeta {
@@ -41,7 +54,8 @@ export function initCatalogDatabase(): void {
       contabilidad TEXT,
       depreciacion TEXT,
       resolucion TEXT,
-      estado TEXT
+      estado TEXT,
+      origen TEXT NOT NULL DEFAULT 'NACIONAL'
     );
     CREATE INDEX IF NOT EXISTS idx_catalogo_denominacion
       ON catalogo_nacional (denominacion);
@@ -50,6 +64,7 @@ export function initCatalogDatabase(): void {
       value TEXT NOT NULL
     );
   `);
+  ensureCatalogoOrigenColumn(db);
   initOfflineSchema(db);
 }
 
@@ -65,17 +80,19 @@ export function replaceCatalog(rows: CatalogoRow[]): CatalogoMeta {
   const insert = db.prepare(`
     INSERT OR REPLACE INTO catalogo_nacional (
       codigo, denominacion, grupo, clase, cuenta_codigo,
-      contabilidad, depreciacion, resolucion, estado
+      contabilidad, depreciacion, resolucion, estado, origen
     ) VALUES (
       @codigo, @denominacion, @grupo, @clase, @cuenta_codigo,
-      @contabilidad, @depreciacion, @resolucion, @estado
+      @contabilidad, @depreciacion, @resolucion, @estado, @origen
     )
   `);
 
   const syncedAt = new Date().toISOString();
   const tx = db.transaction((items: CatalogoRow[]) => {
     db!.exec("DELETE FROM catalogo_nacional");
-    for (const row of items) insert.run(row);
+    for (const row of items) {
+      insert.run({ ...row, origen: row.origen || "NACIONAL" });
+    }
     db!.prepare(
       "INSERT OR REPLACE INTO meta (key, value) VALUES ('catalogo_synced_at', @value)",
     ).run({ value: syncedAt });
@@ -93,13 +110,13 @@ export function upsertCatalogRow(row: CatalogoRow): void {
     `
     INSERT OR REPLACE INTO catalogo_nacional (
       codigo, denominacion, grupo, clase, cuenta_codigo,
-      contabilidad, depreciacion, resolucion, estado
+      contabilidad, depreciacion, resolucion, estado, origen
     ) VALUES (
       @codigo, @denominacion, @grupo, @clase, @cuenta_codigo,
-      @contabilidad, @depreciacion, @resolucion, @estado
+      @contabilidad, @depreciacion, @resolucion, @estado, @origen
     )
   `,
-  ).run(row);
+  ).run({ ...row, origen: row.origen || "NACIONAL" });
 }
 
 export function getCatalogByCodigo(codigo: string): CatalogoRow | null {
@@ -119,8 +136,7 @@ export function searchCatalog(query: string, limit = 20): CatalogoRow[] {
   if (!db) throw new Error("Base de datos no inicializada");
 
   const trimmed = query.trim();
-  const isDigits = /^\d+$/.test(trimmed);
-  if (trimmed.length < (isDigits ? 1 : 2)) return [];
+  if (trimmed.length < minCatalogoQueryLength(trimmed)) return [];
 
   const pattern = `%${trimmed}%`;
   const prefix = `${trimmed}%`;

@@ -3,6 +3,7 @@ import { getSupabaseClient } from "./supabase";
 
 export interface CreateEntidadInput {
   nombre: string;
+  nombre_etiqueta?: string | null;
   ruc?: string;
   direccion?: string;
   admin_nombre?: string;
@@ -59,6 +60,7 @@ export async function createEntidad(
     .from("entidades")
     .insert({
       nombre,
+      nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
       ruc: input.ruc?.trim() || null,
       direccion: input.direccion?.trim() || null,
       admin_nombre: adminNombre,
@@ -97,6 +99,7 @@ export async function updateEntidad(
     .from("entidades")
     .update({
       nombre,
+      nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
       ruc: input.ruc?.trim() || null,
       direccion: input.direccion?.trim() || null,
       admin_nombre: adminNombre,

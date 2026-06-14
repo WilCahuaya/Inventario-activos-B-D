@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
-import { Button, Dialog } from "@inventario/ui";
+"use client";
 
-interface ConfirmDialogProps {
+import type { ReactNode } from "react";
+import { Button, Dialog } from "./components";
+
+export interface ConfirmDialogProps {
   open: boolean;
   onClose: () => void;
   title: string;

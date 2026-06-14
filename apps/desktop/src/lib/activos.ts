@@ -1,3 +1,4 @@
+import { codigoBarrasLookupVariants } from "@inventario/types";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
@@ -12,6 +13,7 @@ export interface CreateActivoInput {
   entidad_id: string;
   codigo_catalogo: string;
   nombre: string;
+  nombre_etiqueta?: string | null;
   descripcion?: string;
   categoria?: CategoriaBien;
   estado_bien?: EstadoBien;
@@ -64,19 +66,23 @@ export async function findActivoByCodigo(
   entidadId: string,
   options?: { allowCache?: boolean },
 ): Promise<ActivoConUbicacion | null> {
-  const trimmed = codigo.trim();
-  if (!trimmed) return null;
+  const variants = codigoBarrasLookupVariants(codigo);
+  if (variants.length === 0) return null;
 
   const online = typeof navigator !== "undefined" ? navigator.onLine : true;
 
   if (online) {
     try {
       const supabase = getSupabaseClient();
+      const orFilter = variants
+        .flatMap((variant) => [`codigo_barras.eq.${variant}`, `codigo_catalogo.eq.${variant}`])
+        .join(",");
+
       const { data, error } = await supabase
         .from("activos")
         .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
         .eq("entidad_id", entidadId)
-        .or(`codigo_barras.eq.${trimmed},codigo_catalogo.eq.${trimmed}`)
+        .or(orFilter)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -95,7 +101,11 @@ export async function findActivoByCodigo(
 
   if (options?.allowCache !== false && window.electronAPI?.offlineCacheFind) {
     const { findCachedActivo } = await import("./offline");
-    return findCachedActivo(entidadId, trimmed);
+    for (const variant of variants) {
+      const cached = await findCachedActivo(entidadId, variant);
+      if (cached) return cached;
+    }
+    return null;
   }
 
   return null;
@@ -172,6 +182,7 @@ export async function createActivo(
     entidad_id: input.entidad_id,
     codigo_catalogo: input.codigo_catalogo.trim(),
     nombre: input.nombre.trim(),
+    nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
     descripcion: input.descripcion?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
     estado_bien: input.estado_bien ?? "BUENO",
@@ -227,6 +238,7 @@ export async function updateActivo(
   const payload = {
     codigo_catalogo: input.codigo_catalogo.trim(),
     nombre: input.nombre.trim(),
+    nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
     descripcion: input.descripcion?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
     estado_bien: input.estado_bien ?? "BUENO",

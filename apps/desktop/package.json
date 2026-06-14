@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "App de escritorio — Inventario de Activos Fijos",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "pnpm dev:compile-electron && concurrently -k \"vite\" \"pnpm dev:electron\"",
     "dev:compile-electron": "tsc -p tsconfig.node.json",
     "dev:electron": "wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
-    "build": "tsc -p tsconfig.node.json && vite build && electron-builder --dir",
+    "build": "tsc -p tsconfig.node.json && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "build:installer": "tsc -p tsconfig.node.json && vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "echo 'no lint configured'",
     "preview": "vite preview"
@@ -46,7 +47,18 @@
       "output": "release"
     },
     "win": {
-      "target": ["nsis"]
-    }
+      "target": ["nsis"],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "protocols": [
+      {
+        "name": "Inventario B&D Auth",
+        "schemes": ["pe.bdconsultores.inventario"]
+      }
+    ]
   }
 }

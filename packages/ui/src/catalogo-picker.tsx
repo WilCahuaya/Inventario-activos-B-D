@@ -1,29 +1,31 @@
-import { useEffect, useRef, useState } from "react";
-import type { CatalogoNacional } from "@inventario/types";
-import { Input, Label } from "@inventario/ui";
-import { getCatalogoByCodigo, searchCatalogo } from "../lib/catalogo";
+"use client";
 
-interface CatalogoPickerLocalProps {
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { CatalogoNacional } from "@inventario/types";
+import { minCatalogoQueryLength } from "@inventario/types";
+import { Input, Label } from "./components";
+
+export interface CatalogoPickerProps {
   onSelect: (item: CatalogoNacional) => void;
   onClear?: () => void;
-  onAddMissing?: (query: string) => void;
   selectedCodigo?: string;
   selectedDenominacion?: string;
   disabled?: boolean;
+  searchCatalogo: (query: string, limit?: number) => Promise<CatalogoNacional[]>;
+  resolveCodigo?: (codigo: string) => Promise<CatalogoNacional | null>;
+  renderAddMissing?: (query: string) => ReactNode;
 }
 
-function minQueryLength(query: string): number {
-  return /^\d+$/.test(query) ? 1 : 2;
-}
-
-export function CatalogoPickerLocal({
+export function CatalogoPicker({
   onSelect,
   onClear,
-  onAddMissing,
   selectedCodigo,
   selectedDenominacion,
   disabled,
-}: CatalogoPickerLocalProps) {
+  searchCatalogo,
+  resolveCodigo,
+  renderAddMissing,
+}: CatalogoPickerProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CatalogoNacional[]>([]);
   const [open, setOpen] = useState(false);
@@ -31,9 +33,13 @@ export function CatalogoPickerLocal({
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
+  const searchCatalogoRef = useRef(searchCatalogo);
+  const resolveCodigoRef = useRef(resolveCodigo);
   const pickingRef = useRef(false);
 
   onSelectRef.current = onSelect;
+  searchCatalogoRef.current = searchCatalogo;
+  resolveCodigoRef.current = resolveCodigo;
 
   useEffect(() => {
     if (selectedCodigo) {
@@ -59,7 +65,7 @@ export function CatalogoPickerLocal({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length < minQueryLength(trimmed)) {
+    if (trimmed.length < minCatalogoQueryLength(trimmed)) {
       setResults([]);
       setOpen(false);
       setLoading(false);
@@ -69,7 +75,7 @@ export function CatalogoPickerLocal({
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const items = await searchCatalogo(trimmed, 15);
+        const items = await searchCatalogoRef.current(trimmed, 15);
         setResults(items);
         setOpen(true);
       } finally {
@@ -90,13 +96,23 @@ export function CatalogoPickerLocal({
   }
 
   async function resolveExactCodigo(codigo: string) {
-    const item = await getCatalogoByCodigo(codigo);
+    const resolve = resolveCodigoRef.current;
+    if (!resolve) return;
+    const item = await resolve(codigo);
     if (item) handleSelect(item);
   }
 
   function handleListPointerDown() {
     pickingRef.current = true;
   }
+
+  const trimmedQuery = query.trim();
+  const showNoResults =
+    !selectedCodigo &&
+    trimmedQuery.length >= minCatalogoQueryLength(trimmedQuery) &&
+    !loading &&
+    results.length === 0 &&
+    open;
 
   return (
     <div ref={containerRef} className={open ? "relative z-50 space-y-2" : "space-y-2"}>
@@ -120,7 +136,7 @@ export function CatalogoPickerLocal({
             if (results.length > 0) setOpen(true);
           }}
           onBlur={() => {
-            if (pickingRef.current) return;
+            if (pickingRef.current || !resolveCodigoRef.current) return;
             const trimmed = query.trim();
             if (/^\d{8}$/.test(trimmed) && trimmed !== selectedCodigo) {
               void resolveExactCodigo(trimmed);
@@ -136,7 +152,7 @@ export function CatalogoPickerLocal({
               handleSelect(exact);
               return;
             }
-            if (/^\d{8}$/.test(trimmed)) {
+            if (resolveCodigoRef.current && /^\d{8}$/.test(trimmed)) {
               void resolveExactCodigo(trimmed);
               return;
             }
@@ -182,24 +198,12 @@ export function CatalogoPickerLocal({
         </p>
       )}
 
-      {!selectedCodigo &&
-        query.trim().length >= minQueryLength(query.trim()) &&
-        !loading &&
-        results.length === 0 &&
-        open && (
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <p>Sin coincidencias en el catálogo nacional.</p>
-            {onAddMissing && (
-              <button
-                type="button"
-                className="font-medium text-primary underline-offset-2 hover:underline"
-                onClick={() => onAddMissing(query.trim())}
-              >
-                Agregar «{query.trim()}» al catálogo
-              </button>
-            )}
-          </div>
-        )}
+      {showNoResults && (
+        <div className="space-y-1 text-xs text-muted-foreground">
+          <p>Sin coincidencias en el catálogo nacional.</p>
+          {renderAddMissing?.(trimmedQuery)}
+        </div>
+      )}
     </div>
   );
 }

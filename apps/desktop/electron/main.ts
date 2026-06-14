@@ -1,5 +1,15 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session } from "electron";
+import fs from "fs";
 import path from "path";
+import { ensureOAuthCallbackServer } from "./auth/callback-server";
+import { registerAuthIpcHandlers } from "./auth/ipc";
+import {
+  attachProtocolListeners,
+  getProtocolUrlFromArgv,
+  handleProtocolAuthUrl,
+  registerAuthProtocol,
+} from "./auth/protocol";
+import { openSystemBrowser } from "./auth/open-browser";
 import { loadDesktopEnvFiles } from "./env";
 import { inviteContador, inviteEntidadAdmin } from "./invite";
 import {
@@ -36,15 +46,107 @@ import { buildLabelZpl, listSystemPrinters, saveZplDialog, sendZplToPrinter } fr
 let mainWindow: BrowserWindow | null = null;
 
 function getDistPath(): string {
-  return path.join(__dirname, "../dist");
+  return path.join(__dirname, "../../dist");
 }
 
-function isAuthCallbackUrl(targetUrl: string): boolean {
-  return targetUrl.includes("/auth/callback");
+function resolvePreloadPath(): string {
+  const candidates = [
+    path.join(__dirname, "preload.js"),
+    path.join(app.getAppPath(), "dist-electron", "electron", "preload.js"),
+    path.join(
+      process.resourcesPath,
+      "app.asar.unpacked",
+      "dist-electron",
+      "electron",
+      "preload.js",
+    ),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      console.info("[app] Preload:", candidate);
+      return candidate;
+    }
+  }
+
+  console.error("[app] preload.js no encontrado:", candidates);
+  return candidates[0];
+}
+
+function isAllowedAppNavigation(targetUrl: string): boolean {
+  if (!targetUrl) return true;
+  if (targetUrl.startsWith("file://")) return true;
+
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devUrl && targetUrl.startsWith(devUrl)) return true;
+
+  return (
+    targetUrl.startsWith("http://127.0.0.1:5173") ||
+    targetUrl.startsWith("http://localhost:5173")
+  );
+}
+
+function loadMainWindowContent(win: BrowserWindow): void {
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devUrl) {
+    void win.loadURL(devUrl);
+    return;
+  }
+  void win.loadFile(path.join(getDistPath(), "index.html"));
+}
+
+function attachSessionNavigationGuards(): void {
+  const appSession = session.fromPartition("persist:inventario");
+
+  appSession.webRequest.onBeforeRequest(
+    { urls: ["http://*/*", "https://*/*"] },
+    (details, callback) => {
+      if (details.resourceType !== "mainFrame") {
+        callback({});
+        return;
+      }
+      if (isAllowedAppNavigation(details.url)) {
+        callback({});
+        return;
+      }
+
+      console.warn("[auth] Cancelada carga HTTP en ventana principal:", details.url);
+      callback({ cancel: true });
+    },
+  );
+}
+
+function attachMainWindowNavigationGuards(win: BrowserWindow): void {
+  const blockExternalNavigation = (event: Electron.Event, url: string) => {
+    if (isAllowedAppNavigation(url)) return;
+
+    event.preventDefault();
+    console.warn("[auth] Bloqueada navegación en ventana principal:", url);
+  };
+
+  win.webContents.on("will-navigate", blockExternalNavigation);
+  win.webContents.on("will-redirect", blockExternalNavigation);
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      void openSystemBrowser(url);
+    }
+    return { action: "deny" };
+  });
+
+  win.webContents.on("did-navigate", (_event, url) => {
+    if (isAllowedAppNavigation(url)) return;
+    console.warn("[auth] Recuperando ventana principal tras navegación a", url);
+    loadMainWindowContent(win);
+  });
 }
 
 function createWindow(): void {
   const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
+
+  if (!process.env.VITE_DEV_SERVER_URL) {
+    Menu.setApplicationMenu(null);
+  }
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -52,12 +154,21 @@ function createWindow(): void {
     minWidth: 1024,
     minHeight: 700,
     title: "Inventario Activos B&D",
+    autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: resolvePreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,
+      partition: "persist:inventario",
     },
   });
+
+  mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error("[app] Error al cargar preload:", preloadPath, error);
+  });
+
+  attachMainWindowNavigationGuards(mainWindow);
 
   if (VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
@@ -66,56 +177,12 @@ function createWindow(): void {
   }
 }
 
-ipcMain.handle("auth:google", async (_event, oauthUrl: string) => {
-  return new Promise<string>((resolve, reject) => {
-    const authWindow = new BrowserWindow({
-      width: 520,
-      height: 720,
-      show: true,
-      title: "Iniciar sesión con Google",
-      autoHideMenuBar: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
-    });
-
-    let settled = false;
-
-    const finish = (callbackUrl: string) => {
-      if (settled) return;
-      settled = true;
-      mainWindow?.webContents.send("auth-callback", callbackUrl);
-      if (!authWindow.isDestroyed()) authWindow.close();
-      resolve(callbackUrl);
-    };
-
-    const fail = (message: string) => {
-      if (settled) return;
-      settled = true;
-      if (!authWindow.isDestroyed()) authWindow.close();
-      reject(new Error(message));
-    };
-
-    authWindow.on("closed", () => {
-      if (!settled) fail("Ventana de autenticación cerrada");
-    });
-
-    authWindow.webContents.on("will-redirect", (_event, targetUrl) => {
-      if (isAuthCallbackUrl(targetUrl)) finish(targetUrl);
-    });
-
-    authWindow.webContents.on("did-navigate", (_event, targetUrl) => {
-      if (isAuthCallbackUrl(targetUrl)) finish(targetUrl);
-    });
-
-    authWindow.webContents.on("will-navigate", (_event, targetUrl) => {
-      if (isAuthCallbackUrl(targetUrl)) finish(targetUrl);
-    });
-
-    authWindow.loadURL(oauthUrl).catch((error: Error) => fail(error.message));
-  });
-});
+registerAuthIpcHandlers(() => ({
+  mainWindow,
+  isAllowedAppNavigation,
+  loadMainWindowContent,
+  setOAuthInProgress: () => {},
+}));
 
 ipcMain.handle("catalog:replace", (_event, rows: CatalogoRow[]) => {
   return replaceCatalog(rows);
@@ -181,16 +248,51 @@ ipcMain.handle("print:saveDialog", (event, zpl: string) => {
 ipcMain.handle("print:send", (_event, zpl: string, printerName?: string) =>
   sendZplToPrinter(zpl, printerName),
 );
-ipcMain.handle("print:listPrinters", () => listSystemPrinters());
+ipcMain.handle("print:listPrinters", (event) => {
+  const sender = BrowserWindow.fromWebContents(event.sender);
+  const windows = BrowserWindow.getAllWindows().filter((window) => !window.isDestroyed());
+  if (sender && !windows.includes(sender)) {
+    windows.unshift(sender);
+  }
+  if (mainWindow && !mainWindow.isDestroyed() && !windows.includes(mainWindow)) {
+    windows.unshift(mainWindow);
+  }
+  return listSystemPrinters(windows);
+});
 
 ipcMain.handle("invite:entidadAdmin", (_event, input) => inviteEntidadAdmin(input));
 ipcMain.handle("invite:contador", (_event, input) => inviteContador(input));
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    const protocolUrl = getProtocolUrlFromArgv(argv);
+    if (protocolUrl) handleProtocolAuthUrl(protocolUrl);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+registerAuthProtocol();
+attachProtocolListeners();
+
 app.whenReady().then(() => {
+  attachSessionNavigationGuards();
+  void ensureOAuthCallbackServer().catch((err) => {
+    console.error("[auth] No se pudo iniciar servidor OAuth local:", err);
+  });
   loadDesktopEnvFiles();
   initCatalogDatabase();
   initAtributoVocabSchema();
   createWindow();
+
+  const startupProtocolUrl = getProtocolUrlFromArgv(process.argv);
+  if (startupProtocolUrl) handleProtocolAuthUrl(startupProtocolUrl);
 });
 
 app.on("window-all-closed", () => {

@@ -3,6 +3,7 @@
 import type { CatalogoNacional, CreateCatalogoNacionalInput } from "@inventario/types";
 import {
   buildCreateCatalogoPayload,
+  minCatalogoQueryLength,
   validarCreateCatalogoInput,
 } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
@@ -13,7 +14,7 @@ export async function searchCatalogo(query: string, limit = 20): Promise<Catalog
   if (!profile) return [];
 
   const trimmed = query.trim();
-  if (trimmed.length < 2) return [];
+  if (trimmed.length < minCatalogoQueryLength(trimmed)) return [];
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("search_catalogo_nacional", {

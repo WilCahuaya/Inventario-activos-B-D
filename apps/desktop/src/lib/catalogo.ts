@@ -1,6 +1,7 @@
-import type { CatalogoNacional, CreateCatalogoNacionalInput } from "@inventario/types";
+import type { CatalogoNacional, CatalogoOrigen, CreateCatalogoNacionalInput } from "@inventario/types";
 import {
   buildCreateCatalogoPayload,
+  minCatalogoQueryLength,
   validarCreateCatalogoInput,
 } from "@inventario/types";
 import { fetchProfile } from "./profile";
@@ -16,9 +17,11 @@ type LocalCatalogRow = {
   depreciacion?: string | null;
   resolucion?: string | null;
   estado?: string | null;
+  origen?: string | null;
 };
 
 function mapLocalRow(row: LocalCatalogRow): CatalogoNacional {
+  const origen: CatalogoOrigen = row.origen === "PROPIO" ? "PROPIO" : "NACIONAL";
   return {
     codigo: row.codigo,
     denominacion: row.denominacion,
@@ -29,16 +32,13 @@ function mapLocalRow(row: LocalCatalogRow): CatalogoNacional {
     depreciacion: row.depreciacion ?? null,
     resolucion: row.resolucion ?? null,
     estado: row.estado ?? null,
+    origen,
   };
-}
-
-function minQueryLength(query: string): number {
-  return /^\d+$/.test(query) ? 1 : 2;
 }
 
 export async function searchCatalogo(query: string, limit = 20): Promise<CatalogoNacional[]> {
   const trimmed = query.trim();
-  if (trimmed.length < minQueryLength(trimmed)) return [];
+  if (trimmed.length < minCatalogoQueryLength(trimmed)) return [];
 
   if (window.electronAPI?.searchCatalogLocal) {
     const rows = await window.electronAPI.searchCatalogLocal(trimmed, limit);
@@ -123,6 +123,7 @@ export async function createCatalogoNacional(
     depreciacion: row.depreciacion,
     resolucion: row.resolucion,
     estado: row.estado,
+    origen: row.origen,
   });
 
   return { data: row };

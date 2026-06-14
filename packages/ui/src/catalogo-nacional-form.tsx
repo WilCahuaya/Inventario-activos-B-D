@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  CATALOGO_ORIGEN_LABELS,
   CATALOGO_PLANTILLAS,
   type CatalogoEstadoSbn,
   type CreateCatalogoNacionalInput,
@@ -115,6 +116,21 @@ export function CatalogoNacionalForm({
           className="font-mono"
           onChange={(e) => updateField("codigo", e.target.value.replace(/\D/g, "").slice(0, 8))}
         />
+      </div>
+
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="catalogo_origen">Origen en catálogo</Label>
+        <Input
+          id="catalogo_origen"
+          readOnly
+          disabled
+          value={CATALOGO_ORIGEN_LABELS.PROPIO}
+          className="bg-muted"
+        />
+        <p className="text-xs text-muted-foreground">
+          Se asigna automáticamente al guardar. Los ítems del catálogo oficial SBN tienen origen
+          nacional.
+        </p>
       </div>
 
       <div className="space-y-2">

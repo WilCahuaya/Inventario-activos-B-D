@@ -1,23 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Dialog, Input, Label } from "@inventario/ui";
+import { Button, Dialog } from "@inventario/ui";
 import { getSavedPrinterName, setSavedPrinterName } from "../lib/offline";
-import { buildLabelZpl } from "../lib/zpl";
+import type { LabelZplInput } from "../lib/label-print";
+import { buildLabelPreviewZpl, buildLabelZpl } from "../lib/zpl";
 import { LabelPreview } from "./LabelPreview";
-
-export interface PrinterOption {
-  name: string;
-  status: string;
-  isDefault: boolean;
-}
+import { PrinterSelector, type PrinterOption } from "./PrinterSelector";
 
 interface PrintLabelDialogProps {
   open: boolean;
   onClose: () => void;
-  entidadNombre: string;
-  codigoBarras: string;
-  nombreBien: string;
+  label: LabelZplInput;
 }
 
 function pickInitialPrinter(printers: PrinterOption[], saved: string): string {
@@ -27,14 +21,9 @@ function pickInitialPrinter(printers: PrinterOption[], saved: string): string {
   return printers[0]?.name ?? "";
 }
 
-export function PrintLabelDialog({
-  open,
-  onClose,
-  entidadNombre,
-  codigoBarras,
-  nombreBien,
-}: PrintLabelDialogProps) {
+export function PrintLabelDialog({ open, onClose, label }: PrintLabelDialogProps) {
   const [zpl, setZpl] = useState("");
+  const [previewZpl, setPreviewZpl] = useState("");
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
   const [printersLoading, setPrintersLoading] = useState(false);
   const [printerName, setPrinterName] = useState("");
@@ -42,15 +31,33 @@ export function PrintLabelDialog({
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const sinImpresora = !printersLoading && printers.length === 0;
+  const { codigoBarras, entidadNombre, fechaAdquisicion, nombreBien } = label;
 
   async function loadPrinters() {
+    if (!window.electronAPI?.printListPrinters) {
+      setPrinters([]);
+      setPrinterName("");
+      setMessage("La detección de impresoras solo funciona en la app de escritorio (Electron).");
+      return;
+    }
+
     setPrintersLoading(true);
+    setMessage(null);
     try {
-      const list = (await window.electronAPI?.printListPrinters?.()) ?? [];
+      const list = await window.electronAPI.printListPrinters();
       const options = list as PrinterOption[];
       setPrinters(options);
       setPrinterName(pickInitialPrinter(options, getSavedPrinterName()));
+      if (options.length === 0) {
+        setMessage(
+          "No se encontraron impresoras. Verifique que estén instaladas en Windows y pulse Actualizar lista.",
+        );
+      }
+    } catch (err) {
+      setPrinters([]);
+      setPrinterName("");
+      const msg = err instanceof Error ? err.message : "Error al detectar impresoras";
+      setMessage(msg);
     } finally {
       setPrintersLoading(false);
     }
@@ -60,9 +67,10 @@ export function PrintLabelDialog({
     if (!open) return;
     setMessage(null);
     setShowZpl(false);
-    setZpl(buildLabelZpl({ entidadNombre, codigoBarras, nombreBien }));
+    setZpl(buildLabelZpl(label));
+    setPreviewZpl(buildLabelPreviewZpl(label));
     void loadPrinters();
-  }, [open, entidadNombre, codigoBarras, nombreBien]);
+  }, [open, label]);
 
   async function handlePrint() {
     if (!zpl) return;
@@ -107,71 +115,26 @@ export function PrintLabelDialog({
       open={open}
       onClose={onClose}
       title="Imprimir etiqueta"
-      description={codigoBarras}
+      description={`${codigoBarras} · 50×25 mm · cinta 110 mm (2 columnas)`}
       className="max-w-2xl"
     >
       <div className="space-y-5">
         <LabelPreview
+          previewZpl={previewZpl}
           entidadNombre={entidadNombre}
           codigoBarras={codigoBarras}
           nombreBien={nombreBien}
+          fechaAdquisicion={fechaAdquisicion}
         />
 
-        {sinImpresora && (
-          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-            No se detectaron impresoras en este equipo. Pulse <strong>Actualizar lista</strong> o
-            escriba el nombre exacto de la impresora (como aparece en el sistema).
-          </p>
-        )}
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="printer_name">Impresora</Label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              disabled={printersLoading}
-              onClick={() => void loadPrinters()}
-            >
-              {printersLoading ? "Buscando…" : "Actualizar lista"}
-            </Button>
-          </div>
-
-          {printers.length > 0 ? (
-            <select
-              id="printer_name"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={printerName}
-              onChange={(e) => setPrinterName(e.target.value)}
-            >
-              {printers.map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.name}
-                  {p.isDefault ? " (predeterminada)" : ""} — {p.status}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              id="printer_name"
-              value={printerName}
-              onChange={(e) => setPrinterName(e.target.value)}
-              placeholder="Nombre de impresora en el sistema (ej. Honeywell_PC42E)"
-              disabled={printersLoading}
-            />
-          )}
-
-          {printersLoading && (
-            <p className="text-sm text-muted-foreground">Detectando impresoras del equipo…</p>
-          )}
-
-          <p className="text-xs text-muted-foreground">
-            Etiquetadora ZPL (Honeywell PC42E-T) u otra impresora configurada en su portátil.
-          </p>
-        </div>
-
+        <PrinterSelector
+          id="printer_name"
+          printers={printers}
+          printersLoading={printersLoading}
+          printerName={printerName}
+          onPrinterNameChange={setPrinterName}
+          onRefresh={() => void loadPrinters()}
+        />
         <div className="space-y-2">
           <button
             type="button"

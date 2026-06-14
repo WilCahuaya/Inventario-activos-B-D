@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ActivoConUbicacion } from "../lib/activos";
 import { registrarActivo } from "../lib/activos";
 import { upsertCachedActivo } from "../lib/offline";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@inventario/ui";
 
 interface ValidarPreregistroDialogProps {
   open: boolean;

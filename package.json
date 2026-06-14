@@ -12,6 +12,7 @@
     "dev:desktop": "pnpm --filter @inventario/desktop dev",
     "build:web": "pnpm --filter @inventario/web build",
     "build:desktop": "pnpm --filter @inventario/desktop build",
+    "build:desktop:installer": "pnpm --filter @inventario/desktop build:installer",
     "import:catalogo": "node scripts/import-catalogo.mjs"
   },
   "devDependencies": {

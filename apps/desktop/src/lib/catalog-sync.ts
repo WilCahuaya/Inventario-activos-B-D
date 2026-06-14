@@ -12,7 +12,7 @@ export async function fetchCatalogoFromSupabase(): Promise<CatalogoNacional[]> {
     const { data, error } = await supabase
       .from("catalogo_nacional")
       .select(
-        "codigo, denominacion, grupo, clase, cuenta_codigo, contabilidad, depreciacion, resolucion, estado",
+        "codigo, denominacion, grupo, clase, cuenta_codigo, contabilidad, depreciacion, resolucion, estado, origen",
       )
       .order("codigo")
       .range(from, from + PAGE_SIZE - 1);

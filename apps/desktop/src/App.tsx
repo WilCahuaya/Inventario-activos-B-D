@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { APP_CLIENT, APP_NAME } from "@inventario/types";
 import {
   Button,
@@ -20,7 +20,9 @@ import { PrintBatchLabelDialog } from "./components/PrintBatchLabelDialog";
 import { PrintLabelDialog } from "./components/PrintLabelDialog";
 import { CatalogoView } from "./components/CatalogoView";
 import { UsuariosView } from "./components/UsuariosView";
-import { signInWithGoogle, signOut, useAuth } from "./hooks/useAuth";
+import { LoginDebugPanel } from "./components/LoginDebugPanel";
+import { type AuthLoginDebug, signInWithGoogle, signOut, useAuth } from "./hooks/useAuth";
+import { getAuthCallbackUrl } from "./lib/auth-config";
 import { useActivosCache } from "./hooks/useActivosCache";
 import { useAtributoVocabSync } from "./hooks/useAtributoVocabSync";
 import { useCatalogSync } from "./hooks/useCatalogSync";
@@ -30,6 +32,7 @@ import { useProfile } from "./hooks/useProfile";
 import { useSelectedEntidad } from "./hooks/useSelectedEntidad";
 import { useSyncQueue } from "./hooks/useSyncQueue";
 import type { ActivoConUbicacion } from "./lib/activos";
+import { labelZplInputForActivo, labelZplInputsForActivos } from "./lib/label-print";
 
 type AmbienteContext = {
   entidadId: string;
@@ -61,13 +64,51 @@ function entidadIdFromFlow(flow: EntidadesFlow): string {
 function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debug, setDebug] = useState<AuthLoginDebug | null>(null);
+  const [showDebugOnError, setShowDebugOnError] = useState(false);
+
+  useEffect(() => {
+    if (window.location.protocol !== "file:") return;
+    if (window.electronAPI?.platform) return;
+    setError(
+      "La app no detectó el módulo de escritorio. Abra «Inventario Activos B&D.exe» desde el menú Inicio (no abra index.html). Si ya lo hizo, reinstale con el instalador más reciente.",
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.getAuthDiagnostics) return;
+    void window.electronAPI.getAuthDiagnostics().then((diag) => {
+      setDebug({
+        callbackUrl: getAuthCallbackUrl(),
+        oauthRedirectBefore: null,
+        oauthRedirectAfter: null,
+        oauthUrlPreview: null,
+        oauthUrlKind: null,
+        redirectPatched: false,
+        serverOk: diag.ok,
+        status: null,
+      });
+    });
+  }, []);
 
   async function handleGoogleLogin() {
+    if (loading) return;
     setLoading(true);
     setError(null);
-    const { error: authError } = await signInWithGoogle();
-    if (authError) setError(authError.message);
-    setLoading(false);
+    try {
+      const onDebug = (partial: AuthLoginDebug) => setDebug(partial);
+      const { error: authError, debug: loginDebug } = await signInWithGoogle(onDebug);
+      if (loginDebug) setDebug(loginDebug);
+      if (authError) {
+        setError(authError.message || "No se pudo iniciar sesión con Google.");
+        setShowDebugOnError(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado al iniciar sesión.");
+      setShowDebugOnError(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -82,14 +123,22 @@ function LoginForm() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-sm text-muted-foreground">
-            Inicie sesión con su cuenta corporativa de Google (rol Contador)
+            Inicie sesión con su cuenta corporativa de Google (rol Contador). Se abrirá Chrome o
+            Edge para completar el acceso.
           </p>
+          {loading && (
+            <p className="text-center text-sm text-muted-foreground">
+              Se abrirá su navegador (Chrome o Edge). Complete el acceso allí y regrese a esta
+              ventana.
+            </p>
+          )}
           {error && (
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           )}
           <Button type="button" className="w-full" disabled={loading} onClick={handleGoogleLogin}>
-            {loading ? "Esperando Google…" : "Continuar con Google"}
+            {loading ? "Esperando autorización en el navegador…" : "Continuar con Google"}
           </Button>
+          <LoginDebugPanel debug={debug} forceVisible={showDebugOnError} />
         </CardContent>
       </Card>
     </div>
@@ -352,6 +401,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           activo={entidadesFlow.activo}
           entidadId={activosEntidadId}
           entidadNombre={drillEntidad?.nombre ?? ""}
+          entidadNombreEtiqueta={drillEntidad?.nombre_etiqueta}
           online={online}
           onEdit={() =>
             setEntidadesFlow({
@@ -367,6 +417,8 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
       {mainNav === "entidades" && entidadesFlow.type === "register" && activosEntidadId && (
         <ActivoFormDesktop
           entidadId={activosEntidadId}
+          entidadNombre={drillEntidad?.nombre ?? ""}
+          entidadNombreEtiqueta={drillEntidad?.nombre_etiqueta}
           fixedSedeId={entidadesFlow.context.sedeId}
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           initialCatalogoCodigo={entidadesFlow.initialCodigo}
@@ -381,6 +433,8 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
       {mainNav === "entidades" && entidadesFlow.type === "edit" && activosEntidadId && (
         <ActivoFormDesktop
           entidadId={activosEntidadId}
+          entidadNombre={drillEntidad?.nombre ?? ""}
+          entidadNombreEtiqueta={drillEntidad?.nombre_etiqueta}
           fixedSedeId={entidadesFlow.context.sedeId}
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           activo={entidadesFlow.activo}
@@ -421,7 +475,12 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
         <ActivoFichaView
           activo={inventarioFlow.activo}
           entidadId={inventarioFlow.activo.entidad_id}
-          entidadNombre={entidadForActivo(inventarioFlow.activo)?.nombre ?? ""}
+          entidadNombre={
+            entidadForActivo(inventarioFlow.activo)?.nombre ??
+            inventarioFlow.activo.entidad_nombre ??
+            ""
+          }
+          entidadNombreEtiqueta={entidadForActivo(inventarioFlow.activo)?.nombre_etiqueta}
           online={online}
           onEdit={() => setInventarioFlow({ type: "edit", activo: inventarioFlow.activo })}
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
@@ -431,6 +490,12 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
       {mainNav === "inventario" && inventarioFlow.type === "edit" && (
         <ActivoFormDesktop
           entidadId={inventarioFlow.activo.entidad_id}
+          entidadNombre={
+            entidadForActivo(inventarioFlow.activo)?.nombre ??
+            inventarioFlow.activo.entidad_nombre ??
+            ""
+          }
+          entidadNombreEtiqueta={entidadForActivo(inventarioFlow.activo)?.nombre_etiqueta}
           fixedSedeId={inventarioFlow.activo.sede_id ?? undefined}
           fixedAmbienteId={inventarioFlow.activo.ambiente_id ?? undefined}
           activo={inventarioFlow.activo}
@@ -453,9 +518,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
         <PrintLabelDialog
           open
           onClose={() => setPrintTarget(null)}
-          entidadNombre={entidadForActivo(printTarget)?.nombre ?? entidad?.nombre ?? ""}
-          codigoBarras={printTarget.codigo_barras}
-          nombreBien={printTarget.nombre}
+          label={labelZplInputForActivo(printTarget, entidadForActivo(printTarget) ?? entidad)}
         />
       )}
 
@@ -463,13 +526,10 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
         <PrintBatchLabelDialog
           open
           onClose={() => setBatchPrintTargets(null)}
-          entidadNombre={
-            entidadForActivo(batchPrintTargets[0])?.nombre ?? entidad?.nombre ?? "Entidad"
-          }
-          items={batchPrintTargets.map((a) => ({
-            codigoBarras: a.codigo_barras!,
-            nombreBien: a.nombre,
-          }))}
+          labels={labelZplInputsForActivos(
+            batchPrintTargets,
+            entidadForActivo(batchPrintTargets[0]) ?? entidad,
+          )}
         />
       )}
     </AppShell>

@@ -1,29 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { Activo, Ambiente, CatalogoNacional, CategoriaBien, Entidad, Sede } from "@inventario/types";
 import {
   CATEGORIA_BIEN_AYUDA,
   CATEGORIA_BIEN_LABELS,
+  assessLabelPrintWarnings,
   buildNombreConsolidado,
   calcDepreciacionAcumulada,
   calcPeriodoMeses,
   calcValorNeto,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
+  formatLabelPrintWarnings,
   formatPorcentajeDepreciacion,
   parseFechaDDMMYYYY,
   parsePorcentajeDepreciacion,
   porcentajeFromVidaUtilMeses,
+  resolveNombreEtiqueta,
+  suggestNombreEtiqueta,
   validarFechaDDMMYYYY,
   vidaUtilMesesFromPorcentaje,
 } from "@inventario/types";
 import {
   ActivoAtributoAutocomplete,
   Button,
+  CatalogoPicker,
   CategoriaBienSelector,
+  ConfirmDialog,
   Input,
   Label,
+  LabelPrintTextPreview,
 } from "@inventario/ui";
 import {
   createActivo,
@@ -34,10 +42,9 @@ import {
   type UpdateActivoInput,
 } from "@/lib/actions/activos";
 import { suggestActivoAtributo } from "@/lib/actions/atributo-vocab";
-import { getCatalogoByCodigo } from "@/lib/actions/catalogo";
+import { getCatalogoByCodigo, searchCatalogo } from "@/lib/actions/catalogo";
 import { createAmbiente, createSede, listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 import { uploadActivoFile } from "@/lib/upload-activo-file";
-import { CatalogoPicker } from "./CatalogoPicker";
 import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
 import { panelFieldsetClass, panelLegendClass } from "./panel-ui";
 
@@ -82,6 +89,7 @@ export function ActivoForm({
   onSuccess,
 }: ActivoFormProps) {
   const isEdit = mode === "edit" && Boolean(activo);
+  const formRef = useRef<HTMLFormElement>(null);
   const soloUbicacionEdit = isEdit && soloUbicacion;
   /** Alta preregistro admin */
   const esPreregistro = !asignaCodigoInmediato && !isEdit;
@@ -92,6 +100,7 @@ export function ActivoForm({
   const [message, setMessage] = useState<string | null>(null);
   const [catalogo, setCatalogo] = useState<CatalogoNacional | null>(null);
   const [nombre, setNombre] = useState("");
+  const [nombreEtiqueta, setNombreEtiqueta] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [categoria, setCategoria] = useState<CategoriaBien>("ACTIVO");
   const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">("BUENO");
@@ -126,8 +135,19 @@ export function ActivoForm({
   );
   const [pendingComprobanteFile, setPendingComprobanteFile] = useState<File | null>(null);
   const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [labelWarnOpen, setLabelWarnOpen] = useState(false);
+  const [labelWarnText, setLabelWarnText] = useState("");
 
   const entidadEfectiva = fixedEntidadId ?? entidadId;
+  const entidadSeleccionada = useMemo(
+    () => entidades.find((e) => e.id === entidadEfectiva),
+    [entidades, entidadEfectiva],
+  );
+  const entidadNombre = entidadSeleccionada?.nombre ?? "";
+  const entidadEnEtiqueta = useMemo(
+    () => resolveNombreEtiqueta(entidadNombre, entidadSeleccionada?.nombre_etiqueta),
+    [entidadNombre, entidadSeleccionada?.nombre_etiqueta],
+  );
 
   useEffect(() => {
     if (!activo || !isEdit) return;
@@ -137,6 +157,7 @@ export function ActivoForm({
     });
 
     setNombre(activo.nombre);
+    setNombreEtiqueta(activo.nombre_etiqueta ?? "");
     setDescripcion(activo.descripcion ?? "");
     setCategoria(activo.categoria);
     setEstadoBien(activo.estado_bien);
@@ -255,10 +276,20 @@ export function ActivoForm({
     () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas),
     [nombre, marca, modelo, serie, color, medidas],
   );
+  const nombreOficial = nombre.trim() || catalogo?.denominacion || "";
+  const nombreEtiquetaSugerido = useMemo(
+    () => (nombreOficial ? suggestNombreEtiqueta(nombreOficial) : ""),
+    [nombreOficial],
+  );
+  const nombreEnEtiqueta = useMemo(
+    () => resolveNombreEtiqueta(nombreOficial, nombreEtiqueta),
+    [nombreOficial, nombreEtiqueta],
+  );
 
   function resetFormulario() {
     setCatalogo(null);
     setNombre("");
+    setNombreEtiqueta("");
     setDescripcion("");
     setCategoria("ACTIVO");
     setEstadoBien("BUENO");
@@ -344,10 +375,10 @@ export function ActivoForm({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    setPending(true);
     setMessage(null);
 
     if (soloUbicacionEdit && activo) {
+      setPending(true);
       if (!sedeId || !ambienteId) {
         setPending(false);
         setMessage("Seleccione sede y ambiente.");
@@ -367,16 +398,40 @@ export function ActivoForm({
     }
 
     if (!catalogo) {
-      setPending(false);
       setMessage("Seleccione un ítem del catálogo nacional.");
       return;
     }
 
     if (!entidadEfectiva) {
-      setPending(false);
       setMessage("Seleccione la entidad.");
       return;
     }
+
+    const fechaError = validarFechaDDMMYYYY(fechaAdquisicion);
+    if (fechaError) {
+      setFechaAdquisicionError(fechaError);
+      setMessage(fechaError);
+      return;
+    }
+
+    const labelWarnings = assessLabelPrintWarnings({
+      nombreBien: nombreEnEtiqueta,
+      entidadNombre: entidadEnEtiqueta,
+    });
+    if (labelWarnings.length > 0) {
+      setLabelWarnText(formatLabelPrintWarnings(labelWarnings));
+      setLabelWarnOpen(true);
+      return;
+    }
+
+    await performSave(form);
+  }
+
+  async function performSave(form: HTMLFormElement) {
+    if (!catalogo || !entidadEfectiva) return;
+
+    setPending(true);
+    setMessage(null);
 
     const fechaError = validarFechaDDMMYYYY(fechaAdquisicion);
     if (fechaError) {
@@ -389,6 +444,7 @@ export function ActivoForm({
     const payload: UpdateActivoInput = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
+      nombre_etiqueta: nombreEtiqueta.trim() || null,
       descripcion: descripcion || undefined,
       categoria,
       estado_bien: estadoBien,
@@ -496,6 +552,7 @@ export function ActivoForm({
   return (
     <>
     <form
+      ref={formRef}
       onSubmit={handleSubmit}
       className={
         variant === "modal"
@@ -548,15 +605,27 @@ export function ActivoForm({
         )}
 
         <CatalogoPicker
+          searchCatalogo={searchCatalogo}
+          resolveCodigo={getCatalogoByCodigo}
           selectedCodigo={catalogo?.codigo}
+          selectedDenominacion={catalogo?.denominacion}
           disabled={pending}
           onSelect={setCatalogo}
           onClear={() => {
             setCatalogo(null);
             setNombre("");
+            setNombreEtiqueta("");
             setDepreciacion("");
             setVidaUtilMeses("");
           }}
+          renderAddMissing={(q) => (
+            <Link
+              href={`/contador/catalogo?q=${encodeURIComponent(q)}`}
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Agregar «{q}» al catálogo
+            </Link>
+          )}
         />
 
         <div className="space-y-2">
@@ -593,6 +662,43 @@ export function ActivoForm({
             onChange={(e) => setNombre(e.target.value)}
           />
         </div>
+
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <Label htmlFor="nombre_etiqueta">Nombre en etiqueta</Label>
+            {nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombreOficial.toUpperCase() && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setNombreEtiqueta(nombreEtiquetaSugerido)}
+              >
+                Usar sugerencia
+              </Button>
+            )}
+          </div>
+          <Input
+            id="nombre_etiqueta"
+            value={nombreEtiqueta}
+            onChange={(e) => setNombreEtiqueta(e.target.value)}
+            placeholder={
+              nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombreOficial.toUpperCase()
+                ? nombreEtiquetaSugerido
+                : "Si está vacío, se usa el nombre del bien"
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            Opcional. Texto que se imprime en la etiqueta 50×25 mm. Si está vacío, se usa el nombre
+            del bien.
+          </p>
+        </div>
+
+        {(nombreEnEtiqueta || entidadEnEtiqueta) && (
+          <LabelPrintTextPreview
+            nombreBien={nombreEnEtiqueta}
+            entidadNombre={entidadEnEtiqueta}
+          />
+        )}
       </fieldset>
 
       {/* Detalle físico */}
@@ -937,6 +1043,22 @@ export function ActivoForm({
       onConfirm={confirmComprobanteSerie}
       onCancel={cancelComprobanteSerie}
     />
+
+    <ConfirmDialog
+      open={labelWarnOpen}
+      onClose={() => setLabelWarnOpen(false)}
+      title="Texto largo para la etiqueta"
+      description="El contenido podría verse reducido o truncado al imprimir la etiqueta 50×25 mm."
+      confirmLabel="Guardar de todos modos"
+      cancelLabel="Volver a editar"
+      pending={pending}
+      onConfirm={() => {
+        setLabelWarnOpen(false);
+        if (formRef.current) void performSave(formRef.current);
+      }}
+    >
+      <p className="whitespace-pre-line text-sm text-muted-foreground">{labelWarnText}</p>
+    </ConfirmDialog>
     </>
   );
 }

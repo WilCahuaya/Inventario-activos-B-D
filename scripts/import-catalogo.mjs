@@ -43,7 +43,7 @@ ON CONFLICT (codigo) DO UPDATE SET
   for (let i = 0; i < rows.length; i += 200) {
     const batch = rows.slice(i, i + 200);
     lines.push(
-      "INSERT INTO public.catalogo_nacional (codigo, denominacion, grupo, clase, cuenta_codigo, contabilidad, depreciacion, resolucion, estado) VALUES",
+      "INSERT INTO public.catalogo_nacional (codigo, denominacion, grupo, clase, cuenta_codigo, contabilidad, depreciacion, resolucion, estado, origen) VALUES",
     );
     lines.push(
       batch
@@ -59,6 +59,7 @@ ON CONFLICT (codigo) DO UPDATE SET
               sqlVal(r.depreciacion),
               sqlVal(r.resolucion),
               sqlVal(r.estado),
+              sqlVal("NACIONAL"),
             ].join(", ")})`,
         )
         .join(",\n") + onConflict + ";",

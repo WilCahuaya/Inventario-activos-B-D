@@ -1,5 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Entidad } from "@inventario/types";
+import {
+  LABEL_PRINT_LAYOUT_FONTS,
+  suggestNombreEtiqueta,
+} from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
 import {
   EditIcon,
@@ -18,7 +22,7 @@ import {
   panelTableThClass,
   useStoredViewMode,
 } from "@inventario/ui/panel";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@inventario/ui";
 import {
   createEntidad,
   deleteEntidad,
@@ -27,11 +31,62 @@ import {
 } from "../lib/entidades";
 
 function EntidadFields({ entidad, requireAdmin = false }: { entidad?: Entidad; requireAdmin?: boolean }) {
+  const [nombre, setNombre] = useState(entidad?.nombre ?? "");
+  const [nombreEtiqueta, setNombreEtiqueta] = useState(entidad?.nombre_etiqueta ?? "");
+
+  useEffect(() => {
+    setNombre(entidad?.nombre ?? "");
+    setNombreEtiqueta(entidad?.nombre_etiqueta ?? "");
+  }, [entidad]);
+
+  const nombreEtiquetaSugerido = useMemo(
+    () =>
+      nombre.trim()
+        ? suggestNombreEtiqueta(nombre, LABEL_PRINT_LAYOUT_FONTS.entidad)
+        : "",
+    [nombre],
+  );
+
   return (
     <>
       <div className="space-y-2">
         <Label htmlFor="nombre">Razón social</Label>
-        <Input id="nombre" name="nombre" required defaultValue={entidad?.nombre ?? ""} />
+        <Input
+          id="nombre"
+          name="nombre"
+          required
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <Label htmlFor="nombre_etiqueta">Nombre en etiqueta</Label>
+          {nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombre.trim().toUpperCase() && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setNombreEtiqueta(nombreEtiquetaSugerido)}
+            >
+              Usar sugerencia
+            </Button>
+          )}
+        </div>
+        <Input
+          id="nombre_etiqueta"
+          name="nombre_etiqueta"
+          value={nombreEtiqueta}
+          onChange={(e) => setNombreEtiqueta(e.target.value)}
+          placeholder={
+            nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombre.trim().toUpperCase()
+              ? nombreEtiquetaSugerido
+              : "Si está vacío, se usa la razón social"
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Opcional. Pie de la etiqueta 50×25 mm. Si está vacío, se usa la razón social.
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="ruc">RUC</Label>
@@ -82,8 +137,10 @@ function EntidadFields({ entidad, requireAdmin = false }: { entidad?: Entidad; r
 }
 
 function entidadFromForm(form: FormData): CreateEntidadInput {
+  const nombreEtiqueta = String(form.get("nombre_etiqueta") || "").trim();
   return {
     nombre: String(form.get("nombre")),
+    nombre_etiqueta: nombreEtiqueta || null,
     ruc: String(form.get("ruc") || ""),
     direccion: String(form.get("direccion") || ""),
     admin_nombre: String(form.get("admin_nombre") || ""),

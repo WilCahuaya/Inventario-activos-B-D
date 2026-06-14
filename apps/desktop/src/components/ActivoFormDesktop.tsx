@@ -3,25 +3,32 @@ import type { CatalogoNacional, CategoriaBien } from "@inventario/types";
 import {
   CATEGORIA_BIEN_AYUDA,
   CATEGORIA_BIEN_LABELS,
+  assessLabelPrintWarnings,
   buildNombreConsolidado,
   calcDepreciacionAcumulada,
   calcPeriodoMeses,
   calcValorNeto,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
+  formatLabelPrintWarnings,
   formatPorcentajeDepreciacion,
   parseFechaDDMMYYYY,
   parsePorcentajeDepreciacion,
   porcentajeFromVidaUtilMeses,
+  resolveNombreEtiqueta,
+  suggestNombreEtiqueta,
   validarFechaDDMMYYYY,
   vidaUtilMesesFromPorcentaje,
 } from "@inventario/types";
 import {
   ActivoAtributoAutocomplete,
   Button,
+  CatalogoPicker,
   CategoriaBienSelector,
+  ConfirmDialog,
   Input,
   Label,
+  LabelPrintTextPreview,
 } from "@inventario/ui";
 import { panelFieldsetClass, panelLegendClass } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
@@ -39,8 +46,7 @@ import {
 } from "../lib/offline";
 import { updateActivoPaths, uploadActivoFile } from "../lib/storage";
 import { suggestActivoAtributo, upsertLocalAtributosFromActivo } from "../lib/atributo-vocab";
-import { getCatalogoByCodigo } from "../lib/catalogo";
-import { CatalogoPickerLocal } from "./CatalogoPickerLocal";
+import { getCatalogoByCodigo, searchCatalogo } from "../lib/catalogo";
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
@@ -61,6 +67,8 @@ function formatSoles(value: number | null) {
 
 interface ActivoFormDesktopProps {
   entidadId: string;
+  entidadNombre: string;
+  entidadNombreEtiqueta?: string | null;
   fixedSedeId?: string;
   fixedAmbienteId?: string;
   activo?: ActivoConUbicacion;
@@ -72,6 +80,8 @@ interface ActivoFormDesktopProps {
 
 export function ActivoFormDesktop({
   entidadId,
+  entidadNombre,
+  entidadNombreEtiqueta,
   fixedSedeId,
   fixedAmbienteId,
   activo,
@@ -84,6 +94,7 @@ export function ActivoFormDesktop({
   const hideUbicacion = Boolean(fixedSedeId && fixedAmbienteId);
   const [catalogo, setCatalogo] = useState<CatalogoNacional | null>(null);
   const [nombre, setNombre] = useState(activo?.nombre ?? "");
+  const [nombreEtiqueta, setNombreEtiqueta] = useState(activo?.nombre_etiqueta ?? "");
   const [descripcion, setDescripcion] = useState(activo?.descripcion ?? "");
   const [categoria, setCategoria] = useState<CategoriaBien>(activo?.categoria ?? "ACTIVO");
   const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">(
@@ -120,6 +131,8 @@ export function ActivoFormDesktop({
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [labelWarnOpen, setLabelWarnOpen] = useState(false);
+  const [labelWarnText, setLabelWarnText] = useState("");
 
   useEffect(() => {
     void listSedes(entidadId).then(setSedes);
@@ -134,20 +147,12 @@ export function ActivoFormDesktop({
   }, [sedeId]);
 
   useEffect(() => {
-    if (activo?.codigo_catalogo && !catalogo) {
-      setCatalogo({
-        codigo: activo.codigo_catalogo,
-        denominacion: activo.nombre,
-        grupo: null,
-        clase: null,
-        cuenta_codigo: null,
-        contabilidad: null,
-        depreciacion: activo.depreciacion,
-        resolucion: null,
-        estado: null,
-      });
-    }
-  }, [activo, catalogo]);
+    if (!activo || !isEdit) return;
+
+    void getCatalogoByCodigo(activo.codigo_catalogo).then((item) => {
+      if (item) setCatalogo(item);
+    });
+  }, [activo, isEdit]);
 
   const fechaAdquisicionIso = useMemo(
     () => (fechaAdquisicion.trim() ? parseFechaDDMMYYYY(fechaAdquisicion) : null),
@@ -167,9 +172,22 @@ export function ActivoFormDesktop({
     () => calcValorNeto(valorNum, depreciacionAcumulada),
     [valorNum, depreciacionAcumulada],
   );
+  const nombreOficial = nombre.trim() || catalogo?.denominacion || "";
   const nombreConsolidado = useMemo(
     () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas),
     [nombre, marca, modelo, serie, color, medidas],
+  );
+  const nombreEtiquetaSugerido = useMemo(
+    () => (nombreOficial ? suggestNombreEtiqueta(nombreOficial) : ""),
+    [nombreOficial],
+  );
+  const nombreEnEtiqueta = useMemo(
+    () => resolveNombreEtiqueta(nombreOficial, nombreEtiqueta),
+    [nombreOficial, nombreEtiqueta],
+  );
+  const entidadEnEtiqueta = useMemo(
+    () => resolveNombreEtiqueta(entidadNombre, entidadNombreEtiqueta),
+    [entidadNombre, entidadNombreEtiqueta],
   );
 
   const searchAtributo = useCallback(
@@ -205,6 +223,7 @@ export function ActivoFormDesktop({
   function handleCatalogoClear() {
     setCatalogo(null);
     setNombre("");
+    setNombreEtiqueta("");
     setDepreciacion("");
     setVidaUtilMeses("");
     if (!isEdit) setCodigoBarrasPreview(null);
@@ -269,12 +288,29 @@ export function ActivoFormDesktop({
       return;
     }
 
+    const labelWarnings = assessLabelPrintWarnings({
+      nombreBien: nombreEnEtiqueta,
+      entidadNombre: entidadEnEtiqueta,
+    });
+    if (labelWarnings.length > 0) {
+      setLabelWarnText(formatLabelPrintWarnings(labelWarnings));
+      setLabelWarnOpen(true);
+      return;
+    }
+
+    await performSave();
+  }
+
+  async function performSave() {
+    if (!catalogo) return;
+
     setPending(true);
     setMessage(null);
 
     const payload = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
+      nombre_etiqueta: nombreEtiqueta.trim() || null,
       descripcion: descripcion || undefined,
       categoria,
       estado_bien: estadoBien,
@@ -329,6 +365,7 @@ export function ActivoFormDesktop({
         correlativo: activo?.correlativo ?? null,
         codigo_barras: activo?.codigo_barras ?? codigoBarrasPreview,
         nombre: payload.nombre,
+        nombre_etiqueta: payload.nombre_etiqueta ?? null,
         descripcion: payload.descripcion ?? null,
         caracteristicas: activo?.caracteristicas ?? null,
         marca: payload.marca ?? null,
@@ -446,6 +483,7 @@ export function ActivoFormDesktop({
     activo?.codigo_barras ?? codigoBarrasPreview ?? "Seleccione catálogo…";
 
   return (
+    <>
     <form
       onSubmit={(e) => void handleSubmit(e)}
       className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2"
@@ -453,13 +491,27 @@ export function ActivoFormDesktop({
       <fieldset className={fieldsetCompact}>
         <legend className={panelLegendClass}>Identificación</legend>
 
-        <CatalogoPickerLocal
+        <CatalogoPicker
+          searchCatalogo={searchCatalogo}
+          resolveCodigo={getCatalogoByCodigo}
           onSelect={handleCatalogoSelect}
           onClear={handleCatalogoClear}
-          onAddMissing={onAddCatalogoMissing}
           selectedCodigo={catalogo?.codigo ?? activo?.codigo_catalogo}
           selectedDenominacion={catalogo?.denominacion}
           disabled={pending}
+          renderAddMissing={
+            onAddCatalogoMissing
+              ? (q) => (
+                  <button
+                    type="button"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                    onClick={() => onAddCatalogoMissing(q)}
+                  >
+                    Agregar «{q}» al catálogo
+                  </button>
+                )
+              : undefined
+          }
         />
 
         <div className="space-y-2">
@@ -486,6 +538,43 @@ export function ActivoFormDesktop({
             onChange={(e) => setNombre(e.target.value)}
           />
         </div>
+
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <Label htmlFor="nombre_etiqueta">Nombre en etiqueta</Label>
+            {nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombreOficial.toUpperCase() && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setNombreEtiqueta(nombreEtiquetaSugerido)}
+              >
+                Usar sugerencia
+              </Button>
+            )}
+          </div>
+          <Input
+            id="nombre_etiqueta"
+            value={nombreEtiqueta}
+            onChange={(e) => setNombreEtiqueta(e.target.value)}
+            placeholder={
+              nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombreOficial.toUpperCase()
+                ? nombreEtiquetaSugerido
+                : "Si está vacío, se usa el nombre del bien"
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            Opcional. Texto que se imprime en la etiqueta 50×25 mm. Si está vacío, se usa el nombre
+            del bien.
+          </p>
+        </div>
+
+        {(nombreEnEtiqueta || entidadEnEtiqueta) && (
+          <LabelPrintTextPreview
+            nombreBien={nombreEnEtiqueta}
+            entidadNombre={entidadEnEtiqueta}
+          />
+        )}
       </fieldset>
 
       <fieldset className={fieldsetCompact}>
@@ -804,5 +893,22 @@ export function ActivoFormDesktop({
         </Button>
       </div>
     </form>
+
+    <ConfirmDialog
+      open={labelWarnOpen}
+      onClose={() => setLabelWarnOpen(false)}
+      title="Texto largo para la etiqueta"
+      description="El contenido podría verse reducido o truncado al imprimir la etiqueta 50×25 mm."
+      confirmLabel="Guardar de todos modos"
+      cancelLabel="Volver a editar"
+      pending={pending}
+      onConfirm={() => {
+        setLabelWarnOpen(false);
+        void performSave();
+      }}
+    >
+      <p className="whitespace-pre-line text-sm text-muted-foreground">{labelWarnText}</p>
+    </ConfirmDialog>
+    </>
   );
 }

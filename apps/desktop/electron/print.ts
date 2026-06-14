@@ -4,30 +4,17 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
+import { buildBatchLabelZpl, buildLabelZpl } from "../shared/print/label-zpl";
+import { sendRawZplToWindowsPrinter } from "./print/raw-windows";
 
 const execFileAsync = promisify(execFile);
+
+export { buildBatchLabelZpl, buildLabelZpl };
 
 export interface PrinterInfo {
   name: string;
   status: string;
   isDefault: boolean;
-}
-
-export function buildLabelZpl(options: {
-  entidadNombre: string;
-  codigoBarras: string;
-  nombreBien: string;
-}): string {
-  const entidad = options.entidadNombre.slice(0, 28).replace(/\^/g, " ");
-  const codigo = options.codigoBarras.replace(/\^/g, "");
-  const nombre = options.nombreBien.slice(0, 32).replace(/\^/g, " ");
-
-  return `^XA
-^FO20,10^A0N,18,18^FDB&D - ${entidad}^FS
-^FO20,32^BY2^BCN,56,Y,N,N^FD${codigo}^FS
-^FO20,100^A0N,16,16^FD${nombre}^FS
-^XZ
-`;
 }
 
 export async function saveZplDialog(
@@ -61,24 +48,205 @@ export async function saveZplDialog(
   }
 }
 
+type WindowsPrinterRow = {
+  Name: string;
+  PrinterStatus: number;
+  IsDefault: boolean;
+  WorkOffline?: boolean;
+};
+
+function parseWindowsPrinterJson(stdout: string): PrinterInfo[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed) as WindowsPrinterRow | WindowsPrinterRow[];
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows
+      .filter((row) => row.Name?.trim())
+      .map((row) => ({
+        name: row.Name.trim(),
+        status: row.WorkOffline
+          ? "Fuera de línea"
+          : windowsPrinterStatusLabel(row.PrinterStatus),
+        isDefault: Boolean(row.IsDefault),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function electronPrinterStatusLabel(status: number): string {
+  const map: Record<number, string> = {
+    0: "En espera",
+    1: "Imprimiendo",
+    2: "Error",
+  };
+  return map[status] ?? "Disponible";
+}
+
+function mergePrinterLists(...lists: PrinterInfo[][]): PrinterInfo[] {
+  const byName = new Map<string, PrinterInfo>();
+
+  for (const list of lists) {
+    for (const printer of list) {
+      const name = printer.name.trim();
+      if (!name) continue;
+
+      const existing = byName.get(name);
+      if (!existing) {
+        byName.set(name, { ...printer, name });
+        continue;
+      }
+
+      if (printer.isDefault) existing.isDefault = true;
+      if (existing.status === "Disponible" && printer.status !== "Disponible") {
+        existing.status = printer.status;
+      }
+    }
+  }
+
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function runWindowsPrinterScript(script: string): Promise<PrinterInfo[]> {
+  const tmpScript = path.join(os.tmpdir(), `inventario-printers-${Date.now()}.ps1`);
+  fs.writeFileSync(tmpScript, script, "utf8");
+
+  try {
+    const { stdout } = await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmpScript],
+      { timeout: 15000, encoding: "utf8" },
+    );
+    const printers = parseWindowsPrinterJson(stdout);
+    if (printers.length > 0) {
+      console.info(`[print] ${printers.length} impresora(s) detectada(s) vía PowerShell`);
+    }
+    return printers;
+  } catch (err) {
+    console.error("[print] Consulta de impresoras Windows falló:", err);
+    return [];
+  } finally {
+    try {
+      fs.unlinkSync(tmpScript);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function listElectronPrinters(window: BrowserWindow | null | undefined): Promise<PrinterInfo[]> {
+  if (!window || window.isDestroyed()) return [];
+
+  const fromAsync = async (): Promise<PrinterInfo[]> => {
+    try {
+      const printers = await window.webContents.getPrintersAsync();
+      return printers
+        .filter((printer) => printer.name?.trim())
+        .map((printer) => ({
+          name: printer.name.trim(),
+          status: electronPrinterStatusLabel(printer.status),
+          isDefault: Boolean(printer.isDefault),
+        }));
+    } catch (err) {
+      console.error("[print] getPrintersAsync falló:", err);
+      return [];
+    }
+  };
+
+  const fromSync = (): PrinterInfo[] => {
+    try {
+      const webContents = window.webContents as typeof window.webContents & {
+        getPrinters?: () => Array<{
+          name: string;
+          status: number;
+          isDefault: boolean;
+        }>;
+      };
+
+      if (typeof webContents.getPrinters !== "function") return [];
+
+      return webContents
+        .getPrinters()
+        .filter((printer) => printer.name?.trim())
+        .map((printer) => ({
+          name: printer.name.trim(),
+          status: electronPrinterStatusLabel(printer.status),
+          isDefault: Boolean(printer.isDefault),
+        }));
+    } catch (err) {
+      console.error("[print] getPrinters falló:", err);
+      return [];
+    }
+  };
+
+  return mergePrinterLists(await fromAsync(), fromSync());
+}
+
+async function listWindowsPrintersViaGetPrinter(): Promise<PrinterInfo[]> {
+  return runWindowsPrinterScript(`
+$default = (Get-CimInstance Win32_Printer -Filter "Default='True'" | Select-Object -ExpandProperty Name -First 1)
+$printers = @(Get-Printer -ErrorAction SilentlyContinue)
+if ($printers.Count -gt 0) {
+  $printers | Select-Object Name, PrinterStatus, @{N='IsDefault';E={$_.Name -eq $default}}, WorkOffline | ConvertTo-Json -Compress
+}
+`);
+}
+
+async function listWindowsPrintersViaWmi(): Promise<PrinterInfo[]> {
+  return runWindowsPrinterScript(`
+$default = (Get-CimInstance Win32_Printer -Filter "Default='True'" | Select-Object -ExpandProperty Name -First 1)
+$rows = @(Get-CimInstance Win32_Printer |
+  Select-Object @{N='Name';E={$_.Name}}, @{N='PrinterStatus';E={$_.PrinterStatus}}, @{N='IsDefault';E={$_.Default}}, @{N='WorkOffline';E={$_.WorkOffline}})
+if ($rows.Count -gt 0) {
+  $rows | ConvertTo-Json -Compress
+}
+`);
+}
+
+async function listWindowsPrintersViaDotNet(): Promise<PrinterInfo[]> {
+  return runWindowsPrinterScript(`
+Add-Type -AssemblyName System.Drawing
+$default = (Get-CimInstance Win32_Printer -Filter "Default='True'" | Select-Object -ExpandProperty Name -First 1)
+$offline = @{}
+Get-CimInstance Win32_Printer -ErrorAction SilentlyContinue | ForEach-Object { $offline[$_.Name] = $_.WorkOffline }
+$names = @([System.Drawing.Printing.PrinterSettings]::InstalledPrinters)
+if ($names.Count -eq 0) { return }
+$rows = foreach ($name in $names) {
+  [PSCustomObject]@{
+    Name = [string]$name
+    PrinterStatus = 0
+    IsDefault = ($name -eq $default)
+    WorkOffline = [bool]$offline[[string]$name]
+  }
+}
+$rows | ConvertTo-Json -Compress
+`);
+}
+
+async function listWindowsPrinters(): Promise<PrinterInfo[]> {
+  const [fromGetPrinter, fromWmi, fromDotNet] = await Promise.all([
+    listWindowsPrintersViaGetPrinter(),
+    listWindowsPrintersViaWmi(),
+    listWindowsPrintersViaDotNet(),
+  ]);
+
+  return mergePrinterLists(fromGetPrinter, fromWmi, fromDotNet);
+}
+
 export async function sendZplToPrinter(
   zpl: string,
   printerName?: string,
 ): Promise<{ ok: boolean; message: string }> {
+  if (process.platform === "win32" && printerName?.trim()) {
+    return sendRawZplToWindowsPrinter(zpl, printerName);
+  }
+
   const tmpFile = path.join(os.tmpdir(), `inventario-label-${Date.now()}.zpl`);
-  fs.writeFileSync(tmpFile, zpl, "utf8");
+  fs.writeFileSync(tmpFile, zpl, "ascii");
 
   try {
-    if (process.platform === "win32" && printerName?.trim()) {
-      const ps = `
-$printer = "${printerName.replace(/"/g, '`"')}"
-$file = "${tmpFile.replace(/\\/g, "\\\\")}"
-Get-Content -Path $file -Raw -Encoding UTF8 | Out-Printer -Name $printer
-`;
-      await execFileAsync("powershell.exe", ["-NoProfile", "-Command", ps], { timeout: 30000 });
-      return { ok: true, message: `Enviado a impresora «${printerName}».` };
-    }
-
     if (process.platform !== "win32") {
       const args = printerName?.trim()
         ? ["-d", printerName, "-o", "raw", tmpFile]
@@ -95,7 +263,7 @@ Get-Content -Path $file -Raw -Encoding UTF8 | Out-Printer -Name $printer
     return {
       ok: false,
       message:
-        "En Windows indique el nombre de la impresora en Ajustes o guarde el archivo .zpl y envíelo desde el driver Honeywell.",
+        "En Windows seleccione la impresora Honeywell del listado o guarde el archivo .zpl para probarlo en BarTender.",
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error al imprimir";
@@ -183,38 +351,22 @@ async function listLinuxPrinters(): Promise<PrinterInfo[]> {
   return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function listSystemPrinters(): Promise<PrinterInfo[]> {
+export async function listSystemPrinters(
+  windows: BrowserWindow[] = [],
+): Promise<PrinterInfo[]> {
   try {
+    const uniqueWindows = windows.filter((window) => window && !window.isDestroyed());
+    const electronLists = await Promise.all(uniqueWindows.map((window) => listElectronPrinters(window)));
+
     if (process.platform === "win32") {
-      const script = `
-$default = (Get-CimInstance Win32_Printer -Filter "Default=$true" | Select-Object -ExpandProperty Name)
-$printers = Get-Printer | Where-Object { -not $_.WorkOffline } | Select-Object Name, PrinterStatus, @{N='IsDefault';E={$_.Name -eq $default}}
-$printers | ConvertTo-Json -Compress
-`;
-      const { stdout } = await execFileAsync(
-        "powershell.exe",
-        ["-NoProfile", "-Command", script],
-        { timeout: 15000 },
-      );
-      const trimmed = stdout.trim();
-      if (!trimmed) return [];
-
-      const parsed = JSON.parse(trimmed) as
-        | { Name: string; PrinterStatus: number; IsDefault: boolean }
-        | Array<{ Name: string; PrinterStatus: number; IsDefault: boolean }>;
-      const rows = Array.isArray(parsed) ? parsed : [parsed];
-
-      return rows
-        .filter((row) => row.Name?.trim())
-        .map((row) => ({
-          name: row.Name.trim(),
-          status: windowsPrinterStatusLabel(row.PrinterStatus),
-          isDefault: Boolean(row.IsDefault),
-        }));
+      const windowsPrinters = await listWindowsPrinters();
+      return mergePrinterLists(...electronLists, windowsPrinters);
     }
 
-    return listLinuxPrinters();
-  } catch {
+    const linuxPrinters = await listLinuxPrinters();
+    return mergePrinterLists(...electronLists, linuxPrinters);
+  } catch (err) {
+    console.error("[print] listSystemPrinters falló:", err);
     return [];
   }
 }

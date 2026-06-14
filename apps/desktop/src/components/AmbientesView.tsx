@@ -20,7 +20,7 @@ import {
   useStoredViewMode,
 } from "@inventario/ui/panel";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@inventario/ui";
 import { GestionarSucursales } from "./GestionarSucursales";
 import {
   createAmbiente,

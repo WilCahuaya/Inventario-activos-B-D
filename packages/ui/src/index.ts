@@ -4,3 +4,6 @@ export * from "./info-hint-button";
 export * from "./categoria-bien-selector";
 export * from "./catalogo-nacional-form";
 export * from "./catalogo-alta-panel";
+export * from "./catalogo-picker";
+export * from "./confirm-dialog";
+export * from "./label-print-text-preview";

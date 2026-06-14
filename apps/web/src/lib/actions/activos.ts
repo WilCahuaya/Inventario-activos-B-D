@@ -9,6 +9,7 @@ export interface CreateActivoInput {
   entidad_id: string;
   codigo_catalogo: string;
   nombre: string;
+  nombre_etiqueta?: string | null;
   descripcion?: string;
   caracteristicas?: string;
   categoria?: CategoriaBien;
@@ -84,6 +85,7 @@ export async function createActivo(input: CreateActivoInput) {
     entidad_id: esAdminEntidad ? profile.entidad_id! : input.entidad_id,
     codigo_catalogo: input.codigo_catalogo.trim(),
     nombre: input.nombre.trim(),
+    nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
     descripcion: input.descripcion?.trim() || null,
     caracteristicas: input.caracteristicas?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
@@ -218,6 +220,7 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
       payload = {
         codigo_catalogo: codigo,
         nombre,
+        nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
         descripcion: input.descripcion?.trim() || null,
         caracteristicas: input.caracteristicas?.trim() || null,
         categoria: input.categoria ?? "ACTIVO",
@@ -256,6 +259,7 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
     payload = {
       codigo_catalogo: input.codigo_catalogo.trim(),
       nombre: input.nombre.trim(),
+      nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
       descripcion: input.descripcion?.trim() || null,
       caracteristicas: input.caracteristicas?.trim() || null,
       categoria: input.categoria ?? "ACTIVO",

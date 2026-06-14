@@ -1,16 +1,24 @@
 import { contextBridge, ipcRenderer } from "electron";
-
-const AUTH_CALLBACK_PATH = "/auth/callback";
+import {
+  DESKTOP_OAUTH_REDIRECT_URL,
+  OAUTH_CALLBACK_PATH,
+} from "../shared/auth/constants";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
-  authCallbackPath: AUTH_CALLBACK_PATH,
+  authCallbackPath: OAUTH_CALLBACK_PATH,
+  authCallbackUrl: DESKTOP_OAUTH_REDIRECT_URL,
+  beginGoogleAuth: () => ipcRenderer.invoke("auth:begin"),
+  cancelGoogleAuth: () => ipcRenderer.invoke("auth:cancel"),
+  getAuthDiagnostics: () =>
+    ipcRenderer.invoke("auth:diagnostics") as Promise<{
+      ok: boolean;
+      callbackUrl: string;
+      callbackPort: number;
+      platform: string;
+      error?: string;
+    }>,
   openGoogleAuth: (url: string) => ipcRenderer.invoke("auth:google", url),
-  onAuthCallback: (callback: (url: string) => void) => {
-    const listener = (_event: unknown, url: string) => callback(url);
-    ipcRenderer.on("auth-callback", listener);
-    return () => ipcRenderer.removeListener("auth-callback", listener);
-  },
   syncCatalog: (rows: unknown[]) => ipcRenderer.invoke("catalog:replace", rows),
   searchCatalogLocal: (query: string, limit?: number) =>
     ipcRenderer.invoke("catalog:search", query, limit),
@@ -46,6 +54,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     entidadNombre: string;
     codigoBarras: string;
     nombreBien: string;
+    fechaAdquisicion?: string | null;
   }) => ipcRenderer.invoke("print:buildZpl", options) as Promise<string>,
   printSaveDialog: (zpl: string) =>
     ipcRenderer.invoke("print:saveDialog", zpl) as Promise<{

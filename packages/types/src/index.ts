@@ -30,6 +30,7 @@ export interface Profile {
 export interface Entidad {
   id: string;
   nombre: string;
+  nombre_etiqueta: string | null;
   ruc: string | null;
   direccion: string | null;
   admin_nombre: string | null;
@@ -74,6 +75,7 @@ export interface Activo {
   correlativo: number | null;
   codigo_barras: string | null;
   nombre: string;
+  nombre_etiqueta: string | null;
   descripcion: string | null;
   caracteristicas: string | null;
   marca: string | null;
@@ -161,13 +163,33 @@ export function formatFechaISOToDDMMYYYY(iso: string | null | undefined): string
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
-/** Correlativo con ceros (6 dígitos por defecto, ej. 000001). */
-export function formatCorrelativoDisplay(correlativo: number | null, digits = 6): string {
+export type { CodigoBarrasPayload } from "./codigo-barras-types";
+
+import { CORRELATIVO_DIGITS, formatCodigoBarras } from "./codigo-barras";
+
+export {
+  CODIGO_BARRAS_CATALOGO_DIGITS,
+  CODIGO_BARRAS_DISPLAY_LENGTH,
+  CODIGO_BARRAS_SIMBOLO_LENGTH,
+  CORRELATIVO_DIGITS,
+  codigoBarrasLookupVariants,
+  formatCodigoBarras,
+  formatCodigoBarrasSimbolo,
+  formatCodigoBarrasSimboloFromPayload,
+  normalizeCodigoBarrasDisplay,
+  parseCodigoBarras,
+} from "./codigo-barras";
+
+/** Correlativo con ceros (4 dígitos por defecto, ej. 0003). */
+export function formatCorrelativoDisplay(
+  correlativo: number | null,
+  digits = CORRELATIVO_DIGITS,
+): string {
   if (correlativo == null) return "";
   return String(correlativo).padStart(digits, "0");
 }
 
-/** Código completo catálogo-correlativo (ej. 74080500-000001). */
+/** Código completo catálogo-correlativo (ej. 74643712-0003). */
 export function formatCorrelativoCompleto(
   codigoCatalogo: string,
   correlativo: number | null,
@@ -343,6 +365,18 @@ export function formatMedidas(
   return parts.join(" × ");
 }
 
+export type CatalogoOrigen = "NACIONAL" | "PROPIO";
+
+export const CATALOGO_ORIGEN_LABELS: Record<CatalogoOrigen, string> = {
+  NACIONAL: "Nacional (catálogo oficial SBN)",
+  PROPIO: "Propio (extensión de la entidad)",
+};
+
+/** Mínimo de caracteres para buscar en catálogo (1 si solo dígitos, 2 si hay texto). */
+export function minCatalogoQueryLength(query: string): number {
+  return /^\d+$/.test(query.trim()) ? 1 : 2;
+}
+
 /** Ítem del catálogo nacional SBN (tabla catalogo_nacional) */
 export interface CatalogoNacional {
   codigo: string;
@@ -354,6 +388,7 @@ export interface CatalogoNacional {
   depreciacion: string | null;
   resolucion: string | null;
   estado: string | null;
+  origen: CatalogoOrigen;
   created_at?: string;
 }
 
@@ -464,6 +499,7 @@ export function buildCreateCatalogoPayload(
     depreciacion: trimOrNull(input.depreciacion),
     resolucion: trimOrNull(input.resolucion),
     estado: input.estado,
+    origen: "PROPIO",
   };
 }
 
@@ -483,27 +519,25 @@ export function homePathForRole(rol: RolUsuario): string {
   return rol === "ADMIN_ENTIDAD" ? "/admin" : "/contador";
 }
 
-/** Formato propuesto Code 128 — Fase 0 */
-export interface CodigoBarrasPayload {
-  codigo_catalogo: string;
-  correlativo: number;
-}
-
-/** Genera string para Code 128: catálogo-correlativo (6 dígitos) */
-export function formatCodigoBarras(payload: CodigoBarrasPayload): string {
-  const correlativo = String(payload.correlativo).padStart(6, "0");
-  return `${payload.codigo_catalogo}-${correlativo}`;
-}
-
-/** Parsea código escaneado; retorna null si formato inválido */
-export function parseCodigoBarras(codigo: string): CodigoBarrasPayload | null {
-  const match = codigo.trim().match(/^([A-Za-z0-9]+)-(\d{1,6})$/);
-  if (!match) return null;
-  return {
-    codigo_catalogo: match[1],
-    correlativo: parseInt(match[2], 10),
-  };
-}
-
 export const APP_NAME = "Inventario de Activos Fijos";
 export const APP_CLIENT = "B&D Consultores Global EIRL";
+
+export {
+  assessLabelPrintWarnings,
+  describeLabelPrintWarning,
+  estimateTextWidthDots,
+  fitLabelLine,
+  fitLabelPrintLine,
+  formatLabelPrintWarnings,
+  LABEL_FIT_FONT_STEPS,
+  LABEL_PRINT_LAYOUT_FONTS,
+  LABEL_PRINT_WIDTH_DOTS,
+  resolveNombreEtiqueta,
+  sanitizeLabelPrintText,
+  suggestNombreEtiqueta,
+  type FitLabelLineOptions,
+  type LabelFitFont,
+  type LabelLineFit,
+  type LabelPrintField,
+  type LabelPrintWarning,
+} from "./label-text";

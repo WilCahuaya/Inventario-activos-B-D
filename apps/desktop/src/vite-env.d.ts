@@ -13,8 +13,17 @@ interface Window {
   electronAPI?: {
     platform: string;
     authCallbackPath: string;
+    authCallbackUrl: string;
+    beginGoogleAuth: () => Promise<void>;
+    cancelGoogleAuth: () => Promise<void>;
+    getAuthDiagnostics: () => Promise<{
+      ok: boolean;
+      callbackUrl: string;
+      callbackPort: number;
+      platform: string;
+      error?: string;
+    }>;
     openGoogleAuth: (url: string) => Promise<string>;
-    onAuthCallback: (callback: (url: string) => void) => () => void;
     syncCatalog: (
       rows: unknown[],
     ) => Promise<{ count: number; syncedAt: string | null }>;
@@ -32,6 +41,7 @@ interface Window {
         depreciacion?: string | null;
         resolucion?: string | null;
         estado?: string | null;
+        origen?: string | null;
       }>
     >;
     getCatalogByCodigo: (codigo: string) => Promise<{
@@ -44,6 +54,7 @@ interface Window {
       depreciacion: string | null;
       resolucion: string | null;
       estado: string | null;
+      origen: string;
     } | null>;
     getCatalogMeta: () => Promise<{ count: number; syncedAt: string | null }>;
     upsertCatalogRow: (row: {
@@ -56,6 +67,7 @@ interface Window {
       depreciacion: string | null;
       resolucion: string | null;
       estado: string | null;
+      origen: string;
     }) => Promise<void>;
     syncAtributoVocab: (
       rows: unknown[],
@@ -81,6 +93,7 @@ interface Window {
       entidadNombre: string;
       codigoBarras: string;
       nombreBien: string;
+      fechaAdquisicion?: string | null;
     }) => Promise<string>;
     printSaveDialog: (zpl: string) => Promise<{ saved: boolean; path?: string; error?: string }>;
     printSend: (zpl: string, printerName?: string) => Promise<{ ok: boolean; message: string }>;

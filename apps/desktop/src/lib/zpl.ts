@@ -1,30 +1,44 @@
-export interface LabelZplInput {
-  entidadNombre: string;
-  codigoBarras: string;
-  nombreBien: string;
-}
-
-export function buildLabelZpl(options: LabelZplInput): string {
-  const entidad = options.entidadNombre.slice(0, 28).replace(/\^/g, " ");
-  const codigo = options.codigoBarras.replace(/\^/g, "");
-  const nombre = options.nombreBien.slice(0, 32).replace(/\^/g, " ");
-
-  return `^XA
-^FO20,10^A0N,18,18^FDB&D - ${entidad}^FS
-^FO20,32^BY2^BCN,56,Y,N,N^FD${codigo}^FS
-^FO20,100^A0N,16,16^FD${nombre}^FS
-^XZ
-`;
-}
-
-export function buildBatchLabelZpl(entidadNombre: string, items: LabelZplInput[]): string {
-  return items
-    .map((item) =>
-      buildLabelZpl({
-        entidadNombre,
-        codigoBarras: item.codigoBarras,
-        nombreBien: item.nombreBien,
-      }),
-    )
-    .join("\n");
-}
+export {
+  buildBatchLabelZpl,
+  buildLabelPreviewZpl,
+  buildLabelRowZpl,
+  buildLabelZpl,
+  barcodeMaxWidthDots,
+  code128ZplPayload,
+  dotsToMm,
+  estimateCode128WidthDots,
+  formatAnioAdquisicion,
+  HONEYWELL_BARCODE_MODULES,
+  resolveBarcodeModule,
+  BARCODE_MAX_WIDTH_MM,
+  LABEL_COLUMN0_X_OFFSET_DOTS,
+  LABEL_DPI,
+  LABEL_HEIGHT_DOTS,
+  LABEL_HEIGHT_MM,
+  LABEL_LAYOUT,
+  labelColumnSideShift,
+  LABEL_WIDTH_DOTS,
+  LABEL_WIDTH_MM,
+  LABELS_PER_ROW,
+  TAPE_GAP_MM,
+  TAPE_WIDTH_DOTS,
+  TAPE_WIDTH_MM,
+  tapeColumnOriginDots,
+  tapeColumnOriginMm,
+  labelZplInputFromActivo,
+  labelZplInputsFromActivos,
+  type LabelActivoPrintSource,
+  type LabelNombreSource,
+  type LabelZplInput,
+} from "@shared/print/label-zpl";
+export {
+  assessLabelPrintWarnings,
+  estimateTextWidthDots,
+  fitLabelLine,
+  formatLabelPrintWarnings,
+  LABEL_FIT_FONT_STEPS,
+  resolveNombreEtiqueta,
+  suggestNombreEtiqueta,
+  type LabelLineFit,
+  type LabelPrintWarning,
+} from "@inventario/types";

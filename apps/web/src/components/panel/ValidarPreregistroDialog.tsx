@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { registrarActivo } from "@/lib/actions/activos";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@inventario/ui";
 
 interface ValidarPreregistroDialogProps {
   open: boolean;
