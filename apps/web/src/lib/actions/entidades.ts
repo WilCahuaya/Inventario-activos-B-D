@@ -99,7 +99,13 @@ export async function listEntidades(): Promise<EntidadConConteo[]> {
 
   const ambienteCountByEntidad = new Map<string, number>();
   for (const row of ambientesRows ?? []) {
-    const entidadId = (row.sedes as { entidad_id: string }).entidad_id;
+    const sedes = row.sedes;
+    const sede = Array.isArray(sedes) ? sedes[0] : sedes;
+    const entidadId =
+      sede && typeof sede === "object" && "entidad_id" in sede
+        ? String((sede as { entidad_id: string }).entidad_id)
+        : null;
+    if (!entidadId) continue;
     ambienteCountByEntidad.set(entidadId, (ambienteCountByEntidad.get(entidadId) ?? 0) + 1);
   }
 
