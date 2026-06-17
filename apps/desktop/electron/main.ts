@@ -12,6 +12,7 @@ import {
 import { openSystemBrowser } from "./auth/open-browser";
 import { loadDesktopEnvFiles } from "./env";
 import { inviteContador, inviteEntidadAdmin } from "./invite";
+import { deleteAuthUser } from "./users-admin";
 import {
   getAtributoVocabMeta,
   initAtributoVocabSchema,
@@ -21,9 +22,11 @@ import {
   type AtributoVocabRow,
 } from "./database/atributo-vocab";
 import {
+  deleteCatalogRow,
   getCatalogByCodigo,
   getCatalogMeta,
   initCatalogDatabase,
+  listCatalogoPropioLocal,
   replaceCatalog,
   searchCatalog,
   upsertCatalogRow,
@@ -204,6 +207,14 @@ ipcMain.handle("catalog:upsert", (_event, row: CatalogoRow) => {
   upsertCatalogRow(row);
 });
 
+ipcMain.handle("catalog:delete", (_event, codigo: string) => {
+  deleteCatalogRow(codigo);
+});
+
+ipcMain.handle("catalog:listPropio", () => {
+  return listCatalogoPropioLocal();
+});
+
 ipcMain.handle("atributoVocab:replace", (_event, rows: AtributoVocabRow[]) => {
   return replaceAtributoVocab(rows);
 });
@@ -262,6 +273,7 @@ ipcMain.handle("print:listPrinters", (event) => {
 
 ipcMain.handle("invite:entidadAdmin", (_event, input) => inviteEntidadAdmin(input));
 ipcMain.handle("invite:contador", (_event, input) => inviteContador(input));
+ipcMain.handle("users:deleteAuth", (_event, userId: string) => deleteAuthUser(userId));
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {

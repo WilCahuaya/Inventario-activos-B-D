@@ -3,6 +3,10 @@
 import type { Profile } from "@inventario/types";
 import { revalidatePath } from "next/cache";
 import { inviteContador as inviteContadorAuth } from "@/lib/auth/contador-invite";
+import {
+  deleteUsuarioForAdmin,
+  setUsuarioActivoForAdmin,
+} from "@/lib/auth/usuario-admin";
 import { requireProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 
@@ -45,4 +49,20 @@ export async function inviteContador(input: { email: string; nombre: string }) {
     invited: result.invited,
     message: result.message ?? result.warning ?? null,
   };
+}
+
+export async function setUsuarioActivo(userId: string, activo: boolean) {
+  const actor = await requireProfile("CONTADOR");
+  const result = await setUsuarioActivoForAdmin({ userId, activo, actor });
+  if (result.error) return { error: result.error };
+  revalidatePath("/contador/usuarios");
+  return { success: true as const };
+}
+
+export async function deleteUsuario(userId: string) {
+  const actor = await requireProfile("CONTADOR");
+  const result = await deleteUsuarioForAdmin({ userId, actor });
+  if (result.error) return { error: result.error };
+  revalidatePath("/contador/usuarios");
+  return { success: true as const };
 }

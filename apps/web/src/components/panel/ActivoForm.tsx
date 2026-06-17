@@ -11,10 +11,12 @@ import {
   calcDepreciacionAcumulada,
   calcPeriodoMeses,
   calcValorNeto,
+  formatComprobanteSerieInput,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
   formatLabelPrintWarnings,
   formatPorcentajeDepreciacion,
+  nombreRequiereEtiquetaOverride,
   parseFechaDDMMYYYY,
   parsePorcentajeDepreciacion,
   porcentajeFromVidaUtilMeses,
@@ -22,6 +24,7 @@ import {
   suggestNombreEtiqueta,
   validarFechaDDMMYYYY,
   vidaUtilMesesFromPorcentaje,
+  type ActivoAtributoCampo,
 } from "@inventario/types";
 import {
   ActivoAtributoAutocomplete,
@@ -29,9 +32,11 @@ import {
   CatalogoPicker,
   CategoriaBienSelector,
   ConfirmDialog,
+  FileInput,
   Input,
   Label,
   LabelPrintTextPreview,
+  Select,
 } from "@inventario/ui";
 import {
   createActivo,
@@ -47,9 +52,6 @@ import { createAmbiente, createSede, listAmbientes, listSedes } from "@/lib/acti
 import { uploadActivoFile } from "@/lib/upload-activo-file";
 import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
 import { panelFieldsetClass, panelLegendClass } from "./panel-ui";
-
-const selectClass =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
 
 const textareaClass =
   "flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -68,6 +70,7 @@ interface ActivoFormProps {
   soloUbicacion?: boolean;
   variant?: "page" | "modal";
   onSuccess?: () => void;
+  onCancel?: () => void;
 }
 
 function formatSoles(value: number | null) {
@@ -87,6 +90,7 @@ export function ActivoForm({
   soloUbicacion = false,
   variant = "page",
   onSuccess,
+  onCancel,
 }: ActivoFormProps) {
   const isEdit = mode === "edit" && Boolean(activo);
   const formRef = useRef<HTMLFormElement>(null);
@@ -101,8 +105,8 @@ export function ActivoForm({
   const [catalogo, setCatalogo] = useState<CatalogoNacional | null>(null);
   const [nombre, setNombre] = useState("");
   const [nombreEtiqueta, setNombreEtiqueta] = useState("");
-  const [descripcion, setDescripcion] = useState("");
   const [categoria, setCategoria] = useState<CategoriaBien>("ACTIVO");
+  const mostrarDepreciacion = categoria !== "CUENTA_ORDEN" && !esPreregistroAdmin;
   const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">("BUENO");
   const [marca, setMarca] = useState("");
   const [modelo, setModelo] = useState("");
@@ -129,8 +133,7 @@ export function ActivoForm({
   const [serieDialogOpen, setSerieDialogOpen] = useState(false);
 
   const searchAtributo = useCallback(
-    (campo: "marca" | "modelo" | "serie" | "color", query: string) =>
-      suggestActivoAtributo(campo, query),
+    (campo: ActivoAtributoCampo, query: string) => suggestActivoAtributo(campo, query),
     [],
   );
   const [pendingComprobanteFile, setPendingComprobanteFile] = useState<File | null>(null);
@@ -158,7 +161,6 @@ export function ActivoForm({
 
     setNombre(activo.nombre);
     setNombreEtiqueta(activo.nombre_etiqueta ?? "");
-    setDescripcion(activo.descripcion ?? "");
     setCategoria(activo.categoria);
     setEstadoBien(activo.estado_bien);
     setMarca(activo.marca ?? "");
@@ -172,7 +174,9 @@ export function ActivoForm({
     setValorEsMercado(activo.valor_es_mercado);
     setFechaAdquisicion(formatFechaISOToDDMMYYYY(activo.fecha_adquisicion));
     setObservacion(activo.observacion ?? "");
-    setComprobanteSerie(activo.comprobante_serie ?? "");
+    setComprobanteSerie(
+      activo.comprobante_serie ? formatComprobanteSerieInput(activo.comprobante_serie) : "",
+    );
     setCodigoBarrasPreview(activo.codigo_barras);
     if (activo.sede_id) setSedeId(activo.sede_id);
     if (activo.ambiente_id) setAmbienteId(activo.ambiente_id);
@@ -181,13 +185,20 @@ export function ActivoForm({
   useEffect(() => {
     if (catalogo) {
       setNombre(catalogo.denominacion);
-      if (!esPreregistroAdmin && catalogo.depreciacion) {
+      if (mostrarDepreciacion && catalogo.depreciacion) {
         setDepreciacion(catalogo.depreciacion);
         const pct = parsePorcentajeDepreciacion(catalogo.depreciacion);
         if (pct) setVidaUtilMeses(String(vidaUtilMesesFromPorcentaje(pct)));
       }
     }
-  }, [catalogo?.codigo, esPreregistroAdmin]);
+  }, [catalogo?.codigo, mostrarDepreciacion]);
+
+  useEffect(() => {
+    if (categoria === "CUENTA_ORDEN") {
+      setDepreciacion("");
+      setVidaUtilMeses("");
+    }
+  }, [categoria]);
 
   function handleDepreciacionChange(value: string) {
     setDepreciacion(value);
@@ -281,6 +292,10 @@ export function ActivoForm({
     () => (nombreOficial ? suggestNombreEtiqueta(nombreOficial) : ""),
     [nombreOficial],
   );
+  const mostrarNombreEtiqueta = useMemo(
+    () => nombreRequiereEtiquetaOverride(nombreOficial),
+    [nombreOficial],
+  );
   const nombreEnEtiqueta = useMemo(
     () => resolveNombreEtiqueta(nombreOficial, nombreEtiqueta),
     [nombreOficial, nombreEtiqueta],
@@ -290,7 +305,6 @@ export function ActivoForm({
     setCatalogo(null);
     setNombre("");
     setNombreEtiqueta("");
-    setDescripcion("");
     setCategoria("ACTIVO");
     setEstadoBien("BUENO");
     setMarca("");
@@ -322,7 +336,7 @@ export function ActivoForm({
   }
 
   function confirmComprobanteSerie(serie: string) {
-    setComprobanteSerie(serie);
+    setComprobanteSerie(formatComprobanteSerieInput(serie));
     if (pendingComprobanteFile) {
       setComprobanteFile(pendingComprobanteFile);
     }
@@ -444,8 +458,7 @@ export function ActivoForm({
     const payload: UpdateActivoInput = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
-      nombre_etiqueta: nombreEtiqueta.trim() || null,
-      descripcion: descripcion || undefined,
+      nombre_etiqueta: mostrarNombreEtiqueta ? nombreEtiqueta.trim() || null : null,
       categoria,
       estado_bien: estadoBien,
       marca: marca || undefined,
@@ -466,7 +479,7 @@ export function ActivoForm({
         comprobante_serie: comprobanteSerie.trim() || undefined,
       });
     }
-    if (!esPreregistroAdmin) {
+    if (mostrarDepreciacion) {
       Object.assign(payload, {
         depreciacion: depreciacion || undefined,
         vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
@@ -531,23 +544,29 @@ export function ActivoForm({
   }
 
   const hideUbicacion = !soloUbicacionEdit && Boolean(fixedAmbienteId && fixedSedeId);
+  const isGridForm = variant === "modal" || variant === "page";
   const formGridClass =
-    variant === "modal"
-      ? soloUbicacionEdit
-        ? "grid grid-cols-1 gap-4"
-        : "grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2"
-      : "space-y-6";
-  const fieldsetCompact = variant === "modal" ? `${panelFieldsetClass} lg:col-span-1` : panelFieldsetClass;
-  const fieldsetWide = variant === "modal" ? `${panelFieldsetClass} col-span-1 lg:col-span-2` : panelFieldsetClass;
-  const categoriaGridClass = variant === "modal" ? "grid gap-3 sm:grid-cols-2" : "space-y-3";
-  const detalleGridClass =
-    variant === "modal"
-      ? "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4"
-      : "grid gap-4 sm:grid-cols-2 lg:grid-cols-4";
-  const textareaModalClass =
-    variant === "modal" ? `${textareaClass} min-h-[100px] sm:min-h-[120px] lg:min-h-[160px] lg:flex-1` : textareaClass;
-  const fieldsetNotasClass =
-    variant === "modal" ? `${fieldsetCompact} lg:flex lg:flex-col` : fieldsetWide;
+    isGridForm && soloUbicacionEdit
+      ? "grid min-w-0 grid-cols-1 gap-4"
+      : isGridForm
+        ? "grid min-w-0 grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2"
+        : "space-y-6";
+  const fieldsetCompact = isGridForm
+    ? `${panelFieldsetClass} lg:col-span-1`
+    : panelFieldsetClass;
+  const fieldsetWide = isGridForm
+    ? `${panelFieldsetClass} col-span-1 lg:col-span-2`
+    : panelFieldsetClass;
+  const categoriaGridClass = isGridForm ? "grid gap-3 sm:grid-cols-2" : "space-y-3";
+  const detalleGridClass = isGridForm
+    ? "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4"
+    : "grid gap-4 sm:grid-cols-2 lg:grid-cols-4";
+  const textareaModalClass = isGridForm
+    ? `${textareaClass} min-h-[100px] sm:min-h-[120px] lg:min-h-[160px] lg:flex-1`
+    : textareaClass;
+  const fieldsetNotasClass = isGridForm
+    ? `${fieldsetCompact} lg:flex lg:flex-col`
+    : fieldsetWide;
 
   return (
     <>
@@ -555,13 +574,13 @@ export function ActivoForm({
       ref={formRef}
       onSubmit={handleSubmit}
       className={
-        variant === "modal"
-          ? `${formGridClass} relative max-h-[85vh] overflow-y-auto pr-0.5 sm:max-h-[78vh] sm:pr-1`
+        isGridForm
+          ? `${formGridClass} relative min-w-0 w-full max-w-full`
           : "relative space-y-6 overflow-visible rounded-xl border border-border/70 bg-card p-6 shadow-sm"
       }
     >
-      {variant === "page" && (
-        <p className="text-sm font-medium">
+      {variant === "page" && !onCancel && (
+        <p className="col-span-1 text-sm font-medium lg:col-span-2">
           {soloUbicacionEdit ? "Editar ubicación" : isEdit ? "Editar activo" : "Nuevo activo"}
         </p>
       )}
@@ -587,20 +606,16 @@ export function ActivoForm({
         {!fixedEntidadId && (
           <div className="space-y-2">
             <Label htmlFor="entidad_id">Entidad</Label>
-            <select
+            <Select
               id="entidad_id"
               required
-              className={selectClass}
               value={entidadId}
-              onChange={(e) => setEntidadId(e.target.value)}
-            >
-              <option value="">Seleccione…</option>
-              {entidades.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setEntidadId}
+              options={[
+                { value: "", label: "Seleccione…" },
+                ...entidades.map((e) => ({ value: e.id, label: e.nombre })),
+              ]}
+            />
           </div>
         )}
 
@@ -650,7 +665,7 @@ export function ActivoForm({
             ...CATEGORIA_BIEN_LABELS[key],
           }))}
           className={categoriaGridClass}
-          headerClassName={variant === "modal" ? "sm:col-span-2" : ""}
+          headerClassName={isGridForm ? "sm:col-span-2" : ""}
         />
 
         <div className="space-y-2">
@@ -663,6 +678,7 @@ export function ActivoForm({
           />
         </div>
 
+        {mostrarNombreEtiqueta && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <Label htmlFor="nombre_etiqueta">Nombre en etiqueta</Label>
@@ -688,10 +704,11 @@ export function ActivoForm({
             }
           />
           <p className="text-xs text-muted-foreground">
-            Opcional. Texto que se imprime en la etiqueta 50×25 mm. Si está vacío, se usa el nombre
-            del bien.
+            El nombre del bien es largo para la etiqueta 50×25 mm. Indique un texto más corto; si
+            queda vacío, se usará el nombre del bien.
           </p>
         </div>
+        )}
 
         {(nombreEnEtiqueta || entidadEnEtiqueta) && (
           <LabelPrintTextPreview
@@ -738,27 +755,27 @@ export function ActivoForm({
             onSearch={searchAtributo}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="medidas">Medidas</Label>
-          <Input
-            id="medidas"
-            value={medidas}
-            onChange={(e) => setMedidas(e.target.value)}
-            placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
-          />
-        </div>
+        <ActivoAtributoAutocomplete
+          id="medidas"
+          label="Medidas"
+          campo="medidas"
+          value={medidas}
+          onChange={setMedidas}
+          onSearch={searchAtributo}
+          placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
+        />
         <div className="space-y-2">
           <Label htmlFor="estado_bien">Estado del bien</Label>
-          <select
+          <Select
             id="estado_bien"
-            className={selectClass}
             value={estadoBien}
-            onChange={(e) => setEstadoBien(e.target.value as typeof estadoBien)}
-          >
-            <option value="BUENO">Bueno</option>
-            <option value="REGULAR">Regular</option>
-            <option value="MALO">Malo</option>
-          </select>
+            onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+            options={[
+              { value: "BUENO", label: "Bueno" },
+              { value: "REGULAR", label: "Regular" },
+              { value: "MALO", label: "Malo" },
+            ]}
+          />
         </div>
         <div className="space-y-2 border-t border-border/50 pt-4">
           <Label>Nombre consolidado</Label>
@@ -766,7 +783,8 @@ export function ActivoForm({
             {nombreConsolidado || "—"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Se forma con: nombre, marca, modelo, serie, color y medidas.
+            Nombre en mayúsculas; marca como se escribe; modelo, serie, color y medidas en
+            minúsculas.
           </p>
         </div>
       </fieldset>
@@ -774,7 +792,11 @@ export function ActivoForm({
       {/* Valoración */}
       <fieldset className={fieldsetCompact}>
         <legend className={panelLegendClass}>
-          {esPreregistroAdmin ? "Valoración (opcional)" : "Valoración y depreciación"}
+          {esPreregistroAdmin
+            ? "Valoración (opcional)"
+            : categoria === "CUENTA_ORDEN"
+              ? "Valoración"
+              : "Valoración y depreciación"}
         </legend>
         {esPreregistroAdmin && (
           <p className="text-sm text-muted-foreground">
@@ -831,41 +853,43 @@ export function ActivoForm({
               <Input
                 id="comprobante_serie"
                 value={comprobanteSerie}
-                onChange={(e) => setComprobanteSerie(e.target.value)}
-                placeholder="Ej. F/E001-129 (puede ir sin PDF)"
+                onChange={(e) => setComprobanteSerie(formatComprobanteSerieInput(e.target.value))}
+                placeholder="Ej. E001 - 1"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="comprobante">PDF del comprobante</Label>
-              <Input
+              <FileInput
                 id="comprobante"
-                type="file"
                 accept="application/pdf,image/jpeg,image/png"
-                onChange={(e) => handleComprobanteFileSelect(e.target.files?.[0] ?? null)}
+                file={comprobanteFile}
+                onFileChange={handleComprobanteFileSelect}
+                buttonLabel="Seleccionar PDF"
+                emptyLabel="Sin archivo adjunto"
+                hint={
+                  isEdit && activo?.comprobante_path && !comprobanteFile
+                    ? "Ya hay un PDF adjunto"
+                    : undefined
+                }
               />
-              {comprobanteFile && (
-                <p className="text-xs text-primary">Archivo listo: {comprobanteFile.name}</p>
-              )}
-              {isEdit && activo?.comprobante_path && !comprobanteFile && (
-                <p className="text-xs text-muted-foreground">Ya hay un PDF adjunto</p>
-              )}
             </div>
           </div>
         )}
         <div className="space-y-2">
           <Label htmlFor="foto_activo">Foto del activo</Label>
-          <Input
+          <FileInput
             id="foto_activo"
-            type="file"
             accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setFotoFile(e.target.files?.[0] ?? null)}
+            file={fotoFile}
+            onFileChange={setFotoFile}
+            buttonLabel="Seleccionar foto"
+            emptyLabel="Sin foto adjunta"
+            hint={
+              isEdit && activo?.foto_path && !fotoFile ? "Ya hay una foto adjunta" : undefined
+            }
           />
-          {fotoFile && <p className="text-xs text-primary">Foto lista: {fotoFile.name}</p>}
-          {isEdit && activo?.foto_path && !fotoFile && (
-            <p className="text-xs text-muted-foreground">Ya hay una foto adjunta</p>
-          )}
         </div>
-        {!esPreregistroAdmin && (
+        {mostrarDepreciacion && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -919,19 +943,9 @@ export function ActivoForm({
 
       {/* Descripción y observación — columna derecha en modal */}
       <fieldset className={fieldsetNotasClass}>
-        <legend className={panelLegendClass}>Descripción y observación (opcional)</legend>
-        <div className={variant === "modal" ? "flex flex-col gap-4 lg:flex-1 lg:flex-col" : "grid gap-4 lg:grid-cols-2"}>
-          <div className={variant === "modal" ? "space-y-2 lg:flex lg:flex-1 lg:flex-col" : "space-y-2"}>
-            <Label htmlFor="descripcion">Descripción</Label>
-            <textarea
-              id="descripcion"
-              className={textareaModalClass}
-              value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              placeholder="Uso, ubicación física, detalle general…"
-            />
-          </div>
-          <div className={variant === "modal" ? "space-y-2 lg:flex lg:flex-1 lg:flex-col" : "space-y-2"}>
+        <legend className={panelLegendClass}>Observación (opcional)</legend>
+        <div className={isGridForm ? "flex flex-col gap-4 lg:flex-1 lg:flex-col" : "space-y-4"}>
+          <div className={isGridForm ? "space-y-2 lg:flex lg:flex-1 lg:flex-col" : "space-y-2"}>
             <Label htmlFor="observacion">Observación</Label>
             <textarea
               id="observacion"
@@ -965,44 +979,35 @@ export function ActivoForm({
         ) : (
           <div className="space-y-2">
             <Label htmlFor="sede_id">Sede</Label>
-            <select
+            <Select
               id="sede_id"
               required={soloUbicacionEdit}
-              className={selectClass}
               value={sedeId}
-              onChange={(e) => {
-                const nextSede = e.target.value;
+              onChange={(nextSede) => {
                 setSedeId(nextSede);
                 if (soloUbicacionEdit) setAmbienteId("");
               }}
-            >
-              <option value="">Seleccione…</option>
-              {sedes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Seleccione…" },
+                ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+              ]}
+            />
           </div>
         )}
 
         {sedeId && (
           <div className="space-y-2">
             <Label htmlFor="ambiente_id">Ambiente</Label>
-            <select
+            <Select
               id="ambiente_id"
               required={soloUbicacionEdit}
-              className={selectClass}
               value={ambienteId}
-              onChange={(e) => setAmbienteId(e.target.value)}
-            >
-              <option value="">Seleccione…</option>
-              {ambientes.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setAmbienteId}
+              options={[
+                { value: "", label: "Seleccione…" },
+                ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
+              ]}
+            />
             {!soloUbicacionEdit && (
               <div className="flex flex-wrap gap-2 pt-1">
                 <Input
@@ -1023,16 +1028,21 @@ export function ActivoForm({
 
       {message && (
         <p
-          className={`text-sm col-span-1 lg:col-span-2 ${message.includes("Error") || message.includes("obligator") || message.includes("Seleccione") ? "text-destructive" : "text-primary"}`}
+          className={`col-span-1 text-sm lg:col-span-2 ${message.includes("Error") || message.includes("obligator") || message.includes("Seleccione") ? "text-destructive" : "text-primary"}`}
         >
           {message}
         </p>
       )}
 
-      <div className={variant === "modal" ? "col-span-1 lg:col-span-2" : undefined}>
+      <div className={isGridForm ? "col-span-1 flex flex-wrap gap-2 lg:col-span-2" : undefined}>
         <Button type="submit" disabled={pending || (!catalogo && !soloUbicacionEdit)}>
           {pending ? "Guardando…" : submitLabel}
         </Button>
+        {onCancel && (
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancelar
+          </Button>
+        )}
       </div>
     </form>
 

@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Activo } from "@inventario/types";
-import { ActivoDetalleModal } from "./ActivoDetalleModal";
+import { TableActionsOverflow, type TableActionItem } from "@inventario/ui/panel";
 import { FotoPreviewDialog } from "./ActivoMediaDialogs";
 import { ActivoIconButton, IconFoto, IconVer } from "./activo-icons";
 
 interface ActivoAccionesBarProps {
   activo: Activo;
   onEdit: (activo: Activo) => void;
+  onOpenFicha: (activo: Activo) => void;
   className?: string;
   compact?: boolean;
   puedeDarDeBaja?: boolean;
@@ -18,46 +19,57 @@ interface ActivoAccionesBarProps {
   modoAdmin?: boolean;
 }
 
-function labelEditarAdmin(activo: Activo) {
-  return activo.estado_registro === "PREREGISTRADO" ? "Editar preregistro" : "Editar ubicación";
-}
-
 export function ActivoAccionesBar({
   activo,
-  onEdit,
+  onOpenFicha,
   className,
   compact = false,
-  puedeDarDeBaja = true,
-  puedeValidarPreregistro = false,
-  editarLabel,
-  modoAdmin = false,
 }: ActivoAccionesBarProps) {
-  const labelEditar = editarLabel ?? (modoAdmin ? labelEditarAdmin(activo) : "Editar activo");
-  const puedeEditar =
-    modoAdmin && activo.estado_registro === "REGISTRADO" ? undefined : onEdit;
   const [fotoOpen, setFotoOpen] = useState(false);
-  const [detalleOpen, setDetalleOpen] = useState(false);
   const iconSize = compact ? "h-7 w-7" : "h-9 w-9";
+
+  const items = useMemo<TableActionItem[]>(
+    () => [
+      {
+        id: "foto",
+        label: "Ver foto",
+        icon: <IconFoto />,
+        onClick: () => setFotoOpen(true),
+        disabled: !activo.foto_path,
+      },
+      {
+        id: "ver",
+        label: "Ver activo",
+        icon: <IconVer />,
+        onClick: () => onOpenFicha(activo),
+      },
+    ],
+    [activo, onOpenFicha],
+  );
 
   return (
     <>
-      <div className={`flex flex-wrap items-center gap-1 ${className ?? ""}`}>
-        <ActivoIconButton
-          label="Ver foto"
-          disabled={!activo.foto_path}
-          onClick={() => setFotoOpen(true)}
-          className={iconSize}
-        >
-          <IconFoto />
-        </ActivoIconButton>
-        <ActivoIconButton
-          label="Ver activo"
-          onClick={() => setDetalleOpen(true)}
-          className={iconSize}
-        >
-          <IconVer />
-        </ActivoIconButton>
-      </div>
+      {compact ? (
+        <TableActionsOverflow items={items} iconClassName={iconSize} variant="menu" />
+      ) : (
+        <div className={`flex flex-wrap items-center gap-1 ${className ?? ""}`}>
+          <ActivoIconButton
+            label="Ver foto"
+            disabled={!activo.foto_path}
+            onClick={() => setFotoOpen(true)}
+            className={iconSize}
+          >
+            <IconFoto />
+          </ActivoIconButton>
+          <ActivoIconButton
+            label="Ver activo"
+            onClick={() => onOpenFicha(activo)}
+            className={iconSize}
+          >
+            <IconVer />
+          </ActivoIconButton>
+        </div>
+      )}
 
       {activo.foto_path && (
         <FotoPreviewDialog
@@ -67,16 +79,6 @@ export function ActivoAccionesBar({
           titulo={activo.nombre}
         />
       )}
-
-      <ActivoDetalleModal
-        open={detalleOpen}
-        onClose={() => setDetalleOpen(false)}
-        activo={activo}
-        onEdit={puedeEditar}
-        puedeDarDeBaja={puedeDarDeBaja}
-        puedeValidarPreregistro={puedeValidarPreregistro}
-        editarLabel={labelEditar}
-      />
     </>
   );
 }

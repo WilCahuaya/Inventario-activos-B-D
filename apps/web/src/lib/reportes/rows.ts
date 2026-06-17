@@ -80,7 +80,7 @@ const HEADERS_VALORIZADOS_COLA = [
   "CP",
 ] as const;
 
-const COLUMNA_UBICACION = "Ubicación" as const;
+const COLUMNA_UBICACION = "Entidad · Sede · Ambiente" as const;
 
 /** Reportes por ambiente: la ubicación ya figura en el membrete. */
 export function omitUbicacionEnTabla(reporteId: ReporteId): boolean {
@@ -95,10 +95,9 @@ const HEADERS_BAJAS = [
   "Código",
   "Corr.",
   "Nombre del bien",
-  "Sede",
-  "Ambiente",
   "Motivo de baja",
   "Fecha de baja",
+  COLUMNA_UBICACION,
 ] as const;
 
 const HEADERS_ACTA = [
@@ -106,8 +105,8 @@ const HEADERS_ACTA = [
   "Código",
   "Nombre del bien",
   "Descripción",
-  "Ubicación",
   "Estado",
+  COLUMNA_UBICACION,
 ] as const;
 
 function comprobanteExport(activo: ActivoReporte): string {
@@ -116,8 +115,10 @@ function comprobanteExport(activo: ActivoReporte): string {
   return serie ?? "PDF adjunto";
 }
 
-function ubicacionLabel(activo: ActivoReporte): string {
-  return [activo.sede_nombre, activo.ambiente_nombre].filter(Boolean).join(" · ") || "—";
+function ubicacionCompletaLabel(activo: ActivoReporte): string {
+  return [activo.entidad_nombre, activo.sede_nombre, activo.ambiente_nombre]
+    .filter(Boolean)
+    .join(" · ") || "—";
 }
 
 function valoresFila(activo: ActivoReporte, fechaCorte: Date): string[] {
@@ -151,11 +152,11 @@ export function reporteHeaders(reporteId: ReporteId, valorizado: boolean): reado
   if (valorizado) {
     return sinUbicacion
       ? [...HEADERS_VALORIZADOS_BASE, ...HEADERS_VALORIZADOS_COLA]
-      : [...HEADERS_VALORIZADOS_BASE, COLUMNA_UBICACION, ...HEADERS_VALORIZADOS_COLA];
+      : [...HEADERS_VALORIZADOS_BASE, ...HEADERS_VALORIZADOS_COLA, COLUMNA_UBICACION];
   }
   return sinUbicacion
     ? [...HEADERS_SIN_VALORES_BASE, ...HEADERS_SIN_VALORES_COLA]
-    : [...HEADERS_SIN_VALORES_BASE, COLUMNA_UBICACION, ...HEADERS_SIN_VALORES_COLA];
+    : [...HEADERS_SIN_VALORES_BASE, ...HEADERS_SIN_VALORES_COLA, COLUMNA_UBICACION];
 }
 
 export function buildReporteRows(
@@ -170,10 +171,9 @@ export function buildReporteRows(
       activo.codigo_barras ?? activo.codigo_catalogo,
       formatCorrelativoDisplay(activo.correlativo),
       activo.nombre,
-      activo.sede_nombre ?? "—",
-      activo.ambiente_nombre ?? "—",
       activo.motivo_baja?.trim() || "—",
       formatFechaISOToDDMMYYYY(activo.updated_at.slice(0, 10)) || "—",
+      ubicacionCompletaLabel(activo),
     ]);
   }
 
@@ -191,8 +191,8 @@ export function buildReporteRows(
         activo.codigo_barras ?? activo.codigo_catalogo,
         activo.nombre,
         descripcion || "—",
-        ubicacionLabel(activo),
         estadoBienLabel(activo.estado_bien),
+        ubicacionCompletaLabel(activo),
       ];
     }
 
@@ -207,24 +207,26 @@ export function buildReporteRows(
       activo.nombre,
       descripcion || "—",
     ];
-    if (!sinUbicacion) {
-      comun.push(ubicacionLabel(activo));
-    }
-    comun.push(
+    const colaComun = [
       formatFechaISOToDDMMYYYY(activo.fecha_adquisicion) || "—",
       estadoBienLabel(activo.estado_bien),
-    );
+    ];
 
     if (valorizado) {
-      return [
+      const fila = [
         ...comun,
+        ...colaComun,
         ...valoresFila(activo, fechaCorte),
         activo.observacion?.trim() || "—",
         comprobanteExport(activo),
       ];
+      if (!sinUbicacion) fila.push(ubicacionCompletaLabel(activo));
+      return fila;
     }
 
-    return [...comun, activo.observacion?.trim() || "—"];
+    const fila = [...comun, ...colaComun, activo.observacion?.trim() || "—"];
+    if (!sinUbicacion) fila.push(ubicacionCompletaLabel(activo));
+    return fila;
   });
 }
 

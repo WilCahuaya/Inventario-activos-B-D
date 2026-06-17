@@ -1,27 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Ambiente, Entidad, EstadoRegistro, Sede } from "@inventario/types";
-import { Button } from "@inventario/ui";
+import { Button, Select } from "@inventario/ui";
 import { listAmbientes, listAmbientesPorEntidad, listSedes } from "../lib/ubicacion";
-import {
-  PanelEmptyState,
-  PanelSearchInput,
-  StatusBadge,
-  TablePagination,
-  panelCardClass,
-  useTablePagination,
-} from "@inventario/ui/panel";
+import { PanelSearchInput } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
-import { ActivosCampoAcciones } from "./ActivosCampoAcciones";
-
-const thBase =
-  "border-b border-r border-border/50 px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide last:border-r-0 lg:px-2";
-const thStd = `${thBase} bg-muted/50 text-foreground/80`;
-const thAccent = `${thBase} bg-primary/10 text-primary`;
-const tdBase =
-  "border-b border-r border-border/40 px-1.5 py-1.5 text-xs text-foreground last:border-r-0 lg:px-2";
-
-const selectClass =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
+import type { InventarioExportMeta } from "../lib/inventario-export";
+import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
+import { InventarioExportButtons } from "./InventarioExportButtons";
 
 const FILTROS_ESTADO: { value: "" | EstadoRegistro; label: string }[] = [
   { value: "", label: "Todos" },
@@ -35,6 +20,9 @@ type ActivosListVariant = "entity" | "global" | "ambiente";
 interface ActivosCampoListProps {
   className?: string;
   variant?: ActivosListVariant;
+  compactLayout?: boolean;
+  toolbarExtra?: ReactNode;
+  statusBanner?: ReactNode;
   entidades: Entidad[];
   entidadId: string;
   onEntidadChange?: (id: string) => void;
@@ -49,31 +37,15 @@ interface ActivosCampoListProps {
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
-}
-
-function puedeImprimirEtiqueta(activo: ActivoConUbicacion): boolean {
-  return activo.estado_registro === "REGISTRADO" && Boolean(activo.codigo_barras);
-}
-
-function ubicacionLabel(activo: ActivoConUbicacion): string {
-  return [activo.sede_nombre, activo.ambiente_nombre].filter(Boolean).join(" · ") || "—";
-}
-
-function estadoBadgeVariant(estado: EstadoRegistro): "active" | "pending" | "default" {
-  if (estado === "REGISTRADO") return "active";
-  if (estado === "PREREGISTRADO") return "pending";
-  return "default";
-}
-
-function estadoLabel(estado: EstadoRegistro): string {
-  if (estado === "PREREGISTRADO") return "Preregistrado";
-  if (estado === "DADO_DE_BAJA") return "Baja";
-  return "Registrado";
+  exportMeta?: InventarioExportMeta;
 }
 
 export function ActivosCampoList({
   className,
   variant = "entity",
+  compactLayout = false,
+  toolbarExtra,
+  statusBanner,
   entidades,
   entidadId,
   onEntidadChange,
@@ -88,6 +60,7 @@ export function ActivosCampoList({
   onPrintLabel,
   onPrintBatch,
   onActivoUpdated,
+  exportMeta,
 }: ActivosCampoListProps) {
   const isGlobal = variant === "global";
   const isAmbiente = variant === "ambiente";
@@ -99,7 +72,7 @@ export function ActivosCampoList({
   const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? ambienteFilter?.id ?? "");
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [ambientes, setAmbientes] = useState<Ambiente[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectedActivos, setSelectedActivos] = useState<ActivoConUbicacion[]>([]);
 
   const sedesEntidadId = isGlobal ? filterEntidadId : entidadId;
 
@@ -184,9 +157,18 @@ export function ActivosCampoList({
     if (!fixedAmbienteId) setAmbienteId("");
     setEstadoRegistro("");
     setFilter("");
+    setSedes([]);
     setAmbientes([]);
     onClearAmbienteFilter?.();
   }
+
+  const hasActiveFilters = Boolean(
+    (isGlobal && filterEntidadId) ||
+      sedeId ||
+      ambienteId ||
+      estadoRegistro ||
+      filter.trim(),
+  );
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -229,49 +211,6 @@ export function ActivosCampoList({
     entidadId,
   ]);
 
-  const paginationKey = useMemo(
-    () =>
-      `${filtered.length}:${filtered[0]?.id ?? ""}:${estadoRegistro}:${sedeId}:${ambienteId}`,
-    [filtered, estadoRegistro, sedeId, ambienteId],
-  );
-  const {
-    paginated,
-    page,
-    setPage,
-    totalPages,
-    total,
-    rangeStart,
-    rangeEnd,
-    pageSize,
-    rowOffset,
-  } = useTablePagination(filtered, paginationKey);
-
-  const printableOnPage = paginated.filter(puedeImprimirEtiqueta);
-  const allPageSelected =
-    printableOnPage.length > 0 && printableOnPage.every((a) => selectedIds.has(a.id));
-  const selectedActivos = filtered.filter((a) => selectedIds.has(a.id) && puedeImprimirEtiqueta(a));
-
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAllPage() {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allPageSelected) {
-        for (const a of printableOnPage) next.delete(a.id);
-      } else {
-        for (const a of printableOnPage) next.add(a.id);
-      }
-      return next;
-    });
-  }
-
   const emptyMessage = isAmbiente
     ? activos.length === 0
       ? "Aún no hay activos en este ambiente. Use «Nuevo activo» para registrar el primero."
@@ -292,8 +231,177 @@ export function ActivosCampoList({
             ? "No hay activos que coincidan con los filtros aplicados."
             : "No hay activos que coincidan con la búsqueda.";
 
+  const useCompactGlobal = isGlobal && compactLayout;
+
   return (
-    <div className={`space-y-3 ${className ?? ""}`}>
+    <div className={`${useCompactGlobal ? "flex min-h-0 min-w-0 flex-col gap-1.5" : "space-y-3"} ${className ?? ""}`}>
+      {useCompactGlobal ? (
+        <>
+          <div className="sticky top-0 z-20 shrink-0 space-y-2 rounded-lg border border-border/60 bg-card/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/90">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h1 className="text-base font-semibold leading-tight text-foreground">
+                  Inventario global
+                </h1>
+                <p className="hidden text-xs text-muted-foreground md:block">
+                  Consulta y gestión de activos en todas las entidades
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {toolbarExtra}
+                {exportMeta && (
+                  <InventarioExportButtons activos={filtered} meta={exportMeta} />
+                )}
+                {onPrintBatch && selectedActivos.length > 0 && (
+                  <Button type="button" size="sm" className="h-8 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
+                    Imprimir lote ({selectedActivos.length})
+                  </Button>
+                )}
+                <span className="text-sm text-muted-foreground">
+                  {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
+                  {loading ? " · …" : ""}
+                </span>
+              </div>
+            </div>
+
+            <div
+              className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-2"
+              role="tablist"
+              aria-label="Estado del activo"
+            >
+              <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
+                {FILTROS_ESTADO.map((f) => (
+                  <button
+                    key={f.value || "all"}
+                    type="button"
+                    role="tab"
+                    aria-selected={estadoRegistro === f.value}
+                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                      estadoRegistro === f.value
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setEstadoRegistro(f.value)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:justify-end">
+                <div className="min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm">
+                  <PanelSearchInput
+                    value={filter}
+                    onChange={setFilter}
+                    placeholder="Buscar código, nombre, entidad…"
+                  />
+                </div>
+
+                <Select
+                  aria-label="Entidad"
+                  size="compact"
+                  value={filterEntidadId}
+                  onChange={(value) => void handleEntidadFilterChange(value)}
+                  options={[
+                    { value: "", label: "Entidad: todas" },
+                    ...entidades.map((e) => ({ value: e.id, label: e.nombre })),
+                  ]}
+                />
+
+                <Select
+                  aria-label="Sede"
+                  size="compact"
+                  value={sedeId}
+                  disabled={!filterEntidadId}
+                  onChange={(value) => void handleSedeFilterChange(value)}
+                  options={[
+                    { value: "", label: "Sede: todas" },
+                    ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+                  ]}
+                />
+
+                <Select
+                  aria-label="Ambiente"
+                  size="compact"
+                  value={ambienteId}
+                  disabled={!sedeId}
+                  onChange={(value) => {
+                    setAmbienteId(value);
+                    onClearAmbienteFilter?.();
+                  }}
+                  options={[
+                    { value: "", label: "Ambiente: todos" },
+                    ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
+                  ]}
+                />
+
+                {hasActiveFilters && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs"
+                    onClick={limpiarFiltros}
+                  >
+                    Limpiar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {statusBanner}
+        </>
+      ) : isAmbiente ? (
+        <>
+          <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto pb-0.5">
+            <div
+              className="inline-flex shrink-0 gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+              role="tablist"
+              aria-label="Estado del activo"
+            >
+              {FILTROS_ESTADO.map((f) => (
+                <button
+                  key={f.value || "all"}
+                  type="button"
+                  role="tab"
+                  aria-selected={estadoRegistro === f.value}
+                  className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                    estadoRegistro === f.value
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setEstadoRegistro(f.value)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex shrink-0 flex-nowrap items-center gap-2">
+              {exportMeta && (
+                <InventarioExportButtons activos={filtered} meta={exportMeta} />
+              )}
+              {onPrintBatch && selectedActivos.length > 0 && (
+                <Button type="button" size="sm" className="h-8 shrink-0 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
+                  Imprimir lote ({selectedActivos.length})
+                </Button>
+              )}
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
+                {loading ? " · …" : ""}
+              </span>
+              {toolbarExtra}
+            </div>
+          </div>
+
+          <PanelSearchInput
+            value={filter}
+            onChange={setFilter}
+            placeholder="Buscar por código, nombre, sede o ambiente…"
+          />
+        </>
+      ) : (
+        <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
           {FILTROS_ESTADO.map((f) => (
@@ -309,18 +417,16 @@ export function ActivosCampoList({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {exportMeta && (
+            <InventarioExportButtons activos={filtered} meta={exportMeta} />
+          )}
           {onPrintBatch && selectedActivos.length > 0 && (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => onPrintBatch(selectedActivos)}
-            >
+            <Button type="button" size="sm" onClick={() => onPrintBatch(selectedActivos)}>
               Imprimir lote ({selectedActivos.length})
             </Button>
           )}
           <span className="text-xs text-muted-foreground">
-            {total} {total === 1 ? "activo" : "activos"}
-            {total > pageSize ? ` · pág. ${page}/${totalPages}` : ""}
+            {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
             {loading ? " · …" : ""}
           </span>
         </div>
@@ -332,60 +438,48 @@ export function ActivosCampoList({
             <label htmlFor="filtro_entidad" className="text-xs font-medium text-muted-foreground">
               Entidad
             </label>
-            <select
+            <Select
               id="filtro_entidad"
-              className={selectClass}
               value={isGlobal ? filterEntidadId : entidadId}
-              onChange={(e) => void handleEntidadFilterChange(e.target.value)}
-            >
-              <option value="">{isGlobal ? "Todas" : "Seleccione…"}</option>
-              {entidades.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => void handleEntidadFilterChange(value)}
+              options={[
+                { value: "", label: isGlobal ? "Todas" : "Seleccione…" },
+                ...entidades.map((e) => ({ value: e.id, label: e.nombre })),
+              ]}
+            />
           </div>
           <div className="space-y-1">
             <label htmlFor="filtro_sede" className="text-xs font-medium text-muted-foreground">
               Sede
             </label>
-            <select
+            <Select
               id="filtro_sede"
-              className={selectClass}
               value={sedeId}
               disabled={!sedesEntidadId}
-              onChange={(e) => void handleSedeFilterChange(e.target.value)}
-            >
-              <option value="">Todas</option>
-              {sedes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => void handleSedeFilterChange(value)}
+              options={[
+                { value: "", label: "Todas" },
+                ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+              ]}
+            />
           </div>
           <div className="space-y-1">
             <label htmlFor="filtro_ambiente" className="text-xs font-medium text-muted-foreground">
               Ambiente
             </label>
-            <select
+            <Select
               id="filtro_ambiente"
-              className={selectClass}
               value={ambienteId}
               disabled={!sedeId}
-              onChange={(e) => {
-                setAmbienteId(e.target.value);
+              onChange={(value) => {
+                setAmbienteId(value);
                 onClearAmbienteFilter?.();
               }}
-            >
-              <option value="">Todos</option>
-              {ambientes.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Todos" },
+                ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
+              ]}
+            />
           </div>
           <div className="flex items-end sm:col-span-2 lg:col-span-1">
             <Button type="button" variant="outline" className="w-full" onClick={limpiarFiltros}>
@@ -404,183 +498,20 @@ export function ActivosCampoList({
             : "Buscar por código, nombre, sede o ambiente…"
         }
       />
+        </>
+      )}
 
-      <div className="overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm">
-        {total === 0 ? (
-          <div className="p-4">
-            <PanelEmptyState message={emptyMessage} />
-          </div>
-        ) : (
-          <>
-            <div className="p-2 sm:hidden">
-              <div className="grid gap-3">
-                {paginated.map((activo) => {
-                  const inactivo = activo.estado_registro === "DADO_DE_BAJA";
-                  return (
-                    <article
-                      key={activo.id}
-                      className={`${panelCardClass} flex flex-col ${inactivo ? "opacity-75" : ""}`}
-                    >
-                      <div className="flex items-start justify-between gap-2 border-b border-border/50 px-3 py-2">
-                        {onPrintBatch && puedeImprimirEtiqueta(activo) && (
-                          <input
-                            type="checkbox"
-                            className="mt-1 h-4 w-4 shrink-0 rounded border-input"
-                            checked={selectedIds.has(activo.id)}
-                            onChange={() => toggleSelect(activo.id)}
-                            aria-label={`Seleccionar ${activo.nombre}`}
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <h3
-                            className={`truncate text-sm font-semibold text-foreground ${inactivo ? "line-through decoration-muted-foreground/50" : ""}`}
-                          >
-                            {activo.nombre}
-                          </h3>
-                          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                            {activo.codigo_barras ?? activo.codigo_catalogo}
-                          </p>
-                        </div>
-                        <StatusBadge variant={estadoBadgeVariant(activo.estado_registro)}>
-                          {estadoLabel(activo.estado_registro)}
-                        </StatusBadge>
-                      </div>
-                      <div className="space-y-1 px-3 py-2 text-xs text-muted-foreground">
-                        <p>
-                          Ubicación:{" "}
-                          <span className="font-medium text-foreground">{ubicacionLabel(activo)}</span>
-                        </p>
-                      </div>
-                      <div className="border-t border-border/50 bg-muted/20 px-3 py-2">
-                        <ActivosCampoAcciones
-                          entidadId={entidadId || activo.entidad_id}
-                          activo={activo}
-                          online={online}
-                          onOpenFicha={onOpenFicha}
-                          onPrintLabel={onPrintLabel}
-                          onValidated={onActivoUpdated}
-                          compact
-                        />
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="hidden overflow-x-auto sm:block">
-              <table className="w-full table-fixed border-collapse">
-                <colgroup>
-                  {onPrintBatch && <col style={{ width: "3%" }} />}
-                  <col style={{ width: "4%" }} />
-                  <col style={{ width: "9%" }} />
-                  <col style={{ width: "11%" }} />
-                  <col style={{ width: "13%" }} />
-                  <col style={{ width: "24%" }} />
-                  <col style={{ width: "17%" }} />
-                  <col style={{ width: "19%" }} />
-                </colgroup>
-                <thead className="sticky top-0 z-10 bg-card shadow-sm">
-                  <tr>
-                    {onPrintBatch && (
-                      <th className={`${thStd} normal-case`}>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-input"
-                          checked={allPageSelected}
-                          disabled={printableOnPage.length === 0}
-                          onChange={toggleSelectAllPage}
-                          aria-label="Seleccionar página para impresión"
-                        />
-                      </th>
-                    )}
-                    <th className={`${thStd} normal-case`}>N°</th>
-                    <th className={thStd}>Estado</th>
-                    <th className={thStd}>Cat.</th>
-                    <th className={thStd}>Código</th>
-                    <th className={`${thStd} normal-case`}>Nombre del bien</th>
-                    <th className={`${thStd} normal-case`}>Ubicación</th>
-                    <th className={`${thAccent} normal-case`}>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginated.map((activo, index) => {
-                    const rowNum = rowOffset + index + 1;
-                    const inactivo = activo.estado_registro === "DADO_DE_BAJA";
-                    return (
-                      <tr
-                        key={activo.id}
-                        className={`hover:bg-muted/20 ${inactivo ? "bg-muted/10 opacity-75" : ""}`}
-                      >
-                        {onPrintBatch && (
-                          <td className={`${tdBase} text-center`}>
-                            {puedeImprimirEtiqueta(activo) ? (
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-input"
-                                checked={selectedIds.has(activo.id)}
-                                onChange={() => toggleSelect(activo.id)}
-                                aria-label={`Seleccionar ${activo.nombre}`}
-                              />
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                        )}
-                        <td className={`${tdBase} text-center text-muted-foreground`}>{rowNum}</td>
-                        <td className={`${tdBase} text-center`}>
-                          <StatusBadge variant={estadoBadgeVariant(activo.estado_registro)}>
-                            {estadoLabel(activo.estado_registro)}
-                          </StatusBadge>
-                        </td>
-                        <td className={`${tdBase} text-center font-mono text-[11px]`}>
-                          {activo.codigo_catalogo}
-                        </td>
-                        <td className={`${tdBase} text-center font-mono text-[11px]`}>
-                          {activo.codigo_barras ?? "—"}
-                        </td>
-                        <td className={tdBase}>
-                          <span
-                            className={`line-clamp-2 font-medium ${inactivo ? "line-through decoration-muted-foreground/50" : ""}`}
-                          >
-                            {activo.nombre}
-                          </span>
-                          {activo.motivo_baja && (
-                            <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                              Baja: {activo.motivo_baja}
-                            </span>
-                          )}
-                        </td>
-                        <td className={`${tdBase} text-muted-foreground`}>{ubicacionLabel(activo)}</td>
-                        <td className={`${tdBase} text-center`}>
-                          <ActivosCampoAcciones
-                            entidadId={entidadId || activo.entidad_id}
-                            activo={activo}
-                            online={online}
-                            onOpenFicha={onOpenFicha}
-                            onPrintLabel={onPrintLabel}
-                            onValidated={onActivoUpdated}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <TablePagination
-              page={page}
-              totalPages={totalPages}
-              total={total}
-              rangeStart={rangeStart}
-              rangeEnd={rangeEnd}
-              pageSize={pageSize}
-              onPageChange={setPage}
-            />
-          </>
-        )}
-      </div>
+      <ActivosInventarioExcelView
+        activos={filtered}
+        entidadId={entidadId}
+        online={online}
+        emptyMessage={emptyMessage}
+        onOpenFicha={onOpenFicha}
+        onPrintLabel={onPrintLabel}
+        onActivoUpdated={onActivoUpdated}
+        onPrintBatch={onPrintBatch}
+        onSelectionChange={setSelectedActivos}
+      />
     </div>
   );
 }

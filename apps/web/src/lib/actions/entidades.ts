@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Entidad } from "@inventario/types";
+import type { Entidad, EntidadConConteo } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { inviteEntidadAdmin } from "@/lib/auth/entidad-admin";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
+import { syncAdminResponsableForEntidad } from "@/lib/responsables-admin-sync";
 
 export interface CreateEntidadInput {
   nombre: string;
@@ -45,6 +46,14 @@ export async function createEntidad(input: CreateEntidadInput) {
 
   if (error) return { error: error.message };
 
+  await syncAdminResponsableForEntidad(
+    supabase,
+    data.id,
+    adminNombre,
+    adminEmail,
+    input.admin_telefono,
+  );
+
   const invite = await inviteEntidadAdmin(data.id, adminEmail, adminNombre, nombre);
   if (invite.error) return { error: invite.error };
 
@@ -73,7 +82,7 @@ export async function getEntidad(entidadId: string): Promise<Entidad | null> {
   return data as Entidad;
 }
 
-export async function listEntidades() {
+export async function listEntidades(): Promise<EntidadConConteo[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("entidades")
@@ -82,7 +91,22 @@ export async function listEntidades() {
     .order("nombre");
 
   if (error) throw new Error(error.message);
-  return data as Entidad[];
+
+  const { data: ambientesRows } = await supabase
+    .from("ambientes")
+    .select("id, sedes!inner(entidad_id)")
+    .eq("activo", true);
+
+  const ambienteCountByEntidad = new Map<string, number>();
+  for (const row of ambientesRows ?? []) {
+    const entidadId = (row.sedes as { entidad_id: string }).entidad_id;
+    ambienteCountByEntidad.set(entidadId, (ambienteCountByEntidad.get(entidadId) ?? 0) + 1);
+  }
+
+  return ((data ?? []) as Entidad[]).map((entidad) => ({
+    ...entidad,
+    ambiente_count: ambienteCountByEntidad.get(entidad.id) ?? 0,
+  }));
 }
 
 export async function updateEntidad(entidadId: string, input: CreateEntidadInput) {
@@ -115,12 +139,19 @@ export async function updateEntidad(entidadId: string, input: CreateEntidadInput
 
   if (error) return { error: error.message };
 
+  await syncAdminResponsableForEntidad(
+    supabase,
+    entidadId,
+    adminNombre,
+    adminEmail,
+    input.admin_telefono,
+  );
+
   const invite = await inviteEntidadAdmin(entidadId, adminEmail, adminNombre, nombre);
   if (invite.error) return { error: invite.error };
 
   revalidatePath("/contador/entidades");
   revalidatePath(`/contador/entidades/${entidadId}`);
-  revalidatePath("/contador/usuarios");
   return {
     success: true,
     data: data as Entidad,

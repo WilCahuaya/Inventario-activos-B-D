@@ -88,7 +88,7 @@ export function upsertAtributoVocabLocal(campo: string, valor: string): void {
   const db = getCatalogDb();
   const trimmed = valor.trim();
   if (!trimmed) return;
-  if (!["marca", "modelo", "serie", "color"].includes(campo)) return;
+  if (!["marca", "modelo", "serie", "color", "medidas"].includes(campo)) return;
 
   const valorNormalizado = trimmed.toLowerCase();
 

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -49,6 +49,132 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
       )}
       {...props}
     />
+  );
+}
+
+/** @deprecated Usa el componente Select; se mantiene por compatibilidad. */
+export { nativeSelectClass, nativeSelectCompactClass, Select, type SelectOption } from "./select";
+function FileUploadIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 16V4m0 0-4 4m4-4 4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"
+      />
+    </svg>
+  );
+}
+
+function FileClearIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+export function FileInput({
+  id,
+  accept,
+  disabled,
+  className,
+  file,
+  onFileChange,
+  buttonLabel = "Seleccionar",
+  emptyLabel = "Ningún archivo seleccionado",
+  hint,
+}: {
+  id?: string;
+  accept?: string;
+  disabled?: boolean;
+  className?: string;
+  file?: File | null;
+  onFileChange: (file: File | null) => void;
+  buttonLabel?: string;
+  emptyLabel?: string;
+  hint?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    onFileChange(event.target.files?.[0] ?? null);
+  }
+
+  function handleClear() {
+    onFileChange(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  return (
+    <div className="space-y-1">
+      <div
+        className={cn(
+          "flex h-10 w-full items-center gap-2 rounded-md border border-input bg-background px-2",
+          "ring-offset-background transition-shadow focus-within:ring-2 focus-within:ring-ring",
+          disabled && "cursor-not-allowed opacity-50",
+          className,
+        )}
+      >
+        <input
+          ref={inputRef}
+          id={id}
+          type="file"
+          accept={accept}
+          disabled={disabled}
+          className="sr-only"
+          onChange={handleChange}
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => inputRef.current?.click()}
+          className={cn(
+            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+            "bg-primary text-primary-foreground hover:opacity-90",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            "disabled:pointer-events-none",
+          )}
+        >
+          <FileUploadIcon className="h-3.5 w-3.5" />
+          {buttonLabel}
+        </button>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-sm",
+            file ? "font-medium text-foreground" : "text-muted-foreground",
+          )}
+          title={file?.name ?? emptyLabel}
+        >
+          {file?.name ?? emptyLabel}
+        </span>
+        {file && !disabled && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Quitar archivo"
+          >
+            <FileClearIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
   );
 }
 
@@ -115,14 +241,18 @@ export function Dialog({
       if (e.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.documentElement.classList.add("dialog-open");
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.documentElement.classList.remove("dialog-open");
+    };
   }, [open, onClose]);
 
   if (!open || !mounted) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 p-2 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[200] flex items-end justify-center overflow-hidden bg-black/50 p-2 sm:items-center sm:p-4"
       role="presentation"
       onClick={onClose}
     >
@@ -131,18 +261,20 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby="dialog-title"
         className={cn(
-          "max-h-[92vh] w-full overflow-y-auto rounded-xl border border-border/70 bg-card p-4 shadow-lg sm:max-h-[90vh] sm:p-6",
+          "flex max-h-[92vh] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-lg sm:max-h-[90vh]",
           className ?? "max-w-lg",
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 space-y-1">
+        <div className="shrink-0 space-y-1 px-4 pb-2 pt-4 sm:px-6 sm:pb-3 sm:pt-6">
           <h2 id="dialog-title" className="text-lg font-semibold">
             {title}
           </h2>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
-        {children}
+        <div className="scrollbar-none min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
+          {children}
+        </div>
       </div>
     </div>,
     document.body,

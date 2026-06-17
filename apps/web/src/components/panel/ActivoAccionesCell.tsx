@@ -6,6 +6,7 @@ import { ActivoAccionesBar } from "./ActivoAccionesBar";
 interface ActivoAccionesCellProps {
   activo: Activo;
   onEdit: (activo: Activo) => void;
+  onOpenFicha: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
   editarLabel?: string;
@@ -15,16 +16,18 @@ interface ActivoAccionesCellProps {
 export function ActivoAccionesCell({
   activo,
   onEdit,
+  onOpenFicha,
   puedeDarDeBaja,
   puedeValidarPreregistro,
   editarLabel,
   modoAdmin,
 }: ActivoAccionesCellProps) {
   return (
-    <td className="border-b border-r border-border/40 px-2 py-2 last:border-r-0">
+    <td className="max-w-0 overflow-visible border-b border-r border-border/40 px-1 py-1 last:border-r-0">
       <ActivoAccionesBar
         activo={activo}
         onEdit={onEdit}
+        onOpenFicha={onOpenFicha}
         compact
         className="justify-center"
         puedeDarDeBaja={puedeDarDeBaja}

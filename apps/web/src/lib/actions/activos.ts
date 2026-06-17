@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
+import {
+  MAX_ACTIVOS_SIMILARES_CANTIDAD,
+  type ActivosSimilaresPreview,
+  type CreateActivosSimilaresResult,
+  type EjemplaresSimilaresResumen,
+} from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
 
@@ -133,6 +139,7 @@ export async function createActivo(input: CreateActivoInput) {
     revalidatePath(`/contador/entidades/${payload.entidad_id}/ambientes/${payload.ambiente_id}`);
   }
   revalidatePath("/admin/activos");
+  revalidatePath("/admin/inventario");
   revalidatePath("/admin");
   if (payload.ambiente_id) {
     revalidatePath(`/admin/ambientes/${payload.ambiente_id}`);
@@ -148,6 +155,7 @@ function revalidateActivoPaths(entidadId: string, ambienteId: string | null) {
     revalidatePath(`/admin/ambientes/${ambienteId}`);
   }
   revalidatePath("/admin/activos");
+  revalidatePath("/admin/inventario");
   revalidatePath("/admin");
 }
 
@@ -434,6 +442,101 @@ export async function darDeBajaActivo(activoId: string, motivo: string) {
 
   revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
   return { success: true };
+}
+
+export async function previewActivosSimilares(
+  entidadId: string,
+  codigoCatalogo: string,
+  cantidad: number,
+): Promise<ActivosSimilaresPreview | null> {
+  const profile = await getProfile();
+  if (!profile) return null;
+
+  const qty = Math.floor(cantidad);
+  if (qty < 1 || qty > MAX_ACTIVOS_SIMILARES_CANTIDAD) return null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("preview_activos_similares_rango", {
+    p_entidad_id: entidadId,
+    p_catalogo: codigoCatalogo.trim(),
+    p_cantidad: qty,
+  });
+
+  if (error) return null;
+  const row = data as {
+    es_registrado?: boolean;
+    primer_codigo?: string | null;
+    ultimo_codigo?: string | null;
+  };
+  return {
+    es_registrado: Boolean(row.es_registrado),
+    primer_codigo: row.primer_codigo ?? null,
+    ultimo_codigo: row.ultimo_codigo ?? null,
+  };
+}
+
+export async function createActivosSimilares(
+  activoId: string,
+  cantidad: number,
+): Promise<{ data?: CreateActivosSimilaresResult; error?: string }> {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+
+  const qty = Math.floor(cantidad);
+  if (qty < 1 || qty > MAX_ACTIVOS_SIMILARES_CANTIDAD) {
+    return { error: `La cantidad debe estar entre 1 y ${MAX_ACTIVOS_SIMILARES_CANTIDAD}.` };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id, estado_registro")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (existing.estado_registro === "DADO_DE_BAJA") {
+    return { error: "No puede duplicar un activo dado de baja." };
+  }
+
+  const { data, error } = await supabase.rpc("create_activos_similares", {
+    p_activo_id: activoId,
+    p_cantidad: qty,
+  });
+
+  if (error) return { error: error.message };
+
+  const result = data as CreateActivosSimilaresResult;
+  revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  return { data: result };
+}
+
+export async function getEjemplaresSimilaresResumen(
+  activoId: string,
+): Promise<EjemplaresSimilaresResumen | null> {
+  const profile = await getProfile();
+  if (!profile) return null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("resumen_ejemplares_similares", {
+    p_activo_id: activoId,
+  });
+
+  if (error) return null;
+  const row = data as {
+    total?: number;
+    registrados?: number;
+    preregistrados?: number;
+  };
+  return {
+    total: row.total ?? 0,
+    registrados: row.registrados ?? 0,
+    preregistrados: row.preregistrados ?? 0,
+  };
 }
 
 export async function listActivosPorAmbiente(ambienteId: string) {

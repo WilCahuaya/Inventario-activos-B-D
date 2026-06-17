@@ -69,6 +69,21 @@ interface Window {
       estado: string | null;
       origen: string;
     }) => Promise<void>;
+    deleteCatalogRow: (codigo: string) => Promise<void>;
+    listCatalogoPropioLocal: () => Promise<
+      Array<{
+        codigo: string;
+        denominacion: string;
+        grupo: string | null;
+        clase: string | null;
+        cuenta_codigo: string | null;
+        contabilidad: string | null;
+        depreciacion: string | null;
+        resolucion: string | null;
+        estado: string | null;
+        origen: string;
+      }>
+    >;
     syncAtributoVocab: (
       rows: unknown[],
     ) => Promise<{ count: number; syncedAt: string | null }>;
@@ -119,5 +134,6 @@ interface Window {
       warning?: string;
       error?: string;
     }>;
+    deleteAuthUser: (userId: string) => Promise<{ error?: string }>;
   };
 }

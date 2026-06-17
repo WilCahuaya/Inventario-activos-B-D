@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getCatalogByCodigo: (codigo: string) => ipcRenderer.invoke("catalog:getByCodigo", codigo),
   getCatalogMeta: () => ipcRenderer.invoke("catalog:meta"),
   upsertCatalogRow: (row: unknown) => ipcRenderer.invoke("catalog:upsert", row),
+  deleteCatalogRow: (codigo: string) => ipcRenderer.invoke("catalog:delete", codigo),
+  listCatalogoPropioLocal: () => ipcRenderer.invoke("catalog:listPropio"),
   syncAtributoVocab: (rows: unknown[]) => ipcRenderer.invoke("atributoVocab:replace", rows),
   searchAtributoVocabLocal: (campo: string, query: string, limit?: number) =>
     ipcRenderer.invoke("atributoVocab:search", campo, query, limit),
@@ -89,4 +91,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
       warning?: string;
       error?: string;
     }>,
+  deleteAuthUser: (userId: string) =>
+    ipcRenderer.invoke("users:deleteAuth", userId) as Promise<{ error?: string }>,
 });

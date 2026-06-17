@@ -2,7 +2,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import type { Activo } from "@inventario/types";
-import { TablePagination, useTablePagination } from "@inventario/ui/panel";
+import { TablePagination, INVENTARIO_TABLE_COL_COUNT, inventarioTableColWidths, useTablePagination } from "@inventario/ui/panel";
 import {
   buildDescripcionBien,
   calcDepreciacionAcumulada,
@@ -18,21 +18,44 @@ import { ActivoAccionesCell } from "./ActivoAccionesCell";
 import { ActivosInventarioMobileCards } from "./ActivosInventarioMobileCards";
 import { ComprobanteCell } from "./ComprobanteCell";
 
-const COLS = 19;
+const COLS = INVENTARIO_TABLE_COL_COUNT;
 
 const thBase =
-  "border-b border-r border-border/50 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-wide last:border-r-0 lg:px-2";
+  "max-w-0 overflow-hidden border-b border-r border-border/50 px-1 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide last:border-r-0";
 const thStd = `${thBase} bg-muted/50 text-foreground/80`;
 const thAccent = `${thBase} bg-primary/10 text-primary`;
 const tdBase =
-  "border-b border-r border-border/40 px-1.5 py-2 text-xs text-foreground last:border-r-0 lg:px-2";
+  "max-w-0 overflow-hidden border-b border-r border-border/40 px-1 py-1.5 text-xs text-foreground last:border-r-0";
+
+function Th({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <th className={`${className ?? thStd}`}>
+      <span className="block truncate">{children}</span>
+    </th>
+  );
+}
+
+function InventarioColgroup() {
+  const widths = inventarioTableColWidths();
+  return (
+    <colgroup>
+      {widths.map((w, i) => (
+        <col key={i} style={{ width: w }} />
+      ))}
+    </colgroup>
+  );
+}
+
 const tdMuted = "text-muted-foreground";
 
-function Cell({ children, center, className }: { children?: ReactNode; center?: boolean; className?: string }) {
+function Cell({ children, center, className, title }: { children?: ReactNode; center?: boolean; className?: string; title?: string }) {
   const text = children === null || children === undefined || children === "" ? "—" : children;
   return (
-    <td className={`${tdBase} ${center ? "text-center" : ""} ${className ?? ""}`}>
-      <span className={text === "—" ? tdMuted : undefined}>{text}</span>
+    <td
+      className={`${tdBase} max-w-0 overflow-hidden ${center ? "text-center" : ""} ${className ?? ""}`}
+      title={title}
+    >
+      <span className={`block truncate ${text === "—" ? tdMuted : ""}`}>{text}</span>
     </td>
   );
 }
@@ -40,6 +63,7 @@ function Cell({ children, center, className }: { children?: ReactNode; center?: 
 interface ActivosInventarioExcelViewProps {
   activos: Activo[];
   onEditActivo: (activo: Activo) => void;
+  onOpenFicha: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
   editarLabel?: string;
@@ -48,36 +72,11 @@ interface ActivosInventarioExcelViewProps {
   modoAdmin?: boolean;
 }
 
-/** Anchos relativos: suman 100 % del contenedor (table-fixed). */
-function InventarioColgroup() {
-  return (
-    <colgroup>
-      <col style={{ width: "2.5%" }} />
-      <col style={{ width: "2.5%" }} />
-      <col style={{ width: "2.5%" }} />
-      <col style={{ width: "3%" }} />
-      <col style={{ width: "5.5%" }} />
-      <col style={{ width: "3.5%" }} />
-      <col style={{ width: "11%" }} />
-      <col style={{ width: "15.5%" }} />
-      <col style={{ width: "5%" }} />
-      <col style={{ width: "4.5%" }} />
-      <col style={{ width: "5.5%" }} />
-      <col style={{ width: "5.5%" }} />
-      <col style={{ width: "4.5%" }} />
-      <col style={{ width: "4.5%" }} />
-      <col style={{ width: "6%" }} />
-      <col style={{ width: "6%" }} />
-      <col style={{ width: "8%" }} />
-      <col style={{ width: "4.5%" }} />
-      <col style={{ width: "5%" }} />
-    </colgroup>
-  );
-}
-
+/** Tabla inventario: ancho fijo 100 % del contenedor, sin scroll horizontal. */
 export function ActivosInventarioExcelView({
   activos,
   onEditActivo,
+  onOpenFicha,
   puedeDarDeBaja = true,
   puedeValidarPreregistro = false,
   editarLabel,
@@ -111,74 +110,69 @@ export function ActivosInventarioExcelView({
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+    <div className="min-w-0 w-full max-w-full overflow-x-hidden rounded-xl border border-border/60 bg-card shadow-sm">
       <div className="lg:hidden">
         <ActivosInventarioMobileCards
           activos={paginated}
           onEditActivo={onEditActivo}
+          onOpenFicha={onOpenFicha}
           {...accionesProps}
         />
       </div>
 
-      <div className="hidden w-full lg:block">
-        <table className="w-full table-fixed border-collapse">
+      <div className="hidden min-w-0 w-full max-w-full overflow-x-hidden lg:block">
+        <table className="min-w-0 w-full max-w-full table-fixed border-collapse">
           <InventarioColgroup />
-          <thead className="sticky top-0 z-10 bg-card shadow-sm">
+          <thead className="sticky top-0 z-10 border-b border-border/60 bg-card">
             <tr>
               <th rowSpan={2} className={`${thStd} normal-case`}>
-                N°
+                <span className="block truncate">N°</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                Cant.
+                <span className="block truncate">Cat.</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                Und.
+                <span className="block truncate">Código</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                Cat.
-              </th>
-              <th rowSpan={2} className={thStd}>
-                Código
-              </th>
-              <th rowSpan={2} className={thStd}>
-                Corr.
+                <span className="block truncate">Corr.</span>
               </th>
               <th rowSpan={2} className={`${thStd} normal-case`}>
-                Nombre del bien
+                <span className="block truncate">Nombre del bien</span>
               </th>
               <th rowSpan={2} className={`${thStd} normal-case`}>
-                Descripción
+                <span className="block truncate">Descripción</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                Fecha adq.
+                <span className="block truncate">Fecha adq.</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                Estado
+                <span className="block truncate">Estado</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                Precio adq.
+                <span className="block truncate">Precio adq.</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                V. mercado
+                <span className="block truncate">V. mercado</span>
               </th>
               <th colSpan={4} className={thAccent}>
-                Depreciación y valor neto
+                <span className="block truncate">Depreciación y valor neto</span>
               </th>
               <th rowSpan={2} className={`${thStd} normal-case`}>
-                Observación
+                <span className="block truncate">Observación</span>
               </th>
               <th rowSpan={2} className={`${thStd} normal-case`}>
-                CP
+                <span className="block truncate">CP</span>
               </th>
               <th rowSpan={2} className={thStd}>
-                Acciones
+                <span className="block truncate">Acciones</span>
               </th>
             </tr>
             <tr>
-              <th className={thAccent}>% Deprec.</th>
-              <th className={thAccent}>Periodo</th>
-              <th className={thAccent}>Dep. acum.</th>
-              <th className={thAccent}>Valor neto</th>
+              <Th className={thAccent}>% Deprec.</Th>
+              <Th className={thAccent}>Periodo</Th>
+              <Th className={thAccent}>Dep. acum.</Th>
+              <Th className={thAccent}>Valor neto</Th>
             </tr>
           </thead>
           <tbody>
@@ -226,32 +220,34 @@ export function ActivosInventarioExcelView({
               return (
                 <tr key={activo.id} className={rowClass}>
                   <Cell center>{rowIndex + 1}</Cell>
-                  <Cell center>1</Cell>
-                  <Cell center>Und.</Cell>
                   <Cell center>{categoriaBienCorto(activo.categoria)}</Cell>
-                  <Cell center>
-                    <span className="break-all font-mono text-[10px] leading-tight">
+                  <Cell center title={activo.codigo_catalogo}>
+                    <span className="block truncate font-mono text-[10px] leading-tight">
                       {activo.codigo_catalogo}
                     </span>
                   </Cell>
-                  <Cell center>
+                  <td className={`${tdBase} text-center`}>
                     {preregistrado ? (
-                      <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-800 dark:text-amber-200">
+                      <span className="inline-block max-w-full truncate rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-800 dark:text-amber-200">
                         Prereg.
                       </span>
                     ) : (
-                      formatCorrelativoDisplay(activo.correlativo)
+                      <span className="block truncate">
+                        {formatCorrelativoDisplay(activo.correlativo)}
+                      </span>
                     )}
-                  </Cell>
-                  <Cell className="break-words text-[11px] leading-snug">
-                    {activo.nombre}
+                  </td>
+                  <Cell className="text-[11px] leading-snug" title={activo.nombre}>
+                    <span className="block truncate">{activo.nombre}</span>
                     {mostrarEstadoRegistro && preregistrado && (
-                      <span className="mt-0.5 block text-[9px] font-medium uppercase text-amber-700 dark:text-amber-300">
+                      <span className="mt-0.5 block truncate text-[9px] font-medium uppercase text-amber-700 dark:text-amber-300">
                         Pendiente de validación
                       </span>
                     )}
                   </Cell>
-                  <Cell className="break-words text-[10px] leading-snug">{descripcion}</Cell>
+                  <Cell className="text-[10px] leading-snug" title={descripcion}>
+                    <span className="block truncate">{descripcion}</span>
+                  </Cell>
                   <Cell center className="text-[11px]">
                     {formatFechaISOToDDMMYYYY(activo.fecha_adquisicion)}
                   </Cell>
@@ -270,9 +266,21 @@ export function ActivosInventarioExcelView({
                   <Cell className="text-right text-[10px] tabular-nums">
                     {valorNeto != null ? `S/ ${formatMonedaPE(valorNeto)}` : "—"}
                   </Cell>
-                  <Cell className="break-words text-[10px] leading-snug">{activo.observacion}</Cell>
+                  <td className={`${tdBase} max-w-0`}>
+                    <span
+                      className="block truncate text-[10px]"
+                      title={activo.observacion?.trim() || undefined}
+                    >
+                      {activo.observacion?.trim() || "—"}
+                    </span>
+                  </td>
                   <ComprobanteCell activo={activo} />
-                  <ActivoAccionesCell activo={activo} onEdit={onEditActivo} {...accionesProps} />
+                  <ActivoAccionesCell
+                    activo={activo}
+                    onEdit={onEditActivo}
+                    onOpenFicha={onOpenFicha}
+                    {...accionesProps}
+                  />
                 </tr>
               );
             })}

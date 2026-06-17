@@ -8,10 +8,12 @@ import {
   calcDepreciacionAcumulada,
   calcPeriodoMeses,
   calcValorNeto,
+  formatComprobanteSerieInput,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
   formatLabelPrintWarnings,
   formatPorcentajeDepreciacion,
+  nombreRequiereEtiquetaOverride,
   parseFechaDDMMYYYY,
   parsePorcentajeDepreciacion,
   porcentajeFromVidaUtilMeses,
@@ -19,6 +21,7 @@ import {
   suggestNombreEtiqueta,
   validarFechaDDMMYYYY,
   vidaUtilMesesFromPorcentaje,
+  type ActivoAtributoCampo,
 } from "@inventario/types";
 import {
   ActivoAtributoAutocomplete,
@@ -26,9 +29,11 @@ import {
   CatalogoPicker,
   CategoriaBienSelector,
   ConfirmDialog,
+  FileInput,
   Input,
   Label,
   LabelPrintTextPreview,
+  Select,
 } from "@inventario/ui";
 import { panelFieldsetClass, panelLegendClass } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
@@ -47,9 +52,6 @@ import {
 import { updateActivoPaths, uploadActivoFile } from "../lib/storage";
 import { suggestActivoAtributo, upsertLocalAtributosFromActivo } from "../lib/atributo-vocab";
 import { getCatalogoByCodigo, searchCatalogo } from "../lib/catalogo";
-
-const selectClass =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
 
 const textareaClass =
   "flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -95,7 +97,6 @@ export function ActivoFormDesktop({
   const [catalogo, setCatalogo] = useState<CatalogoNacional | null>(null);
   const [nombre, setNombre] = useState(activo?.nombre ?? "");
   const [nombreEtiqueta, setNombreEtiqueta] = useState(activo?.nombre_etiqueta ?? "");
-  const [descripcion, setDescripcion] = useState(activo?.descripcion ?? "");
   const [categoria, setCategoria] = useState<CategoriaBien>(activo?.categoria ?? "ACTIVO");
   const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">(
     activo?.estado_bien ?? "BUENO",
@@ -118,7 +119,9 @@ export function ActivoFormDesktop({
   );
   const [fechaAdquisicionError, setFechaAdquisicionError] = useState<string | null>(null);
   const [observacion, setObservacion] = useState(activo?.observacion ?? "");
-  const [comprobanteSerie, setComprobanteSerie] = useState(activo?.comprobante_serie ?? "");
+  const [comprobanteSerie, setComprobanteSerie] = useState(
+    activo?.comprobante_serie ? formatComprobanteSerieInput(activo.comprobante_serie) : "",
+  );
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([]);
   const [ambientes, setAmbientes] = useState<{ id: string; nombre: string }[]>([]);
   const [sedeId, setSedeId] = useState(fixedSedeId ?? activo?.sede_id ?? "");
@@ -173,12 +176,17 @@ export function ActivoFormDesktop({
     [valorNum, depreciacionAcumulada],
   );
   const nombreOficial = nombre.trim() || catalogo?.denominacion || "";
+  const mostrarDepreciacion = categoria !== "CUENTA_ORDEN";
   const nombreConsolidado = useMemo(
     () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas),
     [nombre, marca, modelo, serie, color, medidas],
   );
   const nombreEtiquetaSugerido = useMemo(
     () => (nombreOficial ? suggestNombreEtiqueta(nombreOficial) : ""),
+    [nombreOficial],
+  );
+  const mostrarNombreEtiqueta = useMemo(
+    () => nombreRequiereEtiquetaOverride(nombreOficial),
     [nombreOficial],
   );
   const nombreEnEtiqueta = useMemo(
@@ -190,9 +198,15 @@ export function ActivoFormDesktop({
     [entidadNombre, entidadNombreEtiqueta],
   );
 
+  useEffect(() => {
+    if (categoria === "CUENTA_ORDEN") {
+      setDepreciacion("");
+      setVidaUtilMeses("");
+    }
+  }, [categoria]);
+
   const searchAtributo = useCallback(
-    (campo: "marca" | "modelo" | "serie" | "color", query: string) =>
-      suggestActivoAtributo(campo, query),
+    (campo: ActivoAtributoCampo, query: string) => suggestActivoAtributo(campo, query),
     [],
   );
 
@@ -200,7 +214,7 @@ export function ActivoFormDesktop({
     (item: CatalogoNacional) => {
       setCatalogo(item);
       setNombre(item.denominacion);
-      if (item.depreciacion) {
+      if (categoria !== "CUENTA_ORDEN" && item.depreciacion) {
         setDepreciacion(item.depreciacion);
         const pct = parsePorcentajeDepreciacion(item.depreciacion);
         if (pct) setVidaUtilMeses(String(vidaUtilMesesFromPorcentaje(pct)));
@@ -209,7 +223,7 @@ export function ActivoFormDesktop({
         void previewCodigoBarras(entidadId, item.codigo).then(setCodigoBarrasPreview);
       }
     },
-    [entidadId, isEdit],
+    [entidadId, isEdit, categoria],
   );
 
   useEffect(() => {
@@ -310,8 +324,7 @@ export function ActivoFormDesktop({
     const payload = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
-      nombre_etiqueta: nombreEtiqueta.trim() || null,
-      descripcion: descripcion || undefined,
+      nombre_etiqueta: mostrarNombreEtiqueta ? nombreEtiqueta.trim() || null : null,
       categoria,
       estado_bien: estadoBien,
       marca: marca || undefined,
@@ -319,8 +332,10 @@ export function ActivoFormDesktop({
       serie: serie || undefined,
       color: color || undefined,
       medidas: medidas || undefined,
-      depreciacion: depreciacion || undefined,
-      vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
+      ...(mostrarDepreciacion && {
+        depreciacion: depreciacion || undefined,
+        vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
+      }),
       observacion: observacion || undefined,
       valor_adquisicion: valor ? Number(valor) : undefined,
       valor_es_mercado: valorEsMercado,
@@ -366,7 +381,7 @@ export function ActivoFormDesktop({
         codigo_barras: activo?.codigo_barras ?? codigoBarrasPreview,
         nombre: payload.nombre,
         nombre_etiqueta: payload.nombre_etiqueta ?? null,
-        descripcion: payload.descripcion ?? null,
+        descripcion: activo?.descripcion ?? null,
         caracteristicas: activo?.caracteristicas ?? null,
         marca: payload.marca ?? null,
         modelo: payload.modelo ?? null,
@@ -416,6 +431,7 @@ export function ActivoFormDesktop({
         modelo: payload.modelo,
         serie: payload.serie,
         color: payload.color,
+        medidas: payload.medidas,
       });
       setPending(false);
       setMessage("Guardado en cola offline. Se sincronizará al reconectar.");
@@ -475,6 +491,7 @@ export function ActivoFormDesktop({
       modelo: payload.modelo,
       serie: payload.serie,
       color: payload.color,
+      medidas: payload.medidas,
     });
     onSuccess(mapped);
   }
@@ -539,6 +556,7 @@ export function ActivoFormDesktop({
           />
         </div>
 
+        {mostrarNombreEtiqueta && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <Label htmlFor="nombre_etiqueta">Nombre en etiqueta</Label>
@@ -564,10 +582,11 @@ export function ActivoFormDesktop({
             }
           />
           <p className="text-xs text-muted-foreground">
-            Opcional. Texto que se imprime en la etiqueta 50×25 mm. Si está vacío, se usa el nombre
-            del bien.
+            El nombre del bien es largo para la etiqueta 50×25 mm. Indique un texto más corto; si
+            queda vacío, se usará el nombre del bien.
           </p>
         </div>
+        )}
 
         {(nombreEnEtiqueta || entidadEnEtiqueta) && (
           <LabelPrintTextPreview
@@ -613,27 +632,27 @@ export function ActivoFormDesktop({
             onSearch={searchAtributo}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="medidas">Medidas</Label>
-          <Input
-            id="medidas"
-            value={medidas}
-            onChange={(e) => setMedidas(e.target.value)}
-            placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
-          />
-        </div>
+        <ActivoAtributoAutocomplete
+          id="medidas"
+          label="Medidas"
+          campo="medidas"
+          value={medidas}
+          onChange={setMedidas}
+          onSearch={searchAtributo}
+          placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
+        />
         <div className="space-y-2">
           <Label htmlFor="estado_bien">Estado del bien</Label>
-          <select
+          <Select
             id="estado_bien"
-            className={selectClass}
             value={estadoBien}
-            onChange={(e) => setEstadoBien(e.target.value as typeof estadoBien)}
-          >
-            <option value="BUENO">Bueno</option>
-            <option value="REGULAR">Regular</option>
-            <option value="MALO">Malo</option>
-          </select>
+            onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+            options={[
+              { value: "BUENO", label: "Bueno" },
+              { value: "REGULAR", label: "Regular" },
+              { value: "MALO", label: "Malo" },
+            ]}
+          />
         </div>
         <div className="space-y-2 border-t border-border/50 pt-4">
           <Label>Nombre consolidado</Label>
@@ -641,13 +660,16 @@ export function ActivoFormDesktop({
             {nombreConsolidado || "—"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Se forma con: nombre, marca, modelo, serie, color y medidas.
+            Nombre en mayúsculas; marca como se escribe; modelo, serie, color y medidas en
+            minúsculas.
           </p>
         </div>
       </fieldset>
 
       <fieldset className={fieldsetCompact}>
-        <legend className={panelLegendClass}>Valoración y depreciación</legend>
+        <legend className={panelLegendClass}>
+          {categoria === "CUENTA_ORDEN" ? "Valoración" : "Valoración y depreciación"}
+        </legend>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="valor">
@@ -698,40 +720,44 @@ export function ActivoFormDesktop({
               <Input
                 id="comprobante_serie"
                 value={comprobanteSerie}
-                onChange={(e) => setComprobanteSerie(e.target.value)}
-                placeholder="Ej. F/E001-129 (puede ir sin PDF)"
+                onChange={(e) => setComprobanteSerie(formatComprobanteSerieInput(e.target.value))}
+                placeholder="Ej. E001 - 1"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="comprobante">PDF del comprobante</Label>
-              <Input
+              <FileInput
                 id="comprobante"
-                type="file"
                 accept="application/pdf,image/jpeg,image/png"
-                onChange={(e) => setComprobanteFile(e.target.files?.[0] ?? null)}
+                file={comprobanteFile}
+                onFileChange={setComprobanteFile}
+                buttonLabel="Seleccionar PDF"
+                emptyLabel="Sin archivo adjunto"
+                hint={
+                  isEdit && activo?.comprobante_path && !comprobanteFile
+                    ? "Ya hay un PDF adjunto"
+                    : undefined
+                }
               />
-              {comprobanteFile && (
-                <p className="text-xs text-primary">Archivo listo: {comprobanteFile.name}</p>
-              )}
-              {isEdit && activo?.comprobante_path && !comprobanteFile && (
-                <p className="text-xs text-muted-foreground">Ya hay un PDF adjunto</p>
-              )}
             </div>
           </div>
         )}
         <div className="space-y-2">
           <Label htmlFor="foto_activo">Foto del activo</Label>
-          <Input
+          <FileInput
             id="foto_activo"
-            type="file"
             accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setFotoFile(e.target.files?.[0] ?? null)}
+            file={fotoFile}
+            onFileChange={setFotoFile}
+            buttonLabel="Seleccionar foto"
+            emptyLabel="Sin foto adjunta"
+            hint={
+              isEdit && activo?.foto_path && !fotoFile ? "Ya hay una foto adjunta" : undefined
+            }
           />
-          {fotoFile && <p className="text-xs text-primary">Foto lista: {fotoFile.name}</p>}
-          {isEdit && activo?.foto_path && !fotoFile && (
-            <p className="text-xs text-muted-foreground">Ya hay una foto adjunta</p>
-          )}
         </div>
+        {mostrarDepreciacion && (
+        <>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="depreciacion">Depreciación anual (%)</Label>
@@ -778,21 +804,13 @@ export function ActivoFormDesktop({
             <p className="mt-1 text-xs text-muted-foreground">Valor menos depreciación acumulada</p>
           </div>
         </div>
+        </>
+        )}
       </fieldset>
 
       <fieldset className={fieldsetNotas}>
-        <legend className={panelLegendClass}>Descripción y observación (opcional)</legend>
+        <legend className={panelLegendClass}>Observación (opcional)</legend>
         <div className="flex flex-col gap-4 lg:flex-1 lg:flex-col">
-          <div className="space-y-2 lg:flex lg:flex-1 lg:flex-col">
-            <Label htmlFor="descripcion">Descripción</Label>
-            <textarea
-              id="descripcion"
-              className={textareaModalClass}
-              value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              placeholder="Uso, ubicación física, detalle general…"
-            />
-          </div>
           <div className="space-y-2 lg:flex lg:flex-1 lg:flex-col">
             <Label htmlFor="observacion">Observación</Label>
             <textarea
@@ -812,39 +830,31 @@ export function ActivoFormDesktop({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="sede">Sede</Label>
-            <select
+            <Select
               id="sede"
-              className={selectClass}
               value={sedeId}
-              onChange={(e) => {
-                setSedeId(e.target.value);
+              onChange={(nextSede) => {
+                setSedeId(nextSede);
                 setAmbienteId("");
               }}
-            >
-              <option value="">Seleccione…</option>
-              {sedes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Seleccione…" },
+                ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+              ]}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ambiente">Ambiente</Label>
-            <select
+            <Select
               id="ambiente"
-              className={selectClass}
               value={ambienteId}
-              onChange={(e) => setAmbienteId(e.target.value)}
+              onChange={setAmbienteId}
               disabled={!sedeId}
-            >
-              <option value="">Seleccione…</option>
-              {ambientes.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Seleccione…" },
+                ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
+              ]}
+            />
             {sedeId && (
               <div className="flex flex-wrap gap-2 pt-1">
                 <Input

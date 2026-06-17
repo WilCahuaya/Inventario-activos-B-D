@@ -1,25 +1,80 @@
 "use client";
 
-import type { CreateCatalogoNacionalInput } from "@inventario/types";
-import { CatalogoAltaPanel } from "@inventario/ui";
-import { createCatalogoNacional } from "@/lib/actions/catalogo";
+
+
+import { CatalogoPage } from "@inventario/ui";
+
+import {
+
+  createCatalogoNacional,
+
+  deleteCatalogoOpcionPersonalizada,
+
+  deleteCatalogoPropio,
+
+  getNextCodigoCatalogoPropio,
+
+  listCatalogoClases,
+
+  listCatalogoGrupos,
+
+  listCatalogoPropio,
+
+  registerCatalogoOpcionPersonalizada,
+
+  searchCatalogoNacionalOficial,
+
+  suggestCatalogoGrupo,
+
+  updateCatalogoPropio,
+
+} from "@/lib/actions/catalogo";
+
+
 
 interface CatalogoPanelProps {
+
   initialDenominacion?: string;
-  initialCodigo?: string;
+
 }
 
-export function CatalogoPanel({ initialDenominacion = "", initialCodigo = "" }: CatalogoPanelProps) {
-  async function handleSubmit(input: CreateCatalogoNacionalInput) {
-    return createCatalogoNacional(input);
-  }
+
+
+export function CatalogoPanel({ initialDenominacion = "" }: CatalogoPanelProps) {
 
   return (
-    <CatalogoAltaPanel
+
+    <CatalogoPage
+
       initialDenominacion={initialDenominacion}
-      initialCodigo={initialCodigo}
+
       successSuffix="En desktop, sincronice el catálogo al reconectar."
-      onSubmit={handleSubmit}
+
+      loadNextCodigo={getNextCodigoCatalogoPropio}
+
+      loadGrupos={listCatalogoGrupos}
+
+      loadClases={listCatalogoClases}
+
+      suggestGrupo={suggestCatalogoGrupo}
+
+      onRegisterOpcionPersonalizada={registerCatalogoOpcionPersonalizada}
+
+      onDeleteOpcionPersonalizada={deleteCatalogoOpcionPersonalizada}
+
+      onCreate={createCatalogoNacional}
+
+      listPropio={listCatalogoPropio}
+
+      onUpdatePropio={updateCatalogoPropio}
+
+      onDeletePropio={deleteCatalogoPropio}
+
+      searchNacional={searchCatalogoNacionalOficial}
+
     />
+
   );
+
 }
+

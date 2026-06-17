@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatComprobanteSerieInput } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
 
 interface ComprobanteSerieDialogProps {
@@ -27,7 +28,7 @@ export function ComprobanteSerieDialog({
   function handleConfirm() {
     const trimmed = serie.trim();
     if (!trimmed) return;
-    onConfirm(trimmed);
+    onConfirm(formatComprobanteSerieInput(trimmed));
   }
 
   return (
@@ -48,8 +49,8 @@ export function ComprobanteSerieDialog({
           <Input
             id="comprobante_serie_dialog"
             value={serie}
-            onChange={(e) => setSerie(e.target.value)}
-            placeholder="Ej. F/E001-129"
+            onChange={(e) => setSerie(formatComprobanteSerieInput(e.target.value))}
+            placeholder="Ej. E001 - 1"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Enter") {

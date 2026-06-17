@@ -1,4 +1,10 @@
-import { codigoBarrasLookupVariants } from "@inventario/types";
+import {
+  MAX_ACTIVOS_SIMILARES_CANTIDAD,
+  codigoBarrasLookupVariants,
+  type ActivosSimilaresPreview,
+  type CreateActivosSimilaresResult,
+  type EjemplaresSimilaresResumen,
+} from "@inventario/types";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
@@ -404,4 +410,110 @@ export async function registrarActivo(
   const activo = await getActivoById(activoId);
   if (!activo) return { error: "Activo no encontrado tras validar." };
   return { data: activo };
+}
+
+export async function previewActivosSimilares(
+  entidadId: string,
+  codigoCatalogo: string,
+  cantidad: number,
+): Promise<ActivosSimilaresPreview | null> {
+  const qty = Math.floor(cantidad);
+  if (qty < 1 || qty > MAX_ACTIVOS_SIMILARES_CANTIDAD) return null;
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("preview_activos_similares_rango", {
+    p_entidad_id: entidadId,
+    p_catalogo: codigoCatalogo.trim(),
+    p_cantidad: qty,
+  });
+
+  if (error) return null;
+  const row = data as {
+    es_registrado?: boolean;
+    primer_codigo?: string | null;
+    ultimo_codigo?: string | null;
+  };
+  return {
+    es_registrado: Boolean(row.es_registrado),
+    primer_codigo: row.primer_codigo ?? null,
+    ultimo_codigo: row.ultimo_codigo ?? null,
+  };
+}
+
+export async function createActivosSimilares(
+  activoId: string,
+  cantidad: number,
+): Promise<{ data?: CreateActivosSimilaresResult; error?: string }> {
+  const qty = Math.floor(cantidad);
+  if (qty < 1 || qty > MAX_ACTIVOS_SIMILARES_CANTIDAD) {
+    return { error: `La cantidad debe estar entre 1 y ${MAX_ACTIVOS_SIMILARES_CANTIDAD}.` };
+  }
+
+  const supabase = getSupabaseClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("estado_registro")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (existing.estado_registro === "DADO_DE_BAJA") {
+    return { error: "No puede duplicar un activo dado de baja." };
+  }
+
+  const { data, error } = await supabase.rpc("create_activos_similares", {
+    p_activo_id: activoId,
+    p_cantidad: qty,
+  });
+
+  if (error) return { error: error.message };
+  return { data: data as CreateActivosSimilaresResult };
+}
+
+export async function getEjemplaresSimilaresResumen(
+  activoId: string,
+): Promise<EjemplaresSimilaresResumen | null> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("resumen_ejemplares_similares", {
+    p_activo_id: activoId,
+  });
+
+  if (error) return null;
+  const row = data as {
+    total?: number;
+    registrados?: number;
+    preregistrados?: number;
+  };
+  return {
+    total: row.total ?? 0,
+    registrados: row.registrados ?? 0,
+    preregistrados: row.preregistrados ?? 0,
+  };
+}
+
+export async function listActivosSimilaresParaEtiquetas(
+  activoId: string,
+): Promise<ActivoConUbicacion[]> {
+  const supabase = getSupabaseClient();
+  const { data: ids, error: idsError } = await supabase.rpc("list_activos_similares_ids", {
+    p_activo_id: activoId,
+    p_solo_registrados: true,
+  });
+
+  if (idsError) throw new Error(idsError.message);
+  const activoIds = (ids as string[] | null) ?? [];
+  if (activoIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("activos")
+    .select("*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .in("id", activoIds)
+    .order("correlativo", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return mapActivoRows(data as Record<string, unknown>[]);
 }

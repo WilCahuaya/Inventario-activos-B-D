@@ -19,10 +19,10 @@ export default async function ContadorCatalogoPage({
   return (
     <div className="space-y-6">
       <PanelPageHeader
-        title="Catálogo nacional"
-        subtitle="Agregar ítems que no existen en la base oficial (cuchara, olla, sartén, etc.)"
+        title="Catálogo"
+        subtitle="Administre el catálogo propio (cuenta de orden) y consulte el catálogo nacional oficial."
       />
-      <CatalogoPanel initialDenominacion={params.q ?? ""} initialCodigo={params.codigo ?? ""} />
+      <CatalogoPanel initialDenominacion={params.q ?? ""} />
     </div>
   );
 }

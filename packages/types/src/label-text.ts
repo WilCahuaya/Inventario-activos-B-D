@@ -185,6 +185,14 @@ export function resolveNombreEtiqueta(nombre: string, nombreEtiqueta?: string | 
   return override || nombre.trim();
 }
 
+/** True si el nombre del bien no cabe cómodamente en la etiqueta 50×25 mm. */
+export function nombreRequiereEtiquetaOverride(nombre: string): boolean {
+  const sanitized = sanitizeLabelPrintText(nombre.toUpperCase());
+  if (!sanitized) return false;
+  const fit = fitLabelPrintLine(sanitized, LABEL_PRINT_LAYOUT_FONTS.nombre);
+  return fit.shrunk || fit.truncated;
+}
+
 /** Sugerencia editable cuando el nombre oficial no cabe en 50 mm. */
 export function suggestNombreEtiqueta(
   nombre: string,

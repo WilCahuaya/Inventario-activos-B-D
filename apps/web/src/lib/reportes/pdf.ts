@@ -1,5 +1,5 @@
 import { formatFechaISOToDDMMYYYY, formatMonedaPE } from "@inventario/types";
-import { EMPRESA } from "./branding";
+import { buildInstitutionalHeader } from "./header-meta";
 import { addPdfLogoWatermark, getBrandLogoPngDataUrl } from "./logo-watermark";
 import {
   buildReporteRows,
@@ -28,12 +28,6 @@ function slugFilename(text: string): string {
     .slice(0, 48);
 }
 
-function fechaCortaHora(d: Date): string {
-  const fecha = formatFechaISOToDDMMYYYY(d.toISOString().slice(0, 10)) ?? "";
-  const hora = d.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
-  return `${fecha} ${hora}`;
-}
-
 type JsPDFDoc = import("jspdf").jsPDF;
 
 /** Totales: tono claro distinto al encabezado, texto oscuro para buena legibilidad. */
@@ -51,25 +45,22 @@ function addInstitutionalHeader(
   totalRegistros: number,
   startY = 10,
 ): number {
-  const def = REPORTES.find((r) => r.id === ctx.reporteId)!;
+  const header = buildInstitutionalHeader(ctx, totalRegistros);
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 10;
   let y = startY;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(EMPRESA.razonSocial, margin, y);
+  doc.text(header.razonSocial, margin, y);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.text(`Generado: ${fechaCortaHora(ctx.fechaGeneracion)}`, pageW - margin, y, {
-    align: "right",
-  });
+  doc.text(header.generado, pageW - margin, y, { align: "right" });
   y += 4;
 
-  doc.text(`${EMPRESA.producto}  ·  RUC ${EMPRESA.ruc}`, margin, y);
-  const corte = formatFechaISOToDDMMYYYY(ctx.fechaCorte) || ctx.fechaCorte;
-  doc.text(`Fecha de corte: ${corte}`, pageW - margin, y, { align: "right" });
+  doc.text(header.productoRuc, margin, y);
+  doc.text(header.fechaCorte, pageW - margin, y, { align: "right" });
   y += 5;
 
   doc.setFont("helvetica", "bold");
@@ -79,21 +70,12 @@ function addInstitutionalHeader(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-
-  const metaIzq: string[] = [`Entidad: ${ctx.entidadNombre}`];
-  if (def.scope === "ambiente") {
-    if (ctx.sedeNombre) metaIzq.push(`Sede: ${ctx.sedeNombre}`);
-    if (ctx.ambienteNombre) metaIzq.push(`Ambiente: ${ctx.ambienteNombre}`);
-    if (ctx.responsable?.trim()) metaIzq.push(`Responsable: ${ctx.responsable.trim()}`);
-  }
-  metaIzq.push(`Registros: ${totalRegistros}`);
-
-  doc.text(metaIzq.join("   |   "), margin, y, { maxWidth: pageW - margin * 2 });
+  doc.text(header.metaLine, margin, y, { maxWidth: pageW - margin * 2 });
   y += 4;
 
   doc.setFontSize(7);
   doc.setTextColor(90, 90, 90);
-  doc.text(`${ctx.usuarioNombre} · ${ctx.usuarioEmail}`, margin, y);
+  doc.text(header.usuarioLine, margin, y);
   doc.setTextColor(0, 0, 0);
 
   return y + 3;

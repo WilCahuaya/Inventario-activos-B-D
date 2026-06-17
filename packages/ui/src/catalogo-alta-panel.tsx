@@ -1,30 +1,89 @@
 "use client";
 
-import { useState } from "react";
-import type { CatalogoNacional, CreateCatalogoNacionalInput } from "@inventario/types";
+import { useCallback, useEffect, useState } from "react";
+import type {
+  CatalogoNacional,
+  CatalogoCampoOpciones,
+  CatalogoOpcionTipo,
+  CreateCatalogoNacionalInput,
+} from "@inventario/types";
+import { Button } from "./components";
 import { CatalogoNacionalForm } from "./catalogo-nacional-form";
 import { panelCardClass } from "./panel";
 
+const OPCIONES_VACIAS: CatalogoCampoOpciones = { opciones: [], personalizadas: [] };
+
 export interface CatalogoAltaPanelProps {
   initialDenominacion?: string;
-  initialCodigo?: string;
   /** Texto adicional tras crear el ítem (ej. mensaje offline en desktop). */
   successSuffix?: string;
+  loadNextCodigo: () => Promise<string>;
+  loadGrupos: () => Promise<CatalogoCampoOpciones>;
+  loadClases: () => Promise<CatalogoCampoOpciones>;
+  suggestGrupo: (denominacion: string) => Promise<string | null>;
+  onRegisterOpcionPersonalizada?: (
+    tipo: CatalogoOpcionTipo,
+    valor: string,
+  ) => Promise<{ error?: string } | void>;
+  onDeleteOpcionPersonalizada?: (
+    tipo: CatalogoOpcionTipo,
+    valor: string,
+  ) => Promise<{ error?: string } | void>;
   onSubmit: (
     input: CreateCatalogoNacionalInput,
   ) => Promise<{ data?: CatalogoNacional; error?: string }>;
+  onItemCreated?: () => void | Promise<void>;
+  onClose?: () => void;
 }
 
 export function CatalogoAltaPanel({
   initialDenominacion = "",
-  initialCodigo = "",
   successSuffix,
+  loadNextCodigo,
+  loadGrupos,
+  loadClases,
+  suggestGrupo,
+  onRegisterOpcionPersonalizada,
+  onDeleteOpcionPersonalizada,
   onSubmit,
+  onItemCreated,
+  onClose,
 }: CatalogoAltaPanelProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [created, setCreated] = useState<CatalogoNacional | null>(null);
+  const [codigo, setCodigo] = useState("");
+  const [codigoLoading, setCodigoLoading] = useState(true);
+  const [grupos, setGrupos] = useState<CatalogoCampoOpciones>(OPCIONES_VACIAS);
+  const [clases, setClases] = useState<CatalogoCampoOpciones>(OPCIONES_VACIAS);
+  const [gruposLoading, setGruposLoading] = useState(true);
+  const [clasesLoading, setClasesLoading] = useState(true);
+  const [formKey, setFormKey] = useState(0);
+
+  const refreshMeta = useCallback(async () => {
+    setCodigoLoading(true);
+    setGruposLoading(true);
+    setClasesLoading(true);
+    try {
+      const [nextCodigo, listaGrupos, listaClases] = await Promise.all([
+        loadNextCodigo(),
+        loadGrupos(),
+        loadClases(),
+      ]);
+      setCodigo(nextCodigo);
+      setGrupos(listaGrupos);
+      setClases(listaClases);
+    } finally {
+      setCodigoLoading(false);
+      setGruposLoading(false);
+      setClasesLoading(false);
+    }
+  }, [loadClases, loadGrupos, loadNextCodigo]);
+
+  useEffect(() => {
+    void refreshMeta();
+  }, [refreshMeta]);
 
   async function handleSubmit(input: CreateCatalogoNacionalInput) {
     setPending(true);
@@ -42,25 +101,45 @@ export function CatalogoAltaPanel({
 
     setCreated(result.data ?? null);
     setSuccess(
-      `Ítem ${result.data?.codigo} agregado. Ya puede usarlo al registrar activos.${successSuffix ? ` ${successSuffix}` : ""}`,
+      `Ítem ${result.data?.codigo} agregado. Ya puede usarlo al registrar activos de cuenta de orden.${successSuffix ? ` ${successSuffix}` : ""}`,
     );
+    setFormKey((k) => k + 1);
+    await refreshMeta();
+    await onItemCreated?.();
   }
 
   return (
     <div className="space-y-4">
-      <div className={`${panelCardClass} space-y-4 p-4 sm:p-6`}>
-        <div>
-          <h3 className="font-semibold">Nuevo ítem en catálogo nacional</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Use esto cuando el bien no aparece en el catálogo oficial (ej. cuchara, olla, sartén
-            doméstica). Elija una plantilla, asigne un código de 8 dígitos único y guarde.
-          </p>
+      <div className="overflow-visible rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm sm:p-6 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Nuevo bien de cuenta de orden</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Registre artículos menores que no figuran en el catálogo oficial. El código y la
+              contabilidad se asignan automáticamente; seleccione clase y grupo.
+            </p>
+          </div>
+          {onClose && (
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              Cancelar
+            </Button>
+          )}
         </div>
 
         <CatalogoNacionalForm
+          key={formKey}
           initialDenominacion={initialDenominacion}
-          initialCodigo={initialCodigo}
+          codigo={codigo}
+          codigoLoading={codigoLoading}
+          grupos={grupos}
+          clases={clases}
+          gruposLoading={gruposLoading}
+          clasesLoading={clasesLoading}
           pending={pending}
+          onSuggestGrupo={suggestGrupo}
+          onRegisterOpcionPersonalizada={onRegisterOpcionPersonalizada}
+          onDeleteOpcionPersonalizada={onDeleteOpcionPersonalizada}
+          onOpcionesChanged={refreshMeta}
           onSubmit={handleSubmit}
         />
 
@@ -82,22 +161,19 @@ export function CatalogoAltaPanel({
         )}
       </div>
 
-      <div className={`${panelCardClass} p-4 text-sm text-muted-foreground`}>
-        <p className="font-medium text-foreground">Consejos para el código</p>
-        <ul className="mt-2 list-inside list-disc space-y-1">
-          <li>
-            Copie el prefijo de un ítem similar (ej. cocina mobiliario: <code>3264xxxx</code>).
-          </li>
-          <li>Verifique que los 8 dígitos no existan ya en el catálogo.</li>
-          <li>
-            Use <strong>EXCLUIDO</strong> para bienes de cuenta de orden (cuchara, sartén barata).
-          </li>
-          <li>
-            Use <strong>ACTIVO</strong> y depreciación <strong>10 %</strong> si capitaliza como
-            activo.
-          </li>
-        </ul>
-      </div>
+      {!onClose && (
+        <div className={`${panelCardClass} p-4 text-sm text-muted-foreground`}>
+          <p className="font-medium text-foreground">Cómo funciona</p>
+          <ul className="mt-2 list-inside list-disc space-y-1">
+            <li>
+              Código propio secuencial: <code>BD000001</code>, <code>BD000002</code>, etc.
+            </li>
+            <li>Contabilidad fija: <strong>2524</strong>.</li>
+            <li>Estado en catálogo: <strong>EXCLUIDO</strong> (cuenta de orden).</li>
+            <li>Elija clase y grupo; puede agregar valores con «Otros» y eliminar los que creó.</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

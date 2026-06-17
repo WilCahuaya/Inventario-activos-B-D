@@ -67,13 +67,34 @@
   .dark .border-input {
     border-color: hsl(192 18% 88% / 0.08);
   }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  html.dialog-open main {
+    overflow: hidden !important;
+  }
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+  html {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
   body {
     @apply bg-background text-foreground antialiased;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
   }
 }

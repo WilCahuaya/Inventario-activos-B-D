@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { ActivoAtributoCampo } from "@inventario/types";
 import { Input, Label } from "./components";
-
-type ActivoAtributoCampo = "marca" | "modelo" | "serie" | "color";
 
 const MIN_QUERY_LENGTH = 1;
 const DEBOUNCE_MS = 250;

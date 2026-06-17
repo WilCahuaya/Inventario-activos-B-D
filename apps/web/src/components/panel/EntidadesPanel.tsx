@@ -1,21 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Entidad } from "@inventario/types";
+import type { EntidadConConteo } from "@inventario/types";
 import {
   LABEL_PRINT_LAYOUT_FONTS,
   suggestNombreEtiqueta,
 } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
 import {
+  AmbientesIcon,
+  DeleteIcon,
   PanelDataTable,
+  PanelIconAction,
+  PanelNavActionLink,
+  PanelTableActions,
+  ResponsablesIcon,
+  PanelTableColgroup,
+  PanelTableTd,
+  PanelTableTh,
   PanelViewToggle,
+  ENTIDADES_TABLE_COLS,
+  panelTableShrinkCellClass,
+  panelTableNowrapCellClass,
   panelTableBodyRowClass,
   panelTableHeadRowClass,
-  panelTableTdClass,
-  panelTableThClass,
+  panelTableStickyHeadClass,
   useStoredViewMode,
 } from "@inventario/ui/panel";
 import { createEntidad, deleteEntidad, updateEntidad } from "@/lib/actions/entidades";
@@ -30,7 +40,7 @@ import {
   panelCardClass,
 } from "./panel-ui";
 
-function EntidadFields({ entidad, requireAdmin = false }: { entidad?: Entidad; requireAdmin?: boolean }) {
+function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadConConteo; requireAdmin?: boolean }) {
   const [nombre, setNombre] = useState(entidad?.nombre ?? "");
   const [nombreEtiqueta, setNombreEtiqueta] = useState(entidad?.nombre_etiqueta ?? "");
 
@@ -150,16 +160,16 @@ function entidadFromForm(form: FormData) {
   };
 }
 
-export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] }) {
+export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConConteo[] }) {
   const router = useRouter();
   const [entidades, setEntidades] = useState(initial);
   const [busqueda, setBusqueda] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [editEntidad, setEditEntidad] = useState<Entidad | null>(null);
+  const [editEntidad, setEditEntidad] = useState<EntidadConConteo | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-entidades");
+  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-entidades", "list");
 
   const filtradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -187,7 +197,11 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
       return;
     }
 
-    setEntidades((prev) => [...prev, result.data!].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    setEntidades((prev) =>
+      [...prev, { ...result.data!, ambiente_count: 0 }].sort((a, b) =>
+        a.nombre.localeCompare(b.nombre),
+      ),
+    );
     setCreateOpen(false);
     form.reset();
     if (result.inviteMessage) setSuccess(result.inviteMessage);
@@ -213,14 +227,18 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
 
     setEntidades((prev) =>
       prev
-        .map((e) => (e.id === editEntidad.id ? result.data! : e))
+        .map((e) =>
+          e.id === editEntidad.id
+            ? { ...result.data!, ambiente_count: e.ambiente_count }
+            : e,
+        )
         .sort((a, b) => a.nombre.localeCompare(b.nombre)),
     );
     setEditEntidad(null);
     router.refresh();
   }
 
-  async function handleDelete(entidad: Entidad) {
+  async function handleDelete(entidad: EntidadConConteo) {
     if (!confirm(`¿Eliminar la entidad "${entidad.nombre}"?`)) return;
     setError(null);
 
@@ -235,7 +253,7 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PanelPageHeader
         title="Gestión de entidades"
         subtitle="Administra las entidades y sus ambientes de inventario"
@@ -250,13 +268,18 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
         left={
           <PanelCountLabel count={filtradas.length} singular="entidad" plural="entidades" />
         }
-        right={<PanelViewToggle value={viewMode} onChange={setViewMode} />}
-      />
-
-      <PanelSearchInput
-        value={busqueda}
-        onChange={setBusqueda}
-        placeholder="Buscar por razón social, RUC o administrador…"
+        right={
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+            <div className="min-w-[200px] flex-1 sm:max-w-sm sm:flex-none">
+              <PanelSearchInput
+                value={busqueda}
+                onChange={setBusqueda}
+                placeholder="Buscar por razón social, RUC o administrador…"
+              />
+            </div>
+            <PanelViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        }
       />
 
       {success && (
@@ -285,61 +308,70 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
           }
         />
       ) : viewMode === "list" ? (
-        <PanelDataTable minWidth={960}>
-          <thead>
+        <PanelDataTable layout="auto">
+          <PanelTableColgroup cols={ENTIDADES_TABLE_COLS} />
+          <thead className={panelTableStickyHeadClass}>
             <tr className={panelTableHeadRowClass}>
-              <th className={panelTableThClass}>Razón social</th>
-              <th className={panelTableThClass}>RUC</th>
-              <th className={panelTableThClass}>Administrador</th>
-              <th className={panelTableThClass}>Dirección</th>
-              <th className={panelTableThClass}>Estado</th>
-              <th className={`${panelTableThClass} text-right`}>Acciones</th>
+              <PanelTableTh>Razón social</PanelTableTh>
+              <PanelTableTh className={panelTableShrinkCellClass}>RUC</PanelTableTh>
+              <PanelTableTh>Administrador</PanelTableTh>
+              <PanelTableTh>Dirección</PanelTableTh>
+              <PanelTableTh align="center" className={panelTableShrinkCellClass}>
+                Ambientes
+              </PanelTableTh>
+              <PanelTableTh className={panelTableNowrapCellClass}>Estado</PanelTableTh>
+              <PanelTableTh align="right" className={panelTableNowrapCellClass}>
+                Acciones
+              </PanelTableTh>
             </tr>
           </thead>
           <tbody>
             {filtradas.map((entidad) => (
               <tr key={entidad.id} className={panelTableBodyRowClass}>
-                <td className={`${panelTableTdClass} font-medium text-primary`}>{entidad.nombre}</td>
-                <td className={`${panelTableTdClass} text-muted-foreground`}>{entidad.ruc ?? "—"}</td>
-                <td className={panelTableTdClass}>{entidad.admin_nombre ?? "—"}</td>
-                <td className={`${panelTableTdClass} max-w-[200px] truncate text-muted-foreground`}>
+                <PanelTableTd className="font-medium text-primary" title={entidad.nombre}>
+                  {entidad.nombre}
+                </PanelTableTd>
+                <PanelTableTd
+                  className={`font-mono text-xs text-muted-foreground ${panelTableShrinkCellClass}`}
+                >
+                  {entidad.ruc ?? "—"}
+                </PanelTableTd>
+                <PanelTableTd title={entidad.admin_nombre ?? undefined}>
+                  {entidad.admin_nombre ?? "—"}
+                </PanelTableTd>
+                <PanelTableTd className="text-muted-foreground" title={entidad.direccion ?? undefined}>
                   {entidad.direccion ?? "—"}
-                </td>
-                <td className={panelTableTdClass}>
+                </PanelTableTd>
+                <PanelTableTd align="center" className={panelTableShrinkCellClass}>
+                  {entidad.ambiente_count}
+                </PanelTableTd>
+                <PanelTableTd className={panelTableNowrapCellClass}>
                   <StatusBadge variant="active">Activa</StatusBadge>
-                </td>
-                <td className={`${panelTableTdClass} text-right`}>
-                  <div className="flex flex-wrap items-center justify-end gap-1.5">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      onClick={() => {
-                        setError(null);
-                        setEditEntidad(entidad);
-                      }}
-                    >
-                      <EditIcon />
-                      Editar
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(entidad)}
-                    >
-                      Eliminar
-                    </Button>
-                    <Link
-                      href={`/contador/entidades/${entidad.id}`}
-                      className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90"
-                    >
-                      Ambientes →
-                    </Link>
-                  </div>
-                </td>
+                </PanelTableTd>
+                <PanelTableTd
+                  align="right"
+                  className={`overflow-visible ${panelTableNowrapCellClass}`}
+                >
+                  <PanelTableActions
+                    onEdit={() => {
+                      setError(null);
+                      setEditEntidad(entidad);
+                    }}
+                    onDelete={() => handleDelete(entidad)}
+                    navs={[
+                      {
+                        label: "Ambientes",
+                        kind: "ambientes",
+                        href: `/contador/entidades/${entidad.id}`,
+                      },
+                      {
+                        label: "Responsables",
+                        kind: "responsables",
+                        href: `/contador/entidades/${entidad.id}?tab=responsables`,
+                      },
+                    ]}
+                  />
+                </PanelTableTd>
               </tr>
             ))}
           </tbody>
@@ -365,37 +397,40 @@ export function EntidadesPanel({ entidades: initial }: { entidades: Entidad[] })
                 {entidad.direccion && (
                   <p className="text-muted-foreground">{entidad.direccion}</p>
                 )}
+                <p className="text-muted-foreground">
+                  {entidad.ambiente_count}{" "}
+                  {entidad.ambiente_count === 1 ? "ambiente" : "ambientes"}
+                </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
+                <PanelIconAction
+                  label="Editar"
                   onClick={() => {
                     setError(null);
                     setEditEntidad(entidad);
                   }}
                 >
                   <EditIcon />
-                  Editar
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
+                </PanelIconAction>
+                <PanelIconAction
+                  label="Eliminar"
+                  variant="danger"
                   onClick={() => handleDelete(entidad)}
                 >
-                  Eliminar
-                </Button>
-                <Link
+                  <DeleteIcon />
+                </PanelIconAction>
+                <PanelNavActionLink
                   href={`/contador/entidades/${entidad.id}`}
-                  className="ml-auto inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90"
-                >
-                  Ver ambientes →
-                </Link>
+                  label="Ambientes"
+                  icon={<AmbientesIcon />}
+                  className="ml-auto"
+                />
+                <PanelNavActionLink
+                  href={`/contador/entidades/${entidad.id}?tab=responsables`}
+                  label="Responsables"
+                  icon={<ResponsablesIcon />}
+                />
               </div>
             </article>
           ))}

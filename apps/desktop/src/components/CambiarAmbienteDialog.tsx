@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Activo, Ambiente, Sede } from "@inventario/types";
-import { Button, Dialog, Label } from "@inventario/ui";
+import { Button, Dialog, Label, Select } from "@inventario/ui";
 import { cambiarUbicacionActivo } from "../lib/activos";
 import { listAmbientes, listSedes } from "../lib/ubicacion";
 
@@ -73,40 +73,32 @@ export function CambiarAmbienteDialog({
       <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
         <div className="space-y-2">
           <Label htmlFor="cambiar_sede">Sede</Label>
-          <select
+          <Select
             id="cambiar_sede"
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             value={sedeId}
-            onChange={(e) => {
-              setSedeId(e.target.value);
+            onChange={(value) => {
+              setSedeId(value);
               setAmbienteId("");
             }}
-          >
-            <option value="">Seleccione sede…</option>
-            {sedes.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "Seleccione sede…" },
+              ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+            ]}
+          />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="cambiar_ambiente">Ambiente</Label>
-          <select
+          <Select
             id="cambiar_ambiente"
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             value={ambienteId}
             disabled={!sedeId}
-            onChange={(e) => setAmbienteId(e.target.value)}
-          >
-            <option value="">Seleccione ambiente…</option>
-            {ambientes.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nombre}
-              </option>
-            ))}
-          </select>
+            onChange={setAmbienteId}
+            options={[
+              { value: "", label: "Seleccione ambiente…" },
+              ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
+            ]}
+          />
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

@@ -1,19 +1,19 @@
 import { PanelLayout } from "@/components/panel/PanelLayout";
-import type { PanelNavItem } from "@/components/panel/panel-nav-icons";
+import { getProfile } from "@/lib/auth/profile";
+import { adminNavSections, getAdminPreregistradoCount } from "@/lib/panel-nav";
 
-const ADMIN_LINKS: PanelNavItem[] = [
-  { href: "/admin", label: "Mi inventario", icon: "dashboard" },
-  { href: "/admin/activos", label: "Ambientes", icon: "inventory" },
-  { href: "/admin/reportes", label: "Reportes", icon: "reports" },
-];
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const [preregistrados, profile] = await Promise.all([
+    getAdminPreregistradoCount(),
+    getProfile(),
+  ]);
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <PanelLayout
       panelLabel="Panel entidad"
-      homeHref="/admin"
-      sidebarTitle="Administrador"
-      links={ADMIN_LINKS}
+      homeHref="/admin/inventario"
+      sections={adminNavSections(preregistrados)}
+      user={profile ? { nombre: profile.nombre, email: profile.email } : undefined}
     >
       {children}
     </PanelLayout>

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  PanelBreadcrumbs as PanelBreadcrumbsBase,
+  type PanelBreadcrumbItem,
   panelCardClass,
 } from "@inventario/ui/panel";
 
@@ -10,7 +12,9 @@ export {
   PanelBanner,
   PanelCountLabel,
   PanelEmptyState,
+  PanelFlashMessage,
   PanelSearchInput,
+  PanelTabs,
   PanelToolbar,
   SearchIcon,
   StatusBadge,
@@ -18,7 +22,21 @@ export {
   panelFieldsetClass,
   panelLegendClass,
   panelModalClass,
+  type PanelBreadcrumbItem,
 } from "@inventario/ui/panel";
+
+export function PanelBreadcrumbs({ items }: { items: PanelBreadcrumbItem[] }) {
+  return (
+    <PanelBreadcrumbsBase
+      items={items}
+      LinkComponent={({ href, className, title, children }) => (
+        <Link href={href} className={className} title={title}>
+          {children}
+        </Link>
+      )}
+    />
+  );
+}
 
 export function EditIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
@@ -39,45 +57,48 @@ export function EditIcon({ className = "h-3.5 w-3.5" }: { className?: string }) 
   );
 }
 
-export function PanelBackLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <Link href={href} className="text-sm font-medium text-primary hover:underline">
-      ← {children}
-    </Link>
-  );
-}
-
 export function PanelPageHeader({
   title,
   subtitle,
   backHref,
   backLabel,
+  breadcrumbs,
   actions,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   backHref?: string;
   backLabel?: string;
+  breadcrumbs?: PanelBreadcrumbItem[];
   actions?: ReactNode;
 }) {
+  const crumbs =
+    breadcrumbs ??
+    (title && backHref && backLabel
+      ? [{ label: backLabel, href: backHref }, { label: title }]
+      : title
+        ? [{ label: title }]
+        : undefined);
+
   return (
     <div>
-      {backHref && backLabel && (
-        <PanelBackLink href={backHref}>{backLabel}</PanelBackLink>
-      )}
-      <div
-        className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4 ${backHref ? "mt-3" : ""}`}
-      >
-        <div>
-          <h1 className="text-xl font-bold text-primary sm:text-2xl">{title}</h1>
-          {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+      {crumbs && crumbs.length > 0 && <PanelBreadcrumbs items={crumbs} />}
+      {(subtitle || actions) && (
+        <div
+          className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 ${crumbs?.length ? "mt-2" : ""}`}
+        >
+          {subtitle ? (
+            <p className="min-w-0 text-sm text-muted-foreground">{subtitle}</p>
+          ) : (
+            <span className="hidden sm:block sm:flex-1" />
+          )}
+          {actions && (
+            <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none [&>a]:flex-1 sm:[&>a]:flex-none">
+              {actions}
+            </div>
+          )}
         </div>
-        {actions && (
-          <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
-            {actions}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

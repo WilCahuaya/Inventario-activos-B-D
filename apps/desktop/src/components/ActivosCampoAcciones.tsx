@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ActivoConUbicacion } from "../lib/activos";
-import { Button } from "@inventario/ui";
+import { TableActionsOverflow, type TableActionItem } from "@inventario/ui/panel";
 import { ValidarPreregistroDialog } from "./ValidarPreregistroDialog";
-
+import { ActivoIconButton, IconEtiqueta, IconValidar, IconVer } from "./activo-icons";
 interface ActivosCampoAccionesProps {
   entidadId: string;
   activo: ActivoConUbicacion;
@@ -25,38 +25,73 @@ export function ActivosCampoAcciones({
   const [validarOpen, setValidarOpen] = useState(false);
   const esPreregistrado = activo.estado_registro === "PREREGISTRADO";
   const inactivo = activo.estado_registro === "DADO_DE_BAJA";
+  const iconSize = compact ? "h-7 w-7" : "h-8 w-8";
+
+  const items = useMemo<TableActionItem[]>(() => {
+    const list: TableActionItem[] = [];
+    if (esPreregistrado) {
+      list.push({
+        id: "validar",
+        label: online ? "Validar preregistro" : "Validar preregistro (requiere conexión)",
+        icon: <IconValidar />,
+        onClick: () => setValidarOpen(true),
+        disabled: !online,
+      });
+    }
+    list.push({
+      id: "ficha",
+      label: "Ver ficha del activo",
+      icon: <IconVer />,
+      onClick: () => onOpenFicha(activo),
+    });
+    if (!inactivo) {
+      list.push({
+        id: "etiqueta",
+        label: activo.codigo_barras ? "Imprimir etiqueta" : "Sin código de barras asignado",
+        icon: <IconEtiqueta />,
+        onClick: () => onPrintLabel(activo),
+        disabled: !activo.codigo_barras,
+      });
+    }
+    return list;
+  }, [activo, esPreregistrado, inactivo, online, onOpenFicha, onPrintLabel]);
 
   return (
     <>
-      <div className={`flex flex-wrap gap-2 ${compact ? "flex-col sm:flex-row" : "justify-end"}`}>
-        {esPreregistrado && (
-          <Button
-            type="button"
-            size="sm"
-            disabled={!online}
-            title={online ? "Validar preregistro" : "Requiere conexión"}
-            onClick={() => setValidarOpen(true)}
+      {compact ? (
+        <TableActionsOverflow items={items} iconClassName={iconSize} variant="menu" />
+      ) : (
+        <div className="flex flex-row flex-wrap items-center justify-center gap-1">
+          {esPreregistrado && (
+            <ActivoIconButton
+              label={online ? "Validar preregistro" : "Validar preregistro (requiere conexión)"}
+              variant="primary"
+              disabled={!online}
+              className={iconSize}
+              onClick={() => setValidarOpen(true)}
+            >
+              <IconValidar />
+            </ActivoIconButton>
+          )}
+          <ActivoIconButton
+            label="Ver ficha del activo"
+            className={iconSize}
+            onClick={() => onOpenFicha(activo)}
           >
-            Validar
-          </Button>
-        )}
-        <Button type="button" variant="outline" size="sm" onClick={() => onOpenFicha(activo)}>
-          Ver
-        </Button>
-        {!inactivo && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={!activo.codigo_barras}
-            title={activo.codigo_barras ? "Reimprimir etiqueta" : "Sin código de barras asignado"}
-            onClick={() => onPrintLabel(activo)}
-          >
-            Etiqueta
-          </Button>
-        )}
-      </div>
-
+            <IconVer />
+          </ActivoIconButton>
+          {!inactivo && (
+            <ActivoIconButton
+              label={activo.codigo_barras ? "Imprimir etiqueta" : "Sin código de barras asignado"}
+              className={iconSize}
+              disabled={!activo.codigo_barras}
+              onClick={() => onPrintLabel(activo)}
+            >
+              <IconEtiqueta />
+            </ActivoIconButton>
+          )}
+        </div>
+      )}
       {esPreregistrado && (
         <ValidarPreregistroDialog
           open={validarOpen}

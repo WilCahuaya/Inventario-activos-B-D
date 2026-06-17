@@ -1,53 +1,95 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Entidad, SedeConConteo } from "@inventario/types";
-import { Button, Dialog } from "@inventario/ui";
+import type { Entidad, ResponsableConConteo, SedeConConteo } from "@inventario/types";
+import { Button, Dialog, ResponsablesPanel } from "@inventario/ui";
 import {
+  ActivosIcon,
+  EditIcon,
   PanelDataTable,
+  PanelIconAction,
+  PanelNavActionLink,
+  PanelTableActions,
+  PanelTableColgroup,
+  PanelTableTd,
+  PanelTableTh,
+  PanelTabs,
   PanelToolbar,
   PanelViewToggle,
+  AMBIENTES_TABLE_COL_WIDTHS_PCT,
   panelTableBodyRowClass,
   panelTableHeadRowClass,
-  panelTableTdClass,
-  panelTableThClass,
+  panelTableShrinkCellClass,
+  panelTableStickyHeadClass,
   useStoredViewMode,
 } from "@inventario/ui/panel";
 import type { AmbienteConSede } from "@/lib/actions/ubicacion";
-import { createAmbiente, updateAmbiente } from "@/lib/actions/ubicacion";
+import { createAmbiente, listAmbientesPorEntidad, updateAmbiente } from "@/lib/actions/ubicacion";
+import {
+  createResponsable,
+  deleteResponsable,
+  listResponsables,
+  setResponsableActivo,
+  updateResponsable,
+} from "@/lib/actions/responsables";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
 import {
-  EditIcon,
   PanelCountLabel,
   PanelEmptyState,
   PanelPageHeader,
   PanelSearchInput,
+  StatusBadge,
   panelCardClass,
 } from "./panel-ui";
+
+type AdminEntityTab = "ambientes" | "responsables";
+
+const ADMIN_ENTITY_TABS: { id: AdminEntityTab; label: string }[] = [
+  { id: "ambientes", label: "Ambientes" },
+  { id: "responsables", label: "Responsables" },
+];
 
 interface AdminAmbientesPanelProps {
   entidad: Entidad;
   ambientes: AmbienteConSede[];
   sedes: SedeConConteo[];
-  activosPorAmbiente: Record<string, number>;
+  responsables: ResponsableConConteo[];
+  initialTab?: AdminEntityTab;
 }
 
 export function AdminAmbientesPanel({
   entidad,
   ambientes: initial,
   sedes,
-  activosPorAmbiente,
+  responsables: initialResponsables,
+  initialTab = "ambientes",
 }: AdminAmbientesPanelProps) {
   const router = useRouter();
+  const [tab, setTab] = useState<AdminEntityTab>(initialTab);
   const [ambientes, setAmbientes] = useState(initial);
+  const [responsables, setResponsables] = useState(initialResponsables);
   const [busqueda, setBusqueda] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editAmbiente, setEditAmbiente] = useState<AmbienteConSede | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes");
+  const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes", "list");
+
+  async function syncAmbientesYResponsables() {
+    const [ambList, respList] = await Promise.all([
+      listAmbientesPorEntidad(entidad.id),
+      listResponsables(entidad.id),
+    ]);
+    setAmbientes(ambList);
+    setResponsables(respList);
+    router.refresh();
+  }
+
+  function responsableNombreById(id: string | null) {
+    if (!id) return null;
+    return responsables.find((r) => r.id === id)?.nombre ?? null;
+  }
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -89,7 +131,7 @@ export function AdminAmbientesPanel({
       sedeId: input.sedeId,
       nombre: input.nombre,
       descripcion: input.descripcion,
-      responsable: input.responsable,
+      responsableId: input.responsableId,
     });
 
     setPending(false);
@@ -102,6 +144,11 @@ export function AdminAmbientesPanel({
       ...result.data!,
       sede_nombre: sede?.nombre ?? "",
       sede_es_principal: sede?.es_principal ?? false,
+      activo_count: 0,
+      responsable:
+        result.data?.responsable ??
+        responsableNombreById(input.responsableId) ??
+        null,
     };
     setAmbientes((prev) =>
       [...prev, nuevo].sort((a, b) => {
@@ -112,6 +159,7 @@ export function AdminAmbientesPanel({
     );
     setCreateOpen(false);
     form.reset();
+    await syncAmbientesYResponsables();
     router.refresh();
   }
 
@@ -137,35 +185,54 @@ export function AdminAmbientesPanel({
               ...a,
               nombre: input.nombre.trim(),
               descripcion: input.descripcion.trim() || null,
-              responsable: input.responsable.trim() || null,
+              responsable_id: input.responsableId,
+              responsable: responsableNombreById(input.responsableId),
             }
           : a,
       ),
     );
     setEditAmbiente(null);
+    await syncAmbientesYResponsables();
     router.refresh();
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PanelPageHeader
-        title="Ambientes"
-        subtitle="Seleccione un ambiente para ver el inventario o preregistrar bienes"
-        backHref="/admin"
-        backLabel="Mi inventario"
-        actions={
-          <Button type="button" onClick={() => setCreateOpen(true)} disabled={sedes.length === 0}>
-            + Nuevo ambiente
-          </Button>
+        title={entidad.nombre}
+        subtitle={
+          entidad.ruc
+            ? `RUC ${entidad.ruc} · Ambientes y responsables`
+            : "Ambientes y responsables"
         }
+        backHref="/admin/inventario"
+        backLabel="Inventario global"
       />
 
-      <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entidad</p>
-        <p className="font-semibold text-primary">{entidad.nombre}</p>
-        {entidad.ruc && <p className="text-sm text-muted-foreground">RUC {entidad.ruc}</p>}
-      </div>
+      <PanelTabs tabs={ADMIN_ENTITY_TABS} value={tab} onChange={setTab} />
 
+      {tab === "responsables" ? (
+        <ResponsablesPanel
+          responsables={responsables}
+          onCreate={async (input) => {
+            const result = await createResponsable(entidad.id, input);
+            if (result.data) {
+              await syncAmbientesYResponsables();
+              return { data: { ...result.data, ambiente_count: 0 } };
+            }
+            return { error: result.error };
+          }}
+          onUpdate={async (id, input) => {
+            const result = await updateResponsable(id, input);
+            if (!result.error) await syncAmbientesYResponsables();
+            return result;
+          }}
+          onSetActivo={setResponsableActivo}
+          onDelete={deleteResponsable}
+          onReload={syncAmbientesYResponsables}
+        />
+      ) : (
+        <>
       {sedes.length === 0 && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
           No hay sucursales configuradas. Contacte al contador para registrar sucursales antes de
@@ -175,13 +242,26 @@ export function AdminAmbientesPanel({
 
       <PanelToolbar
         left={<PanelCountLabel count={filtrados.length} singular="ambiente" plural="ambientes" />}
-        right={<PanelViewToggle value={viewMode} onChange={setViewMode} />}
-      />
-
-      <PanelSearchInput
-        value={busqueda}
-        onChange={setBusqueda}
-        placeholder="Buscar por nombre, responsable o sucursal…"
+        right={
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+            <div className="min-w-[200px] flex-1 sm:max-w-sm sm:flex-none">
+              <PanelSearchInput
+                value={busqueda}
+                onChange={setBusqueda}
+                placeholder="Buscar ambiente, responsable o sucursal…"
+              />
+            </div>
+            <PanelViewToggle value={viewMode} onChange={setViewMode} />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+              disabled={sedes.length === 0}
+            >
+              + Nuevo ambiente
+            </Button>
+          </div>
+        }
       />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -195,109 +275,111 @@ export function AdminAmbientesPanel({
           }
         />
       ) : viewMode === "list" ? (
-        <PanelDataTable minWidth={900}>
-          <thead>
+        <PanelDataTable>
+          <PanelTableColgroup widths={AMBIENTES_TABLE_COL_WIDTHS_PCT} />
+          <thead className={panelTableStickyHeadClass}>
             <tr className={panelTableHeadRowClass}>
-              <th className={panelTableThClass}>Ambiente</th>
-              <th className={panelTableThClass}>Responsable</th>
-              <th className={panelTableThClass}>Descripción</th>
-              <th className={panelTableThClass}>Sucursal</th>
-              <th className={panelTableThClass}>Activos</th>
-              <th className={`${panelTableThClass} text-right`}>Acciones</th>
+              <PanelTableTh>Ambiente</PanelTableTh>
+              <PanelTableTh>Responsable</PanelTableTh>
+              <PanelTableTh>Descripción</PanelTableTh>
+              <PanelTableTh>Sucursal</PanelTableTh>
+              <PanelTableTh align="center" className={panelTableShrinkCellClass}>
+                Activos
+              </PanelTableTh>
+              <PanelTableTh>Estado</PanelTableTh>
+              <PanelTableTh align="right">Acciones</PanelTableTh>
             </tr>
           </thead>
           <tbody>
-            {filtrados.map((amb) => {
-              const totalActivos = activosPorAmbiente[amb.id] ?? 0;
-              return (
-                <tr key={amb.id} className={panelTableBodyRowClass}>
-                  <td className={`${panelTableTdClass} font-medium text-foreground`}>{amb.nombre}</td>
-                  <td className={panelTableTdClass}>{amb.responsable ?? "—"}</td>
-                  <td className={`${panelTableTdClass} max-w-[220px] truncate text-muted-foreground`}>
-                    {amb.descripcion ?? "—"}
-                  </td>
-                  <td className={panelTableTdClass}>{amb.sede_nombre}</td>
-                  <td className={panelTableTdClass}>{totalActivos}</td>
-                  <td className={`${panelTableTdClass} text-right`}>
-                    <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => setEditAmbiente(amb)}
-                      >
-                        <EditIcon />
-                        Editar
-                      </Button>
-                      <Link
-                        href={`/admin/ambientes/${amb.id}`}
-                        className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90"
-                      >
-                        Inventario →
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+            {filtrados.map((amb) => (
+              <tr key={amb.id} className={panelTableBodyRowClass}>
+                <PanelTableTd className="font-medium text-primary" title={amb.nombre}>
+                  {amb.nombre}
+                </PanelTableTd>
+                <PanelTableTd title={amb.responsable ?? undefined}>
+                  {amb.responsable ?? "—"}
+                </PanelTableTd>
+                <PanelTableTd className="text-muted-foreground" title={amb.descripcion ?? undefined}>
+                  {amb.descripcion ?? "—"}
+                </PanelTableTd>
+                <PanelTableTd title={amb.sede_nombre}>{amb.sede_nombre}</PanelTableTd>
+                <PanelTableTd align="center" className={panelTableShrinkCellClass}>
+                  {amb.activo_count}
+                </PanelTableTd>
+                <PanelTableTd>
+                  <StatusBadge variant="active">Activo</StatusBadge>
+                </PanelTableTd>
+                <PanelTableTd align="right" className="overflow-visible">
+                  <PanelTableActions
+                    onEdit={() => {
+                      setError(null);
+                      setEditAmbiente(amb);
+                    }}
+                    nav={{
+                      label: "Activos",
+                      kind: "activos",
+                      href: `/admin/ambientes/${amb.id}`,
+                    }}
+                  />
+                </PanelTableTd>
+              </tr>
+            ))}
           </tbody>
         </PanelDataTable>
       ) : (
         <div className="space-y-8">
           {gruposPorSede.map(({ sedeId, sedeNombre, ambientes: lista }) => (
             <section key={sedeId}>
-              <h2 className="mb-4 text-lg font-bold uppercase tracking-wide text-primary">
-                {sedeNombre}
-              </h2>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold uppercase tracking-wide text-primary">
+                  {sedeNombre}
+                </h2>
+                <span className="text-sm text-muted-foreground">
+                  {lista.length} {lista.length === 1 ? "ambiente" : "ambientes"}
+                </span>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {lista.map((amb) => {
-                  const totalActivos = activosPorAmbiente[amb.id] ?? 0;
-                  return (
-                    <article key={amb.id} className={`${panelCardClass} flex flex-col`}>
-                      <div className="border-b border-border/50 px-4 py-3">
-                        <h3 className="font-semibold text-foreground">{amb.nombre}</h3>
-                        {amb.responsable && (
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Responsable: {amb.responsable}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm text-muted-foreground">
-                        {amb.descripcion ? (
-                          <p>{amb.descripcion}</p>
-                        ) : (
-                          <p className="italic">Sin descripción</p>
-                        )}
-                        <p className="mt-auto text-xs font-medium uppercase tracking-wide">
-                          {totalActivos} {totalActivos === 1 ? "activo" : "activos"}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 border-t border-border/50 bg-muted/20 px-4 py-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => setEditAmbiente(amb)}
-                        >
-                          <EditIcon />
-                          Editar
-                        </Button>
-                        <Link
-                          href={`/admin/ambientes/${amb.id}`}
-                          className="ml-auto inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90"
-                        >
-                          Ver inventario →
-                        </Link>
-                      </div>
-                    </article>
-                  );
-                })}
+                {lista.map((amb) => (
+                  <article key={amb.id} className={`${panelCardClass} flex flex-col`}>
+                    <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
+                      <h3 className="font-semibold leading-snug text-primary">{amb.nombre}</h3>
+                      <StatusBadge variant="active">Activo</StatusBadge>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
+                      <p className="font-medium text-foreground">
+                        {amb.responsable ?? "Sin responsable asignado"}
+                      </p>
+                      {amb.descripcion ? (
+                        <p className="text-muted-foreground">{amb.descripcion}</p>
+                      ) : (
+                        <p className="italic text-muted-foreground">Sin descripción</p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        {amb.activo_count} {amb.activo_count === 1 ? "activo" : "activos"}
+                      </p>
+                      <p className="mt-auto pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {amb.sede_nombre}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
+                      <PanelIconAction label="Editar" onClick={() => setEditAmbiente(amb)}>
+                        <EditIcon />
+                      </PanelIconAction>
+                      <PanelNavActionLink
+                        href={`/admin/ambientes/${amb.id}`}
+                        label="Activos"
+                        icon={<ActivosIcon />}
+                        className="ml-auto"
+                      />
+                    </div>
+                  </article>
+                ))}
               </div>
             </section>
           ))}
         </div>
+      )}
+        </>
       )}
 
       <Dialog
@@ -311,7 +393,7 @@ export function AdminAmbientesPanel({
         className="max-w-md"
       >
         <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">
-          <AmbienteFormFields sedes={sedes} showSedeSelect />
+          <AmbienteFormFields sedes={sedes} responsables={responsables} showSedeSelect />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
@@ -335,7 +417,7 @@ export function AdminAmbientesPanel({
       >
         {editAmbiente && (
           <form onSubmit={(e) => void handleEdit(e)} className="space-y-4">
-            <AmbienteFormFields ambiente={editAmbiente} sedes={sedes} />
+            <AmbienteFormFields ambiente={editAmbiente} sedes={sedes} responsables={responsables} />
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setEditAmbiente(null)}>

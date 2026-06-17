@@ -1,5 +1,6 @@
-import type { Entidad } from "@inventario/types";
+import type { Entidad, EntidadConConteo } from "@inventario/types";
 import { getSupabaseClient } from "./supabase";
+import { syncAdminResponsableForEntidad } from "./responsables-admin-sync";
 
 export interface CreateEntidadInput {
   nombre: string;
@@ -32,7 +33,7 @@ async function inviteAdminAfterSave(
   return result.message ?? result.warning ?? null;
 }
 
-export async function listEntidades(): Promise<Entidad[]> {
+export async function listEntidades(): Promise<EntidadConConteo[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("entidades")
@@ -41,7 +42,22 @@ export async function listEntidades(): Promise<Entidad[]> {
     .order("nombre");
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as Entidad[];
+
+  const { data: ambientesRows } = await supabase
+    .from("ambientes")
+    .select("id, sedes!inner(entidad_id)")
+    .eq("activo", true);
+
+  const ambienteCountByEntidad = new Map<string, number>();
+  for (const row of ambientesRows ?? []) {
+    const entidadId = (row.sedes as { entidad_id: string }).entidad_id;
+    ambienteCountByEntidad.set(entidadId, (ambienteCountByEntidad.get(entidadId) ?? 0) + 1);
+  }
+
+  return ((data ?? []) as Entidad[]).map((entidad) => ({
+    ...entidad,
+    ambiente_count: ambienteCountByEntidad.get(entidad.id) ?? 0,
+  }));
 }
 
 export async function createEntidad(
@@ -71,6 +87,14 @@ export async function createEntidad(
     .single();
 
   if (error) return { error: error.message };
+
+  await syncAdminResponsableForEntidad(
+    supabase,
+    (data as Entidad).id,
+    adminNombre,
+    adminEmail,
+    input.admin_telefono,
+  );
 
   const inviteMessage = await inviteAdminAfterSave(
     (data as Entidad).id,
@@ -112,6 +136,14 @@ export async function updateEntidad(
     .single();
 
   if (error) return { error: error.message };
+
+  await syncAdminResponsableForEntidad(
+    supabase,
+    entidadId,
+    adminNombre,
+    adminEmail,
+    input.admin_telefono,
+  );
 
   const inviteMessage = await inviteAdminAfterSave(
     entidadId,

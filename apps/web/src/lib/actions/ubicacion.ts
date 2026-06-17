@@ -8,7 +8,9 @@ import { getProfile, requireProfile } from "@/lib/auth/profile";
 function revalidateEntidad(entidadId: string) {
   revalidatePath("/contador/entidades");
   revalidatePath(`/contador/entidades/${entidadId}`);
+  revalidatePath(`/contador/entidades/${entidadId}/responsables`);
   revalidatePath("/admin/activos");
+  revalidatePath("/admin/responsables");
   revalidatePath("/admin");
 }
 
@@ -74,7 +76,28 @@ export async function listSedes(entidadId: string): Promise<Sede[]> {
 export type AmbienteConSede = Ambiente & {
   sede_nombre: string;
   sede_es_principal: boolean;
+  activo_count: number;
 };
+
+async function activoCountByAmbienteIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ambienteIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (ambienteIds.length === 0) return counts;
+
+  const { data } = await supabase
+    .from("activos")
+    .select("ambiente_id")
+    .in("ambiente_id", ambienteIds);
+
+  for (const row of data ?? []) {
+    const ambienteId = row.ambiente_id as string | null;
+    if (!ambienteId) continue;
+    counts.set(ambienteId, (counts.get(ambienteId) ?? 0) + 1);
+  }
+  return counts;
+}
 
 export async function listAmbientesPorEntidad(
   entidadId: string,
@@ -106,10 +129,21 @@ export async function listAmbientesPorEntidad(
       ...(ambiente as Ambiente),
       sede_nombre: sede?.nombre ?? "",
       sede_es_principal: sede?.es_principal ?? false,
+      activo_count: 0,
     };
   });
 
-  return mapped.sort((a, b) => {
+  const activoCounts = await activoCountByAmbienteIds(
+    supabase,
+    mapped.map((ambiente) => ambiente.id),
+  );
+
+  const withCounts = mapped.map((ambiente) => ({
+    ...ambiente,
+    activo_count: activoCounts.get(ambiente.id) ?? 0,
+  }));
+
+  return withCounts.sort((a, b) => {
     if (a.sede_es_principal !== b.sede_es_principal) {
       return a.sede_es_principal ? -1 : 1;
     }
@@ -220,7 +254,7 @@ export interface CreateAmbienteInput {
   sedeId: string;
   nombre: string;
   descripcion?: string;
-  responsable?: string;
+  responsableId?: string | null;
 }
 
 export async function createAmbiente(input: CreateAmbienteInput) {
@@ -243,7 +277,7 @@ export async function createAmbiente(input: CreateAmbienteInput) {
       sede_id: input.sedeId,
       nombre: trimmed,
       descripcion: input.descripcion?.trim() || null,
-      responsable: input.responsable?.trim() || null,
+      responsable_id: input.responsableId || null,
     })
     .select()
     .single();
@@ -304,7 +338,7 @@ export async function updateAmbiente(
     .update({
       nombre: trimmed,
       descripcion: input.descripcion?.trim() || null,
-      responsable: input.responsable?.trim() || null,
+      responsable_id: input.responsableId ?? null,
     })
     .eq("id", ambienteId);
 

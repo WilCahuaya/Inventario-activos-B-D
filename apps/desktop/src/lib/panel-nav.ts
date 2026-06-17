@@ -1,0 +1,39 @@
+import type { PanelNavSection } from "@inventario/ui/panel";
+
+export type DesktopMainNav = "entidades" | "inventario" | "catalogo" | "usuarios" | "reportes";
+
+export function desktopNavSections(preregistrados = 0): PanelNavSection[] {
+  return [
+    {
+      label: "Operación",
+      items: [
+        {
+          href: "inventario",
+          label: "Inventario",
+          icon: "inventory",
+          badge: preregistrados > 0 ? preregistrados : undefined,
+          badgeTitle: "Preregistrados pendientes",
+        },
+        { href: "entidades", label: "Entidades", icon: "entities" },
+        { href: "reportes", label: "Reportes", icon: "reports" },
+      ],
+    },
+    {
+      label: "Configuración",
+      items: [
+        { href: "catalogo", label: "Catálogo de bienes", icon: "assets" },
+        { href: "usuarios", label: "Usuarios", icon: "users" },
+      ],
+    },
+  ];
+}
+
+export function isDesktopMainNav(value: string): value is DesktopMainNav {
+  return (
+    value === "entidades" ||
+    value === "inventario" ||
+    value === "catalogo" ||
+    value === "usuarios" ||
+    value === "reportes"
+  );
+}

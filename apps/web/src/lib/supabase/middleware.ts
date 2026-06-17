@@ -76,7 +76,7 @@ export async function updateSession(request: NextRequest) {
     const allowedPanel = panelForRole(profile.rol);
     if (pathname.startsWith("/contador") && allowedPanel !== "/contador") {
       const url = request.nextUrl.clone();
-      url.pathname = "/admin";
+      url.pathname = homePathForRole(profile.rol);
       return NextResponse.redirect(url);
     }
     if (pathname.startsWith("/admin") && allowedPanel !== "/admin") {

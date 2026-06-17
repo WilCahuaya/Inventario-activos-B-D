@@ -34,6 +34,7 @@ export function upsertLocalAtributosFromActivo(values: {
   modelo?: string | null;
   serie?: string | null;
   color?: string | null;
+  medidas?: string | null;
 }): void {
   const upsert = window.electronAPI?.upsertAtributoVocabLocal;
   if (!upsert) return;
@@ -42,4 +43,5 @@ export function upsertLocalAtributosFromActivo(values: {
   if (values.modelo?.trim()) upsert("modelo", values.modelo);
   if (values.serie?.trim()) upsert("serie", values.serie);
   if (values.color?.trim()) upsert("color", values.color);
+  if (values.medidas?.trim()) upsert("medidas", values.medidas);
 }

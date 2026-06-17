@@ -14,12 +14,14 @@ interface InventarioExportButtonsProps {
   meta: InventarioExportMeta;
   /** Administradores exportan sin columnas monetarias */
   sinValores?: boolean;
+  size?: "sm" | "default";
 }
 
 export function InventarioExportButtons({
   activos,
   meta,
   sinValores = false,
+  size = "sm",
 }: InventarioExportButtonsProps) {
   const [pending, setPending] = useState<"excel" | "pdf" | null>(null);
 
@@ -44,12 +46,15 @@ export function InventarioExportButtons({
     }
   }
 
+  const compact = size === "sm";
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-nowrap gap-2">
       <Button
         type="button"
         variant="outline"
-        size="sm"
+        size={size}
+        className={compact ? "h-8 shrink-0 px-2 text-xs" : undefined}
         disabled={pending !== null || activos.length === 0}
         onClick={() => void handleExport("excel")}
       >
@@ -58,7 +63,8 @@ export function InventarioExportButtons({
       <Button
         type="button"
         variant="outline"
-        size="sm"
+        size={size}
+        className={compact ? "h-8 shrink-0 px-2 text-xs" : undefined}
         disabled={pending !== null || activos.length === 0}
         onClick={() => void handleExport("pdf")}
       >

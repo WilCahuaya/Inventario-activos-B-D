@@ -9,15 +9,20 @@ export function RegistrarActivoButton({
   nombre,
   codigoCatalogo,
   compact = false,
+  label,
+  className,
   onValidated,
 }: {
   activoId: string;
   nombre: string;
   codigoCatalogo?: string;
   compact?: boolean;
+  label?: string;
+  className?: string;
   onValidated?: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const buttonLabel = label ?? (compact ? "Validar" : "Validar → REGISTRADO");
 
   return (
     <>
@@ -25,10 +30,10 @@ export function RegistrarActivoButton({
         type="button"
         size="sm"
         variant="outline"
-        className={compact ? "h-7 px-2 text-[10px]" : undefined}
+        className={className ?? (compact ? "h-7 px-2 text-[10px]" : undefined)}
         onClick={() => setDialogOpen(true)}
       >
-        {compact ? "Validar" : "Validar → REGISTRADO"}
+        {buttonLabel}
       </Button>
 
       <ValidarPreregistroDialog

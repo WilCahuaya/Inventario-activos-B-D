@@ -20,8 +20,12 @@
     "@supabase/supabase-js": "^2.47.10",
     "better-sqlite3": "^11.7.0",
     "jsbarcode": "^3.11.6",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
@@ -32,10 +36,10 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "wait-on": "^8.0.1"
@@ -47,7 +51,9 @@
       "output": "release"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "signAndEditExecutable": false
     },
     "nsis": {
@@ -57,7 +63,9 @@
     "protocols": [
       {
         "name": "Inventario B&D Auth",
-        "schemes": ["pe.bdconsultores.inventario"]
+        "schemes": [
+          "pe.bdconsultores.inventario"
+        ]
       }
     ]
   }

@@ -1,8 +1,10 @@
 import type { Entidad } from "@inventario/types";
-import { Button } from "@inventario/ui";
+import { useState, type ReactNode } from "react";
 import type { ActivoConUbicacion } from "../lib/activos";
 import type { CatalogSyncState } from "../hooks/useCatalogSync";
+import { Button } from "@inventario/ui";
 import { ActivosCampoList } from "./ActivosCampoList";
+import { InventarioImportDialog } from "./InventarioImportDialog";
 
 interface InventarioGlobalViewProps {
   entidades: Entidad[];
@@ -15,48 +17,45 @@ interface InventarioGlobalViewProps {
   syncMessage: string | null;
   onSyncNow: () => void;
   syncing: boolean;
+  usuarioNombre: string;
+  usuarioEmail: string;
   onOpenFicha: (activo: ActivoConUbicacion) => void;
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
+  onActivosImported?: () => void;
 }
 
-function StatPill({
-  label,
-  value,
-  title,
-  onClick,
-  disabled,
+function CatalogSyncButton({
+  catalog,
+  catalogSyncing,
+  online,
+  onSyncCatalog,
 }: {
-  label: string;
-  value: string;
-  title?: string;
-  onClick?: () => void;
-  disabled?: boolean;
+  catalog: CatalogSyncState;
+  catalogSyncing: boolean;
+  online: boolean;
+  onSyncCatalog: () => void;
 }) {
-  const className =
-    "inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 py-1 text-xs whitespace-nowrap";
-
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        title={title}
-        disabled={disabled}
-        onClick={onClick}
-        className={`${className} transition-colors hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60`}
-      >
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-semibold text-primary">{value}</span>
-      </button>
-    );
-  }
+  const title = catalog.error
+    ? catalog.error
+    : catalog.syncedAt
+      ? `Última sync: ${new Date(catalog.syncedAt).toLocaleString("es-PE")}`
+      : "Sincronizar catálogo nacional";
 
   return (
-    <span className={className} title={title}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold text-primary">{value}</span>
-    </span>
+    <button
+      type="button"
+      title={title}
+      disabled={!online || catalogSyncing}
+      onClick={onSyncCatalog}
+      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 text-xs transition-colors hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <span className="text-muted-foreground">Catálogo</span>
+      <span className="font-semibold text-primary">
+        {catalogSyncing ? "…" : catalog.count.toLocaleString("es-PE")}
+      </span>
+    </button>
   );
 }
 
@@ -71,77 +70,93 @@ export function InventarioGlobalView({
   syncMessage,
   onSyncNow,
   syncing,
+  usuarioNombre,
+  usuarioEmail,
   onOpenFicha,
   onPrintLabel,
   onPrintBatch,
   onActivoUpdated,
+  onActivosImported,
 }: InventarioGlobalViewProps) {
-  const registradosCount = activos.filter((a) => a.estado_registro === "REGISTRADO").length;
-  const preregistradosCount = activos.filter((a) => a.estado_registro === "PREREGISTRADO").length;
-  const bajaCount = activos.filter((a) => a.estado_registro === "DADO_DE_BAJA").length;
+  const [importOpen, setImportOpen] = useState(false);
 
-  return (
-    <div className="space-y-2">
-      <div className="shrink-0 space-y-2 rounded-lg border border-border/60 bg-card px-3 py-2 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium text-foreground">Inventario global</p>
-            <p className="text-xs text-muted-foreground">
-              Todos los activos de todas las entidades. Valide preregistros desde aquí.
-            </p>
-          </div>
-          {online && (
-            <Button type="button" size="sm" variant="outline" disabled={syncing} onClick={onSyncNow}>
-              {syncing ? "Sync…" : "Sincronizar"}
-            </Button>
-          )}
-        </div>
+  const toolbarExtra: ReactNode = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 shrink-0 px-2 text-xs"
+        onClick={() => setImportOpen(true)}
+      >
+        Importar activos
+      </Button>
+      <CatalogSyncButton
+        catalog={catalog}
+        catalogSyncing={catalogSyncing}
+        online={online}
+        onSyncCatalog={onSyncCatalog}
+      />
+      {online && (
+        <button
+          type="button"
+          disabled={syncing}
+          onClick={onSyncNow}
+          className="inline-flex h-8 items-center rounded-md border border-border/60 bg-card px-2.5 text-xs font-medium transition-colors hover:border-primary/40 disabled:opacity-60"
+        >
+          {syncing ? "Sync…" : "Sincronizar"}
+        </button>
+      )}
+    </>
+  );
 
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 pt-2">
-          <StatPill label="Registrados" value={registradosCount.toLocaleString("es-PE")} />
-          <StatPill label="Preregistrados" value={preregistradosCount.toLocaleString("es-PE")} />
-          <StatPill label="Dados de baja" value={bajaCount.toLocaleString("es-PE")} />
-          <StatPill
-            label="Catálogo"
-            value={catalogSyncing ? "…" : catalog.count.toLocaleString("es-PE")}
-            title={
-              catalog.error
-                ? catalog.error
-                : catalog.syncedAt
-                  ? `Última sync: ${new Date(catalog.syncedAt).toLocaleString("es-PE")}`
-                  : "Sincronizar catálogo nacional"
-            }
-            onClick={onSyncCatalog}
-            disabled={!online || catalogSyncing}
-          />
-          {activosLoading && (
-            <span className="text-xs text-muted-foreground">Actualizando lista…</span>
-          )}
-        </div>
-
+  const statusBanner =
+    !online || syncMessage ? (
+      <div className="shrink-0 space-y-1">
         {!online && (
-          <p className="border-t border-amber-500/20 pt-2 text-xs text-amber-800 dark:text-amber-200">
+          <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-xs text-amber-800 dark:text-amber-200">
             Sin conexión: se muestra la caché local agregada de todas las entidades.
           </p>
         )}
-
         {syncMessage && (
-          <p className="border-t border-border/40 pt-2 text-xs text-primary">{syncMessage}</p>
+          <p className="rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs text-primary">
+            {syncMessage}
+          </p>
         )}
       </div>
+    ) : null;
 
+  return (
+    <>
       <ActivosCampoList
         variant="global"
+        compactLayout
         entidades={entidades}
         entidadId=""
         activos={activos}
         loading={activosLoading}
         online={online}
+        toolbarExtra={toolbarExtra}
+        statusBanner={statusBanner}
+        exportMeta={{
+          ambienteNombre: "Inventario global",
+          entidadNombre: "Todas las entidades",
+          usuarioNombre,
+          usuarioEmail,
+        }}
         onOpenFicha={onOpenFicha}
         onPrintLabel={onPrintLabel}
         onPrintBatch={onPrintBatch}
         onActivoUpdated={onActivoUpdated}
       />
-    </div>
+
+      <InventarioImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        entidades={entidades}
+        online={online}
+        onImported={onActivosImported}
+      />
+    </>
   );
 }

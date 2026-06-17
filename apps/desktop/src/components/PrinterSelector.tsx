@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Label } from "@inventario/ui";
+import { Button, Label, Select } from "@inventario/ui";
 
 export interface PrinterOption {
   name: string;
@@ -53,27 +53,23 @@ export function PrinterSelector({
         </Button>
       </div>
 
-      <select
+      <Select
         id={id}
-        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
         value={selectedName}
-        onChange={(e) => onPrinterNameChange(e.target.value)}
+        onChange={onPrinterNameChange}
         disabled={printersLoading || sinImpresora}
-      >
-        {sinImpresora ? (
-          <option value="">No hay impresoras detectadas</option>
-        ) : (
-          <option value="" disabled>
-            Seleccione una impresora…
-          </option>
-        )}
-        {printers.map((printer) => (
-          <option key={printer.name} value={printer.name}>
-            {printer.name}
-            {printer.isDefault ? " (predeterminada)" : ""} — {printer.status}
-          </option>
-        ))}
-      </select>
+        options={
+          sinImpresora
+            ? [{ value: "", label: "No hay impresoras detectadas" }]
+            : [
+                { value: "", label: "Seleccione una impresora…", disabled: true },
+                ...printers.map((printer) => ({
+                  value: printer.name,
+                  label: `${printer.name}${printer.isDefault ? " (predeterminada)" : ""} — ${printer.status}`,
+                })),
+              ]
+        }
+      />
 
       {printersLoading && (
         <p className="text-sm text-muted-foreground">Detectando impresoras del equipo…</p>
@@ -85,11 +81,6 @@ export function PrinterSelector({
           {printers.length === 1 ? "" : "s"} en este equipo.
         </p>
       )}
-
-      <p className="text-xs text-muted-foreground">
-        Elija la Honeywell del listado; el ZPL se envía en <strong>modo RAW</strong> (como
-        BarTender). No use <strong>Ctrl+P</strong>.
-      </p>
     </div>
   );
 }

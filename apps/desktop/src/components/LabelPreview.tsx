@@ -133,7 +133,7 @@ export function LabelPreview({
         fechaAdquisicion={fechaAdquisicion}
       />
       <p className="text-center text-xs text-muted-foreground">
-        Sin conexión o vista previa ZPL no disponible. Use «Ver código ZPL» o imprima una prueba.
+        Sin conexión o vista previa no disponible. Puede imprimir una prueba.
       </p>
     </div>
   );

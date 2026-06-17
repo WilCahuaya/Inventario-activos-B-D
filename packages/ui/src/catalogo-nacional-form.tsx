@@ -1,150 +1,182 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CATALOGO_ORIGEN_LABELS,
-  CATALOGO_PLANTILLAS,
-  type CatalogoEstadoSbn,
+  CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+  CATALOGO_CUENTA_ORDEN_ESTADO,
+  type CatalogoCampoOpciones,
+  type CatalogoOpcionTipo,
   type CreateCatalogoNacionalInput,
 } from "@inventario/types";
 import { Button, Input, Label } from "./components";
-
-const selectClass =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
+import { ClaseCatalogoCombobox } from "./clase-catalogo-combobox";
+import { GrupoCatalogoCombobox } from "./grupo-catalogo-combobox";
 
 export interface CatalogoNacionalFormProps {
   initialDenominacion?: string;
-  initialCodigo?: string;
+  codigo: string;
+  codigoLoading?: boolean;
+  grupos?: CatalogoCampoOpciones;
+  clases?: CatalogoCampoOpciones;
+  gruposLoading?: boolean;
+  clasesLoading?: boolean;
   pending?: boolean;
+  onSuggestGrupo?: (denominacion: string) => Promise<string | null>;
+  onRegisterOpcionPersonalizada?: (
+    tipo: CatalogoOpcionTipo,
+    valor: string,
+  ) => void | Promise<void | { error?: string }>;
+  onDeleteOpcionPersonalizada?: (
+    tipo: CatalogoOpcionTipo,
+    valor: string,
+  ) => void | Promise<{ error?: string } | void>;
+  onOpcionesChanged?: () => void | Promise<void>;
   onSubmit: (input: CreateCatalogoNacionalInput) => void | Promise<void>;
 }
 
-const emptyForm = (denominacion = "", codigo = ""): CreateCatalogoNacionalInput => ({
-  codigo,
-  denominacion,
-  grupo: "",
-  clase: "",
-  cuenta_codigo: "",
-  contabilidad: "",
-  depreciacion: "",
-  resolucion: "",
-  estado: "EXCLUIDO",
-});
-
 export function CatalogoNacionalForm({
   initialDenominacion = "",
-  initialCodigo = "",
+  codigo,
+  codigoLoading = false,
+  grupos = { opciones: [], personalizadas: [] },
+  clases = { opciones: [], personalizadas: [] },
+  gruposLoading = false,
+  clasesLoading = false,
   pending = false,
+  onSuggestGrupo,
+  onRegisterOpcionPersonalizada,
+  onDeleteOpcionPersonalizada,
+  onOpcionesChanged,
   onSubmit,
 }: CatalogoNacionalFormProps) {
-  const [plantillaId, setPlantillaId] = useState(CATALOGO_PLANTILLAS[0]?.id ?? "");
-  const [form, setForm] = useState(() => ({
-    ...emptyForm(initialDenominacion, initialCodigo),
-    ...CATALOGO_PLANTILLAS[0]?.values,
-  }));
+  const [denominacion, setDenominacion] = useState(initialDenominacion);
+  const [grupo, setGrupo] = useState("");
+  const [clase, setClase] = useState("");
+  const [grupoSugerido, setGrupoSugerido] = useState<string | null>(null);
+  const [grupoManual, setGrupoManual] = useState(false);
+  const [sugiriendoGrupo, setSugiriendoGrupo] = useState(false);
+  const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const grupoManualRef = useRef(false);
+  const onSuggestGrupoRef = useRef(onSuggestGrupo);
+  onSuggestGrupoRef.current = onSuggestGrupo;
+
+  const gruposDisponibles = useMemo(() => {
+    const merged = new Set(grupos.opciones);
+    if (grupo) merged.add(grupo);
+    return [...merged].sort((a, b) => a.localeCompare(b, "es"));
+  }, [grupos.opciones, grupo]);
+
+  const clasesDisponibles = useMemo(() => {
+    const merged = new Set(clases.opciones);
+    if (clase) merged.add(clase);
+    return [...merged].sort((a, b) => a.localeCompare(b, "es"));
+  }, [clases.opciones, clase]);
+
+  function setGrupoManualState(manual: boolean) {
+    grupoManualRef.current = manual;
+    setGrupoManual(manual);
+  }
 
   useEffect(() => {
-    setForm((prev) => ({
-      ...prev,
-      denominacion: initialDenominacion || prev.denominacion,
-      codigo: initialCodigo || prev.codigo,
-    }));
-  }, [initialDenominacion, initialCodigo]);
+    setDenominacion(initialDenominacion);
+    setGrupo("");
+    setClase("");
+    setGrupoSugerido(null);
+    setGrupoManualState(false);
+  }, [initialDenominacion, codigo]);
 
-  function applyPlantilla(id: string) {
-    setPlantillaId(id);
-    const plantilla = CATALOGO_PLANTILLAS.find((p) => p.id === id);
-    if (!plantilla) return;
-    setForm((prev) => ({
-      ...prev,
-      ...plantilla.values,
-      depreciacion: plantilla.values.depreciacion ?? "",
-      grupo: plantilla.values.grupo ?? "",
-      clase: plantilla.values.clase ?? "",
-      cuenta_codigo: plantilla.values.cuenta_codigo ?? "",
-      contabilidad: plantilla.values.contabilidad ?? "",
-      resolucion: plantilla.values.resolucion ?? "",
-    }));
+  useEffect(() => {
+    const texto = denominacion.trim();
+    if (texto.length < 2 || grupoManual) {
+      setSugiriendoGrupo(false);
+      return;
+    }
+
+    if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+    setSugiriendoGrupo(true);
+
+    suggestTimerRef.current = setTimeout(() => {
+      void (async () => {
+        const sugeridoRemoto = onSuggestGrupoRef.current
+          ? await onSuggestGrupoRef.current(texto)
+          : null;
+        const sugerido = sugeridoRemoto;
+
+        setSugiriendoGrupo(false);
+        if (grupoManualRef.current) return;
+
+        setGrupoSugerido(sugerido);
+        if (sugerido) setGrupo(sugerido);
+      })();
+    }, 350);
+
+    return () => {
+      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+    };
+  }, [denominacion, grupoManual]);
+
+  function handleDenominacionChange(value: string) {
+    setDenominacion(value);
+    setGrupoManualState(false);
+    setGrupoSugerido(null);
   }
 
-  function updateField<K extends keyof CreateCatalogoNacionalInput>(
-    key: K,
-    value: CreateCatalogoNacionalInput[K],
-  ) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  function handleGrupoChange(value: string) {
+    setGrupo(value);
+    setGrupoManualState(Boolean(value));
+    if (value && value !== grupoSugerido) setGrupoSugerido(null);
   }
+
+  async function handleRegister(tipo: CatalogoOpcionTipo, valor: string) {
+    await onRegisterOpcionPersonalizada?.(tipo, valor);
+    await onOpcionesChanged?.();
+  }
+
+  async function handleDelete(tipo: CatalogoOpcionTipo, valor: string) {
+    const result = await onDeleteOpcionPersonalizada?.(tipo, valor);
+    await onOpcionesChanged?.();
+    return result;
+  }
+
+  const camposDeshabilitados = pending || codigoLoading;
 
   return (
     <form
       className="grid gap-4 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit(form);
+        void onSubmit({
+          codigo,
+          denominacion,
+          grupo,
+          clase,
+          estado: CATALOGO_CUENTA_ORDEN_ESTADO,
+        });
       }}
     >
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="catalogo_plantilla">Plantilla (rellena campos contables)</Label>
-        <select
-          id="catalogo_plantilla"
-          className={selectClass}
-          value={plantillaId}
-          onChange={(e) => applyPlantilla(e.target.value)}
-          disabled={pending}
-        >
-          {CATALOGO_PLANTILLAS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">
-          Elija la plantilla más parecida (cocina, aseo, etc.) y ajuste solo código y nombre.
-        </p>
-      </div>
-
       <div className="space-y-2">
-        <Label htmlFor="catalogo_codigo">Código (8 dígitos)</Label>
+        <Label htmlFor="catalogo_codigo">Código</Label>
         <Input
           id="catalogo_codigo"
-          inputMode="numeric"
-          pattern="\d{8}"
-          maxLength={8}
-          required
-          value={form.codigo}
-          disabled={pending}
-          placeholder="32649910"
-          className="font-mono"
-          onChange={(e) => updateField("codigo", e.target.value.replace(/\D/g, "").slice(0, 8))}
-        />
-      </div>
-
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="catalogo_origen">Origen en catálogo</Label>
-        <Input
-          id="catalogo_origen"
           readOnly
           disabled
-          value={CATALOGO_ORIGEN_LABELS.PROPIO}
-          className="bg-muted"
+          value={codigoLoading ? "Generando…" : codigo}
+          className="bg-muted font-mono"
         />
         <p className="text-xs text-muted-foreground">
-          Se asigna automáticamente al guardar. Los ítems del catálogo oficial SBN tienen origen
-          nacional.
+          Secuencia automática para bienes de cuenta de orden (BD000001, BD000002…).
         </p>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="catalogo_estado">Estado en catálogo</Label>
-        <select
-          id="catalogo_estado"
-          className={selectClass}
-          value={form.estado}
-          disabled={pending}
-          onChange={(e) => updateField("estado", e.target.value as CatalogoEstadoSbn)}
-        >
-          <option value="EXCLUIDO">EXCLUIDO — bienes menores / cuenta de orden</option>
-          <option value="ACTIVO">ACTIVO — depreciable en catálogo</option>
-        </select>
+        <Label htmlFor="catalogo_contabilidad">Contabilidad</Label>
+        <Input
+          id="catalogo_contabilidad"
+          readOnly
+          disabled
+          value={CATALOGO_CUENTA_ORDEN_CONTABILIDAD}
+          className="bg-muted font-mono"
+        />
       </div>
 
       <div className="space-y-2 sm:col-span-2">
@@ -152,82 +184,53 @@ export function CatalogoNacionalForm({
         <Input
           id="catalogo_denominacion"
           required
-          value={form.denominacion}
-          disabled={pending}
+          value={denominacion}
+          disabled={camposDeshabilitados}
           placeholder="CUCHARA DE COCINA"
-          onChange={(e) => updateField("denominacion", e.target.value)}
-        />
-      </div>
-
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="catalogo_grupo">Grupo</Label>
-        <Input
-          id="catalogo_grupo"
-          value={form.grupo ?? ""}
-          disabled={pending}
-          placeholder="32 COCINA Y COMEDOR"
-          onChange={(e) => updateField("grupo", e.target.value)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="catalogo_clase">Clase</Label>
-        <Input
-          id="catalogo_clase"
-          value={form.clase ?? ""}
-          disabled={pending}
-          placeholder="64 MOBILIARIO"
-          onChange={(e) => updateField("clase", e.target.value)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="catalogo_cuenta">Cuenta contable (código)</Label>
-        <Input
-          id="catalogo_cuenta"
-          value={form.cuenta_codigo ?? ""}
-          disabled={pending}
-          placeholder="33522"
-          onChange={(e) => updateField("cuenta_codigo", e.target.value)}
-        />
-      </div>
-
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="catalogo_contabilidad">Contabilidad (texto)</Label>
-        <Input
-          id="catalogo_contabilidad"
-          value={form.contabilidad ?? ""}
-          disabled={pending}
-          placeholder="33522 Enseres de cocina"
-          onChange={(e) => updateField("contabilidad", e.target.value)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="catalogo_depreciacion">Depreciación</Label>
-        <Input
-          id="catalogo_depreciacion"
-          value={form.depreciacion ?? ""}
-          disabled={pending}
-          placeholder="10 %"
-          onChange={(e) => updateField("depreciacion", e.target.value)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="catalogo_resolucion">Resolución</Label>
-        <Input
-          id="catalogo_resolucion"
-          value={form.resolucion ?? ""}
-          disabled={pending}
-          placeholder="0158-97/SBN"
-          onChange={(e) => updateField("resolucion", e.target.value)}
+          onChange={(e) => handleDenominacionChange(e.target.value)}
         />
       </div>
 
       <div className="sm:col-span-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Guardando…" : "Agregar al catálogo nacional"}
+        <ClaseCatalogoCombobox
+          id="catalogo_clase"
+          value={clase}
+          opciones={clasesDisponibles}
+          personalizadas={clases.personalizadas}
+          disabled={camposDeshabilitados || clasesLoading}
+          loading={clasesLoading}
+          onChange={setClase}
+          onRegisterPersonalizada={(valor) => handleRegister("clase", valor)}
+          onDeletePersonalizada={(valor) => handleDelete("clase", valor)}
+        />
+      </div>
+
+      <div className="sm:col-span-2">
+        <GrupoCatalogoCombobox
+          id="catalogo_grupo"
+          value={grupo}
+          grupos={gruposDisponibles}
+          personalizadas={grupos.personalizadas}
+          disabled={camposDeshabilitados}
+          loading={gruposLoading}
+          suggestedGrupo={grupoSugerido}
+          onChange={handleGrupoChange}
+          onRegisterPersonalizada={(valor) => handleRegister("grupo", valor)}
+          onDeletePersonalizada={(valor) => handleDelete("grupo", valor)}
+          helperText={
+            sugiriendoGrupo
+              ? "Buscando grupo recomendado según la denominación…"
+              : undefined
+          }
+        />
+      </div>
+
+      <div className="sm:col-span-2">
+        <Button
+          type="submit"
+          disabled={camposDeshabilitados || !codigo || !grupo || !clase}
+        >
+          {pending ? "Guardando…" : "Agregar al catálogo"}
         </Button>
       </div>
     </form>

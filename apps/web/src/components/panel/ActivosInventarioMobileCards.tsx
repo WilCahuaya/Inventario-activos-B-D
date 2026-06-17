@@ -19,6 +19,7 @@ import { panelCardClass } from "./panel-ui";
 interface ActivosInventarioMobileCardsProps {
   activos: Activo[];
   onEditActivo: (activo: Activo) => void;
+  onOpenFicha: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
   editarLabel?: string;
@@ -39,6 +40,7 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
 export function ActivosInventarioMobileCards({
   activos,
   onEditActivo,
+  onOpenFicha,
   puedeDarDeBaja = true,
   puedeValidarPreregistro = false,
   editarLabel,
@@ -152,6 +154,7 @@ export function ActivosInventarioMobileCards({
               <ActivoAccionesBar
                 activo={activo}
                 onEdit={onEditActivo}
+                onOpenFicha={onOpenFicha}
                 puedeDarDeBaja={puedeDarDeBaja}
                 puedeValidarPreregistro={puedeValidarPreregistro}
                 editarLabel={editarLabel}

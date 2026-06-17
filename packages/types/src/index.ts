@@ -11,7 +11,7 @@ export type EstadoBien = "BUENO" | "REGULAR" | "MALO";
 export type CategoriaBien = "ACTIVO" | "CUENTA_ORDEN";
 
 /** Campos con vocabulario global para autocompletado */
-export type ActivoAtributoCampo = "marca" | "modelo" | "serie" | "color";
+export type ActivoAtributoCampo = "marca" | "modelo" | "serie" | "color" | "medidas";
 
 export const ACTIVO_ATRIBUTO_CAMPOS = ["marca", "modelo", "serie", "color"] as const;
 
@@ -41,6 +41,10 @@ export interface Entidad {
   updated_at: string;
 }
 
+export interface EntidadConConteo extends Entidad {
+  ambiente_count: number;
+}
+
 export interface Sede {
   id: string;
   entidad_id: string;
@@ -56,10 +60,61 @@ export interface Ambiente {
   sede_id: string;
   nombre: string;
   descripcion: string | null;
+  responsable_id: string | null;
   responsable: string | null;
   activo: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/** Persona responsable de ámbitos/ambientes (sin cuenta de usuario) */
+export interface Responsable {
+  id: string;
+  entidad_id: string;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  cargo: string | null;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResponsableConConteo extends Responsable {
+  ambiente_count: number;
+  /** Nombres de ambientes activos asignados (sede entre paréntesis si aplica). */
+  ambiente_nombres?: string[];
+  /** Coincide con el administrador de la entidad (correo en entidades.admin_email). */
+  es_administrador?: boolean;
+}
+
+export interface CreateResponsableInput {
+  nombre: string;
+  email?: string;
+  telefono?: string;
+  /** @deprecated El cargo se asigna automáticamente al crear. */
+  cargo?: string;
+}
+
+/** Cargo por defecto al registrar un responsable (no editable en el formulario). */
+export const RESPONSABLE_CARGO_DEFAULT = "Responsable";
+
+/** Cargo del administrador de entidad sincronizado en responsables. */
+export const RESPONSABLE_CARGO_ADMIN = "Administrador";
+
+export interface UpdateResponsableInput extends CreateResponsableInput {
+  activo?: boolean;
+}
+
+export function normalizeResponsableNombre(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+export function validarCreateResponsableInput(input: CreateResponsableInput): string | null {
+  if (!normalizeResponsableNombre(input.nombre)) {
+    return "El nombre del responsable es obligatorio.";
+  }
+  return null;
 }
 
 export interface SedeConConteo extends Sede {
@@ -106,6 +161,45 @@ export interface Activo {
   updated_at: string;
 }
 
+/** Máximo de unidades por operación «agregar bienes similares». */
+export const MAX_ACTIVOS_SIMILARES_CANTIDAD = 500;
+
+export interface ActivosSimilaresPreview {
+  es_registrado: boolean;
+  primer_codigo?: string | null;
+  ultimo_codigo?: string | null;
+}
+
+export interface CreateActivosSimilaresResult {
+  creados: number;
+  estado_registro: string;
+  primer_codigo_barras?: string | null;
+  ultimo_codigo_barras?: string | null;
+}
+
+export interface EjemplaresSimilaresResumen {
+  total: number;
+  registrados: number;
+  preregistrados: number;
+}
+
+export function formatEjemplaresEnAmbienteTexto(resumen: EjemplaresSimilaresResumen): string {
+  const { total } = resumen;
+  if (total <= 0) return "";
+  return total === 1 ? "1 ejemplar en este ambiente" : `${total} ejemplares en este ambiente`;
+}
+
+/** @deprecated Usar formatEjemplaresEnAmbienteTexto en la ficha. */
+export function formatEjemplaresSimilaresTexto(resumen: EjemplaresSimilaresResumen): string {
+  const { total, registrados, preregistrados } = resumen;
+  if (total <= 0) return "Sin ejemplares";
+  if (total === 1) return "1 ejemplar en este ambiente";
+  const partes = [`${total} ejemplares en este ambiente`];
+  if (registrados > 0) partes.push(`${registrados} registrados`);
+  if (preregistrados > 0) partes.push(`${preregistrados} preregistrados`);
+  return partes.join(" · ");
+}
+
 export const CATEGORIA_BIEN_AYUDA =
   "Ambos duran más de un año. La diferencia es el valor: si es importante para el patrimonio contable, elija Activo; si es bajo pero igual conviene controlarlo, elija Cuenta de orden.";
 
@@ -124,7 +218,7 @@ export const CATEGORIA_BIEN_LABELS: Record<
     titulo: "Cuenta de orden",
     descripcion:
       "Bien que también dura más de un año y debe controlarse, pero por su bajo valor no se considera patrimonio contable importante.",
-    ejemplos: "Sillas plásticas, escobas, tachos, baldes, sartenes, herramientas pequeñas.",
+    ejemplos: "Sillas plásticas, tachos, sartenes, herramientas pequeñas.",
   },
 };
 
@@ -314,10 +408,10 @@ function caracteristicasPartes(
 ): string[] {
   const partes: string[] = [];
   if (marca?.trim()) partes.push(`marca: ${marca.trim()}`);
-  if (modelo?.trim()) partes.push(`modelo: ${modelo.trim()}`);
-  if (serie?.trim()) partes.push(`serie: ${serie.trim()}`);
-  if (color?.trim()) partes.push(`color: ${color.trim()}`);
-  if (medidas?.trim()) partes.push(medidas.trim());
+  if (modelo?.trim()) partes.push(`modelo: ${modelo.trim().toLowerCase()}`);
+  if (serie?.trim()) partes.push(`serie: ${serie.trim().toLowerCase()}`);
+  if (color?.trim()) partes.push(`color: ${color.trim().toLowerCase()}`);
+  if (medidas?.trim()) partes.push(medidas.trim().toLowerCase());
   return partes;
 }
 
@@ -347,12 +441,19 @@ export function buildNombreConsolidado(
   color?: string | null,
   medidas?: string | null,
 ): string {
-  const base = nombre.trim();
+  const base = nombre.trim().toUpperCase();
   if (!base) return "";
 
   const partes = caracteristicasPartes(marca, modelo, serie, color, medidas);
   if (partes.length === 0) return base;
   return `${base} ${partes.join(", ")}`;
+}
+
+/** Serie de comprobante: mayúsculas; primeros 4 caracteres + « - » + resto. */
+export function formatComprobanteSerieInput(value: string): string {
+  const upper = value.replace(/\s*-\s*/g, "").toUpperCase();
+  if (upper.length <= 4) return upper;
+  return `${upper.slice(0, 4)} - ${upper.slice(4)}`;
 }
 
 export function formatMedidas(
@@ -394,6 +495,117 @@ export interface CatalogoNacional {
 
 export type CatalogoEstadoSbn = "ACTIVO" | "EXCLUIDO";
 
+/** Prefijo de códigos propios (cuenta de orden) agregados por la entidad. */
+export const CATALOGO_PROPIO_PREFIX = "BD";
+
+export const CATALOGO_CUENTA_ORDEN_CONTABILIDAD = "2524";
+export const CATALOGO_CUENTA_ORDEN_ESTADO: CatalogoEstadoSbn = "EXCLUIDO";
+
+/** @deprecated Usar selección de clase en formulario; valor histórico por defecto. */
+export const CATALOGO_CUENTA_ORDEN_CLASE = "25 OTROS SUMINISTROS";
+
+export const CATALOGO_PROPIO_CODIGO_RE = /^BD\d{6}$/;
+
+/** Grupos disponibles al dar de alta ítems propios (cuenta de orden). */
+export const CATALOGO_GRUPOS_OPCIONES = [
+  "04 AGRICOLA Y PESQUERO",
+  "11 AIRE ACONDICIONADO Y REFRIGERACION",
+  "18 ANIMALES",
+  "25 ASEO Y LIMPIEZA",
+  "32 COCINA Y COMEDOR",
+  "39 CULTURA Y ARTE",
+  "46 ELECTRICIDAD Y ELECTRONICA",
+  "53 HOSPITALIZACION",
+  "60 INSTRUMENTO DE MEDICION",
+  "67 MAQUINARIA, VEHICULOS Y OTROS",
+  "74 OFICINA",
+  "81 RECREACION Y DEPORTE",
+  "88 SEGURIDAD INDUSTRIAL",
+  "95 TELECOMUNICACIONES",
+] as const;
+
+export function resolveCatalogoGrupos(extra?: string[]): string[] {
+  const merged = new Set<string>(CATALOGO_GRUPOS_OPCIONES);
+  for (const grupo of extra ?? []) {
+    const t = grupo.trim();
+    if (t) merged.add(t);
+  }
+  return [...merged].sort((a, b) => a.localeCompare(b, "es"));
+}
+
+/** Clases SBN disponibles al dar de alta ítems propios (cuenta de orden). */
+export const CATALOGO_CLASES_OPCIONES = [
+  "04 AERONAVE",
+  "08 COMPUTO",
+  "22 EQUIPO",
+  "29 FERROCARRIL",
+  "36 MAQUINARIA PESADA",
+  "50 MAQUINA",
+  "64 MOBILIARIO",
+  "71 NAVE O ARTEFACTO NAVAL",
+  "78 PRODUCCION Y SEGURIDAD",
+  "82 VEHICULO",
+] as const;
+
+export function resolveCatalogoClases(extra?: string[]): string[] {
+  const merged = new Set<string>(CATALOGO_CLASES_OPCIONES);
+  for (const clase of extra ?? []) {
+    const t = clase.trim();
+    if (t) merged.add(t);
+  }
+  return [...merged].sort((a, b) => a.localeCompare(b, "es"));
+}
+
+export type CatalogoOpcionTipo = "grupo" | "clase";
+
+export interface CatalogoCampoOpciones {
+  opciones: string[];
+  personalizadas: string[];
+}
+
+const CATALOGO_GRUPOS_PREDETERMINADOS = new Set<string>(CATALOGO_GRUPOS_OPCIONES);
+const CATALOGO_CLASES_PREDETERMINADAS = new Set<string>(CATALOGO_CLASES_OPCIONES);
+
+export function isCatalogoGrupoPredeterminado(grupo: string): boolean {
+  return CATALOGO_GRUPOS_PREDETERMINADOS.has(grupo.trim());
+}
+
+export function isCatalogoClasePredeterminada(clase: string): boolean {
+  return CATALOGO_CLASES_PREDETERMINADAS.has(clase.trim());
+}
+
+export function shouldRegistrarCatalogoOpcionPersonalizada(
+  tipo: CatalogoOpcionTipo,
+  valor: string,
+): boolean {
+  const texto = valor.trim();
+  if (!texto) return false;
+  return tipo === "grupo"
+    ? !isCatalogoGrupoPredeterminado(texto)
+    : !isCatalogoClasePredeterminada(texto);
+}
+
+export function buildCatalogoCampoOpciones(
+  tipo: CatalogoOpcionTipo,
+  personalizadas: string[],
+  extras: string[] = [],
+): CatalogoCampoOpciones {
+  const mergedExtras = [...personalizadas, ...extras];
+  const opciones =
+    tipo === "grupo"
+      ? resolveCatalogoGrupos(mergedExtras)
+      : resolveCatalogoClases(mergedExtras);
+  const personalizadasVisibles = personalizadas
+    .map((v) => v.trim())
+    .filter((v) => v && opciones.includes(v));
+  return {
+    opciones,
+    personalizadas: [...new Set(personalizadasVisibles)].sort((a, b) =>
+      a.localeCompare(b, "es"),
+    ),
+  };
+}
+
 export interface CreateCatalogoNacionalInput {
   codigo: string;
   denominacion: string;
@@ -406,101 +618,176 @@ export interface CreateCatalogoNacionalInput {
   estado: CatalogoEstadoSbn;
 }
 
-export interface CatalogoPlantilla {
-  id: string;
-  label: string;
-  values: Omit<CreateCatalogoNacionalInput, "codigo" | "denominacion">;
+export function formatCodigoCatalogoPropio(secuencia: number): string {
+  if (!Number.isInteger(secuencia) || secuencia < 1 || secuencia > 999_999) {
+    throw new Error("Secuencia de catálogo propio fuera de rango.");
+  }
+  return `${CATALOGO_PROPIO_PREFIX}${String(secuencia).padStart(6, "0")}`;
 }
 
-export const CATALOGO_PLANTILLAS: CatalogoPlantilla[] = [
-  {
-    id: "cocina_enseres_excluido",
-    label: "Cocina — enseres menores (cuenta de orden)",
-    values: {
-      grupo: "32 COCINA Y COMEDOR",
-      clase: "64 MOBILIARIO",
-      cuenta_codigo: "33522",
-      contabilidad: "33522 Enseres de cocina",
-      resolucion: "0158-97/SBN",
-      estado: "EXCLUIDO",
-    },
-  },
-  {
-    id: "cocina_enseres_activo",
-    label: "Cocina — enseres (activo fijo, 10%)",
-    values: {
-      grupo: "32 COCINA Y COMEDOR",
-      clase: "64 MOBILIARIO",
-      cuenta_codigo: "33522",
-      contabilidad: "33522 Enseres de cocina",
-      depreciacion: "10 %",
-      resolucion: "0158-97/SBN",
-      estado: "ACTIVO",
-    },
-  },
-  {
-    id: "cocina_equipo",
-    label: "Cocina — equipo (10%)",
-    values: {
-      grupo: "32 COCINA Y COMEDOR",
-      clase: "22 EQUIPO",
-      cuenta_codigo: "33690",
-      contabilidad: "336901 Otros equipos - de cocina",
-      depreciacion: "10 %",
-      resolucion: "0158-97/SBN",
-      estado: "ACTIVO",
-    },
-  },
-  {
-    id: "aseo_excluido",
-    label: "Aseo — artículo menor (cuenta de orden)",
-    values: {
-      grupo: "25 ASEO Y LIMPIEZA",
-      clase: "64 MOBILIARIO",
-      resolucion: "0158-97/SBN",
-      estado: "EXCLUIDO",
-    },
-  },
-];
+export function parseCodigoCatalogoPropioSecuencia(codigo: string): number | null {
+  const match = codigo.trim().match(/^BD(\d{6})$/);
+  if (!match) return null;
+  const secuencia = Number.parseInt(match[1], 10);
+  return secuencia >= 1 ? secuencia : null;
+}
+
+export function nextCodigoCatalogoPropioFromMax(maxCodigo: string | null | undefined): string {
+  if (!maxCodigo) return formatCodigoCatalogoPropio(1);
+  const secuencia = parseCodigoCatalogoPropioSecuencia(maxCodigo);
+  if (secuencia === null) return formatCodigoCatalogoPropio(1);
+  return formatCodigoCatalogoPropio(secuencia + 1);
+}
 
 export function normalizeCatalogoDenominacion(value: string): string {
   return value.trim().replace(/\s+/g, " ").toUpperCase();
 }
 
-export function validarCreateCatalogoInput(input: CreateCatalogoNacionalInput): string | null {
+export function validarCreateCatalogoCuentaOrdenInput(
+  input: CreateCatalogoNacionalInput,
+): string | null {
   const codigo = input.codigo.trim();
-  if (!/^\d{8}$/.test(codigo)) {
-    return "El código debe tener exactamente 8 dígitos numéricos.";
+  if (!CATALOGO_PROPIO_CODIGO_RE.test(codigo)) {
+    return "El código debe tener el formato BD000001.";
   }
   if (!normalizeCatalogoDenominacion(input.denominacion)) {
     return "La denominación es obligatoria.";
   }
-  if (input.estado !== "ACTIVO" && input.estado !== "EXCLUIDO") {
-    return "Seleccione un estado válido (ACTIVO o EXCLUIDO).";
+  if (!input.grupo?.trim()) {
+    return "Seleccione un grupo del catálogo.";
+  }
+  if (!input.clase?.trim()) {
+    return "Seleccione una clase del catálogo.";
   }
   return null;
+}
+
+export function buildCreateCatalogoCuentaOrdenPayload(
+  input: CreateCatalogoNacionalInput,
+): Omit<CatalogoNacional, "created_at"> {
+  return {
+    codigo: input.codigo.trim(),
+    denominacion: normalizeCatalogoDenominacion(input.denominacion),
+    grupo: input.grupo!.trim(),
+    clase: input.clase!.trim(),
+    cuenta_codigo: null,
+    contabilidad: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+    depreciacion: null,
+    resolucion: null,
+    estado: CATALOGO_CUENTA_ORDEN_ESTADO,
+    origen: "PROPIO",
+  };
+}
+
+export interface UpdateCatalogoPropioInput {
+  denominacion: string;
+  grupo: string;
+  clase: string;
+}
+
+export function validarUpdateCatalogoPropioInput(input: UpdateCatalogoPropioInput): string | null {
+  if (!normalizeCatalogoDenominacion(input.denominacion)) {
+    return "La denominación es obligatoria.";
+  }
+  if (!input.grupo?.trim()) {
+    return "Seleccione un grupo del catálogo.";
+  }
+  if (!input.clase?.trim()) {
+    return "Seleccione una clase del catálogo.";
+  }
+  return null;
+}
+
+export function buildUpdateCatalogoPropioPayload(input: UpdateCatalogoPropioInput) {
+  return {
+    denominacion: normalizeCatalogoDenominacion(input.denominacion),
+    grupo: input.grupo.trim(),
+    clase: input.clase.trim(),
+    contabilidad: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+    estado: CATALOGO_CUENTA_ORDEN_ESTADO,
+  };
+}
+
+export function isCatalogoPropio(item: Pick<CatalogoNacional, "codigo" | "origen">): boolean {
+  return item.origen === "PROPIO" || CATALOGO_PROPIO_CODIGO_RE.test(item.codigo.trim());
+}
+
+export function isCatalogoNacionalOficial(
+  item: Pick<CatalogoNacional, "codigo" | "origen">,
+): boolean {
+  return !isCatalogoPropio(item);
+}
+
+export function suggestGrupoFromCatalogoItems(items: CatalogoNacional[]): string | null {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const grupo = item.grupo?.trim();
+    if (!grupo) continue;
+    counts.set(grupo, (counts.get(grupo) ?? 0) + 1);
+  }
+
+  let mejor: string | null = null;
+  let mejorConteo = 0;
+  for (const [grupo, conteo] of counts) {
+    if (conteo > mejorConteo) {
+      mejor = grupo;
+      mejorConteo = conteo;
+    }
+  }
+  return mejor;
+}
+
+/** Coincide palabras de la denominación con nombres de grupo del catálogo. */
+export function suggestGrupoByDenominacionKeywords(
+  denominacion: string,
+  grupos: string[],
+): string | null {
+  const tokens = normalizeCatalogoDenominacion(denominacion)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length >= 3);
+
+  if (tokens.length === 0) return null;
+
+  let mejor: string | null = null;
+  let mejorPuntaje = 0;
+
+  for (const grupo of grupos) {
+    const grupoLower = grupo.toLowerCase();
+    let puntaje = 0;
+    for (const token of tokens) {
+      if (grupoLower.includes(token)) puntaje += token.length;
+    }
+    if (puntaje > mejorPuntaje) {
+      mejor = grupo;
+      mejorPuntaje = puntaje;
+    }
+  }
+
+  return mejor;
+}
+
+export function suggestGrupoForDenominacion(
+  denominacion: string,
+  catalogItems: CatalogoNacional[],
+  grupos?: string[],
+): string | null {
+  const lista = resolveCatalogoGrupos(grupos);
+  return (
+    suggestGrupoFromCatalogoItems(catalogItems) ??
+    suggestGrupoByDenominacionKeywords(denominacion, lista)
+  );
+}
+
+/** @deprecated Usar validarCreateCatalogoCuentaOrdenInput para ítems propios. */
+export function validarCreateCatalogoInput(input: CreateCatalogoNacionalInput): string | null {
+  return validarCreateCatalogoCuentaOrdenInput(input);
 }
 
 export function buildCreateCatalogoPayload(
   input: CreateCatalogoNacionalInput,
 ): Omit<CatalogoNacional, "created_at"> {
-  const trimOrNull = (v?: string) => {
-    const t = v?.trim();
-    return t ? t : null;
-  };
-
-  return {
-    codigo: input.codigo.trim(),
-    denominacion: normalizeCatalogoDenominacion(input.denominacion),
-    grupo: trimOrNull(input.grupo),
-    clase: trimOrNull(input.clase),
-    cuenta_codigo: trimOrNull(input.cuenta_codigo),
-    contabilidad: trimOrNull(input.contabilidad),
-    depreciacion: trimOrNull(input.depreciacion),
-    resolucion: trimOrNull(input.resolucion),
-    estado: input.estado,
-    origen: "PROPIO",
-  };
+  return buildCreateCatalogoCuentaOrdenPayload(input);
 }
 
 export interface HistorialCambio {
@@ -516,11 +803,73 @@ export interface HistorialCambio {
 }
 
 export function homePathForRole(rol: RolUsuario): string {
-  return rol === "ADMIN_ENTIDAD" ? "/admin" : "/contador";
+  return rol === "ADMIN_ENTIDAD" ? "/admin/inventario" : "/contador";
+}
+
+export type UsuarioGestionResumen = Pick<Profile, "id" | "rol" | "activo" | "nombre" | "email">;
+
+export function countContadoresActivos(usuarios: UsuarioGestionResumen[]): number {
+  return usuarios.filter((u) => u.rol === "CONTADOR" && u.activo).length;
+}
+
+export function validarDesactivarUsuario(input: {
+  target: UsuarioGestionResumen;
+  actorId: string;
+  usuarios: UsuarioGestionResumen[];
+}): string | null {
+  const { target, actorId, usuarios } = input;
+  if (!target.activo) return "El usuario ya está inactivo.";
+  if (target.id === actorId) return "No puede desactivar su propio usuario.";
+  if (target.rol === "CONTADOR" && countContadoresActivos(usuarios) <= 1) {
+    return "Debe quedar al menos un contador activo en el sistema.";
+  }
+  return null;
+}
+
+export function validarReactivarUsuario(target: UsuarioGestionResumen): string | null {
+  if (target.activo) return "El usuario ya está activo.";
+  return null;
+}
+
+export function validarEliminarUsuario(input: {
+  target: UsuarioGestionResumen;
+  actorId: string;
+  activosVinculados: number;
+  historialVinculado: number;
+}): string | null {
+  const { target, actorId, activosVinculados, historialVinculado } = input;
+  if (target.id === actorId) return "No puede eliminar su propio usuario.";
+  if (target.activo) return "Desactive el usuario antes de eliminarlo.";
+  if (activosVinculados > 0) {
+    return `No se puede eliminar: ${activosVinculados} activo(s) registrados por este usuario.`;
+  }
+  if (historialVinculado > 0) {
+    return `No se puede eliminar: ${historialVinculado} registro(s) en el historial asociados a este usuario.`;
+  }
+  return null;
 }
 
 export const APP_NAME = "Inventario de Activos Fijos";
 export const APP_CLIENT = "B&D Consultores Global EIRL";
+
+export {
+  MAX_IMPORT_ACTIVOS_FILAS,
+  IMPORT_ACTIVOS_COLUMN_ERROR,
+  IMPORT_ACTIVOS_HEADERS,
+  buildUbicacionLookup,
+  emptyImportActivoFila,
+  importErrorFilaFromItem,
+  mapImportHeaders,
+  normalizeImportKey,
+  validateImportActivoFila,
+  type ImportActivoErrorFila,
+  type ImportActivoErrorItem,
+  type ImportActivoFila,
+  type ImportActivoHeader,
+  type ImportActivoInsertPayload,
+  type ImportActivosResult,
+  type ImportUbicacionRef,
+} from "./import-activos";
 
 export {
   assessLabelPrintWarnings,
@@ -532,6 +881,7 @@ export {
   LABEL_FIT_FONT_STEPS,
   LABEL_PRINT_LAYOUT_FONTS,
   LABEL_PRINT_WIDTH_DOTS,
+  nombreRequiereEtiquetaOverride,
   resolveNombreEtiqueta,
   sanitizeLabelPrintText,
   suggestNombreEtiqueta,

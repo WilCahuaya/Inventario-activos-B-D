@@ -27,7 +27,6 @@ export function PrintLabelDialog({ open, onClose, label }: PrintLabelDialogProps
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
   const [printersLoading, setPrintersLoading] = useState(false);
   const [printerName, setPrinterName] = useState("");
-  const [showZpl, setShowZpl] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -37,7 +36,7 @@ export function PrintLabelDialog({ open, onClose, label }: PrintLabelDialogProps
     if (!window.electronAPI?.printListPrinters) {
       setPrinters([]);
       setPrinterName("");
-      setMessage("La detección de impresoras solo funciona en la app de escritorio (Electron).");
+      setMessage("La detección de impresoras solo funciona en la app de escritorio.");
       return;
     }
 
@@ -66,7 +65,6 @@ export function PrintLabelDialog({ open, onClose, label }: PrintLabelDialogProps
   useEffect(() => {
     if (!open) return;
     setMessage(null);
-    setShowZpl(false);
     setZpl(buildLabelZpl(label));
     setPreviewZpl(buildLabelPreviewZpl(label));
     void loadPrinters();
@@ -116,49 +114,41 @@ export function PrintLabelDialog({ open, onClose, label }: PrintLabelDialogProps
       onClose={onClose}
       title="Imprimir etiqueta"
       description={`${codigoBarras} · 50×25 mm · cinta 110 mm (2 columnas)`}
-      className="max-w-2xl"
+      className="max-w-md sm:max-w-xl"
     >
-      <div className="space-y-5">
-        <LabelPreview
-          previewZpl={previewZpl}
-          entidadNombre={entidadNombre}
-          codigoBarras={codigoBarras}
-          nombreBien={nombreBien}
-          fechaAdquisicion={fechaAdquisicion}
-        />
+      <div className="space-y-3">
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+          <div className="shrink-0 origin-top scale-[0.88] sm:scale-90">
+            <LabelPreview
+              previewZpl={previewZpl}
+              entidadNombre={entidadNombre}
+              codigoBarras={codigoBarras}
+              nombreBien={nombreBien}
+              fechaAdquisicion={fechaAdquisicion}
+            />
+          </div>
 
-        <PrinterSelector
-          id="printer_name"
-          printers={printers}
-          printersLoading={printersLoading}
-          printerName={printerName}
-          onPrinterNameChange={setPrinterName}
-          onRefresh={() => void loadPrinters()}
-        />
-        <div className="space-y-2">
-          <button
-            type="button"
-            className="text-xs font-medium text-primary hover:underline"
-            onClick={() => setShowZpl((v) => !v)}
-          >
-            {showZpl ? "Ocultar código ZPL" : "Ver código ZPL"}
-          </button>
-          {showZpl && (
-            <pre className="max-h-32 overflow-auto rounded-md border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
-              {zpl}
-            </pre>
-          )}
+          <div className="min-w-0 w-full flex-1 space-y-3">
+            <PrinterSelector
+              id="printer_name"
+              printers={printers}
+              printersLoading={printersLoading}
+              printerName={printerName}
+              onPrinterNameChange={setPrinterName}
+              onRefresh={() => void loadPrinters()}
+            />
+
+            {message && (
+              <p
+                className={`text-sm ${message.includes("Error") || message.toLowerCase().includes("fall") ? "text-destructive" : "text-primary"}`}
+              >
+                {message}
+              </p>
+            )}
+          </div>
         </div>
 
-        {message && (
-          <p
-            className={`text-sm ${message.includes("Error") || message.toLowerCase().includes("fall") ? "text-destructive" : "text-primary"}`}
-          >
-            {message}
-          </p>
-        )}
-
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border/40 pt-3">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>

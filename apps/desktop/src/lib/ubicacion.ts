@@ -6,13 +6,34 @@ export { listEntidades } from "./entidades";
 export type AmbienteConSede = Ambiente & {
   sede_nombre: string;
   sede_es_principal: boolean;
+  activo_count: number;
 };
+
+async function activoCountByAmbienteIds(
+  ambienteIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (ambienteIds.length === 0) return counts;
+
+  const supabase = getSupabaseClient();
+  const { data } = await supabase
+    .from("activos")
+    .select("ambiente_id")
+    .in("ambiente_id", ambienteIds);
+
+  for (const row of data ?? []) {
+    const ambienteId = row.ambiente_id as string | null;
+    if (!ambienteId) continue;
+    counts.set(ambienteId, (counts.get(ambienteId) ?? 0) + 1);
+  }
+  return counts;
+}
 
 export interface CreateAmbienteInput {
   sedeId: string;
   nombre: string;
   descripcion?: string;
-  responsable?: string;
+  responsableId?: string | null;
 }
 
 export async function listSedes(entidadId: string): Promise<Sede[]> {
@@ -59,10 +80,18 @@ export async function listAmbientesPorEntidad(entidadId: string): Promise<Ambien
       ...(ambiente as Ambiente),
       sede_nombre: sede?.nombre ?? "",
       sede_es_principal: sede?.es_principal ?? false,
+      activo_count: 0,
     };
   });
 
-  return mapped.sort((a, b) => {
+  const activoCounts = await activoCountByAmbienteIds(mapped.map((ambiente) => ambiente.id));
+
+  const withCounts = mapped.map((ambiente) => ({
+    ...ambiente,
+    activo_count: activoCounts.get(ambiente.id) ?? 0,
+  }));
+
+  return withCounts.sort((a, b) => {
     if (a.sede_es_principal !== b.sede_es_principal) return a.sede_es_principal ? -1 : 1;
     if (a.sede_nombre !== b.sede_nombre) return a.sede_nombre.localeCompare(b.sede_nombre);
     return a.nombre.localeCompare(b.nombre);
@@ -82,7 +111,7 @@ export async function createAmbiente(
       sede_id: input.sedeId,
       nombre: trimmed,
       descripcion: input.descripcion?.trim() || null,
-      responsable: input.responsable?.trim() || null,
+      responsable_id: input.responsableId || null,
     })
     .select()
     .single();
@@ -104,7 +133,7 @@ export async function updateAmbiente(
     .update({
       nombre: trimmed,
       descripcion: input.descripcion?.trim() || null,
-      responsable: input.responsable?.trim() || null,
+      responsable_id: input.responsableId ?? null,
     })
     .eq("id", ambienteId);
 

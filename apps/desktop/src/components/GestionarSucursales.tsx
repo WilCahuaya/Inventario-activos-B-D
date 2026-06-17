@@ -1,7 +1,25 @@
 import { useEffect, useState } from "react";
 import type { SedeConConteo } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
-import { EditIcon, panelCardClass } from "@inventario/ui/panel";
+import {
+  DeleteIcon,
+  EditIcon,
+  PanelCountLabel,
+  PanelDataTable,
+  PanelEmptyState,
+  PanelFlashMessage,
+  PanelIconAction,
+  PanelTableColgroup,
+  PanelTableTd,
+  PanelTableTh,
+  PanelToolbar,
+  StatusBadge,
+  SUCURSALES_TABLE_COL_WIDTHS_PCT,
+  panelTableBodyRowClass,
+  panelTableHeadRowClass,
+  panelTableMutedClass,
+  panelTableStickyHeadClass,
+} from "@inventario/ui/panel";
 import { createSede, deleteSede, updateSede } from "../lib/ubicacion";
 
 interface GestionarSucursalesProps {
@@ -75,67 +93,80 @@ export function GestionarSucursales({
   }
 
   return (
-    <div className={`space-y-4 p-5 ${panelCardClass}`}>
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-foreground">Gestionar sucursales</h2>
-        <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-          + Nueva sucursal
-        </Button>
-      </div>
-
-      <ul className="divide-y overflow-hidden rounded-lg border">
-        {sedes.map((sede) => (
-          <li
-            key={sede.id}
-            className="flex items-center justify-between gap-3 bg-background px-4 py-3.5 text-sm"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-base"
-                aria-hidden
-              >
-                🏢
-              </span>
-              <div>
-                <span className="font-semibold text-foreground">{sede.nombre}</span>
-                <span className="ml-2 text-muted-foreground">
-                  {sede.ambiente_count} {sede.ambiente_count === 1 ? "ambiente" : "ambientes"}
-                </span>
-              </div>
-            </div>
-            {!sede.es_principal && (
-              <div className="flex shrink-0 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setEditSede(sede)}
-                >
-                  <EditIcon />
-                  Editar
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => void handleDelete(sede)}
-                >
-                  Eliminar
-                </Button>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+    <div className="space-y-4">
+      <PanelToolbar
+        left={<PanelCountLabel count={sedes.length} singular="sucursal" plural="sucursales" />}
+        right={
+          <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
+            + Nueva sucursal
+          </Button>
+        }
+      />
 
       <p className="text-xs text-muted-foreground">
         Puede renombrar cualquier sucursal. Solo puede eliminar las que no tengan ambientes
         asociados. La sucursal Principal no se puede editar ni eliminar.
       </p>
 
-      {message && <p className="text-sm text-destructive">{message}</p>}
+      {message && <PanelFlashMessage variant="error">{message}</PanelFlashMessage>}
+
+      {sedes.length === 0 ? (
+        <PanelEmptyState
+          message="No hay sucursales registradas."
+          action={
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              + Crear primera sucursal
+            </Button>
+          }
+        />
+      ) : (
+        <PanelDataTable>
+          <PanelTableColgroup widths={SUCURSALES_TABLE_COL_WIDTHS_PCT} />
+          <thead className={panelTableStickyHeadClass}>
+            <tr className={panelTableHeadRowClass}>
+              <PanelTableTh>Sucursal</PanelTableTh>
+              <PanelTableTh align="center">Ambientes</PanelTableTh>
+              <PanelTableTh>Tipo</PanelTableTh>
+              <PanelTableTh align="right">Acciones</PanelTableTh>
+            </tr>
+          </thead>
+          <tbody>
+            {sedes.map((sede) => (
+              <tr key={sede.id} className={panelTableBodyRowClass}>
+                <PanelTableTd className="font-medium" title={sede.nombre}>
+                  {sede.nombre}
+                </PanelTableTd>
+                <PanelTableTd align="center">{sede.ambiente_count}</PanelTableTd>
+                <PanelTableTd>
+                  {sede.es_principal ? (
+                    <StatusBadge variant="active">Principal</StatusBadge>
+                  ) : (
+                    <span className={panelTableMutedClass}>Secundaria</span>
+                  )}
+                </PanelTableTd>
+                <PanelTableTd align="right" className="overflow-visible">
+                  {!sede.es_principal ? (
+                    <div className="flex items-center justify-end gap-1">
+                      <PanelIconAction label="Editar" onClick={() => setEditSede(sede)}>
+                        <EditIcon />
+                      </PanelIconAction>
+                      <PanelIconAction
+                        label="Eliminar"
+                        variant="danger"
+                        onClick={() => void handleDelete(sede)}
+                      >
+                        <DeleteIcon />
+                      </PanelIconAction>
+                    </div>
+                  ) : (
+                    <span className={`text-xs ${panelTableMutedClass}`}>—</span>
+                  )}
+                </PanelTableTd>
+              </tr>
+            ))}
+          </tbody>
+        </PanelDataTable>
+      )}
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} title="Nueva sucursal">
         <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">

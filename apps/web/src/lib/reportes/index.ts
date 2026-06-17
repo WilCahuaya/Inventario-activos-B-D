@@ -5,6 +5,12 @@ import type { ActivoReporte, ReporteContexto, ReporteFormato } from "./types";
 export * from "./types";
 export { REPORTES } from "./types";
 export { buildReporteRows, reporteHeaders, reporteTitulo } from "./rows";
+export {
+  REPORTE_PREVIEW_MAX_ROWS,
+  buildReporteResumenPreview,
+  type ReporteResumenGrupo,
+  type ReporteResumenPreview,
+} from "./preview";
 
 export async function exportReporte(
   formato: ReporteFormato,

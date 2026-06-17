@@ -3,7 +3,7 @@ import {
   BRAND_LOGO_PATH,
   BRAND_LOGO_TRANSFORM,
   BRAND_LOGO_VIEWBOX,
-} from "@/components/public/brand-logo-path";
+} from "../../components/public/brand-logo-path";
 
 /** Color marca B&D (hsl 198 51% 47%) */
 const BRAND_FILL = "#3B92A8";

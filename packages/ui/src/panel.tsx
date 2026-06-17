@@ -1,14 +1,18 @@
 import type { ReactNode } from "react";
 import { Input } from "./components";
+import { PanelBreadcrumbs, type PanelBreadcrumbItem } from "./panel-breadcrumbs";
+
+export type { PanelBreadcrumbItem };
+export { PanelBreadcrumbs };
 
 export const panelCardClass =
   "overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm";
 export const panelFieldsetClass =
-  "space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm";
+  "min-w-0 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm";
 export const panelLegendClass = "px-1 text-sm font-semibold text-foreground";
 
 export const panelModalClass =
-  "w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:w-[95vw] sm:max-w-[95vw] md:w-[88vw] md:max-w-[88vw] lg:w-[70vw] lg:max-w-[70vw]";
+  "w-full max-w-[min(70rem,calc(100%-1rem))] sm:max-w-[min(60rem,95%)] md:max-w-[min(56rem,88%)] lg:max-w-[min(48rem,70%)]";
 
 export function EditIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
@@ -53,38 +57,43 @@ export function PanelPageHeader({
   subtitle,
   onBack,
   backLabel,
+  breadcrumbs,
   actions,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   onBack?: () => void;
   backLabel?: string;
+  breadcrumbs?: PanelBreadcrumbItem[];
   actions?: ReactNode;
 }) {
+  const crumbs =
+    breadcrumbs ??
+    (title && onBack && backLabel
+      ? [{ label: backLabel, onClick: onBack }, { label: title }]
+      : title
+        ? [{ label: title }]
+        : undefined);
+
   return (
     <div>
-      {onBack && backLabel && (
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-sm font-medium text-primary hover:underline"
+      {crumbs && crumbs.length > 0 && <PanelBreadcrumbs items={crumbs} />}
+      {(subtitle || actions) && (
+        <div
+          className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 ${crumbs?.length ? "mt-2" : ""}`}
         >
-          ← {backLabel}
-        </button>
-      )}
-      <div
-        className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4 ${onBack ? "mt-3" : ""}`}
-      >
-        <div>
-          <h1 className="text-xl font-bold text-primary sm:text-2xl">{title}</h1>
-          {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+          {subtitle ? (
+            <p className="min-w-0 text-sm text-muted-foreground">{subtitle}</p>
+          ) : (
+            <span className="hidden sm:block sm:flex-1" />
+          )}
+          {actions && (
+            <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
+              {actions}
+            </div>
+          )}
         </div>
-        {actions && (
-          <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
-            {actions}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -101,9 +110,61 @@ export function PanelBanner({
   return (
     <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-primary/80">{label}</p>
-      <p className="font-semibold text-primary">{title}</p>
+      <p className="truncate font-semibold text-primary" title={title}>
+        {title}
+      </p>
       {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
     </div>
+  );
+}
+
+export function PanelTabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { id: T; label: string }[];
+  value: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div className="flex gap-1 border-b border-border/60" role="tablist">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={value === tab.id}
+          className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            value === tab.id
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function PanelFlashMessage({
+  variant,
+  children,
+}: {
+  variant: "success" | "error";
+  children: ReactNode;
+}) {
+  const classes =
+    variant === "success"
+      ? "border-emerald-300/60 bg-emerald-50 text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-100"
+      : "border-destructive/30 bg-destructive/10 text-destructive";
+
+  return (
+    <p className={`rounded-lg border px-3 py-2 text-sm ${classes}`} role="status">
+      {children}
+    </p>
   );
 }
 
@@ -199,5 +260,16 @@ export function PanelToolbar({
 }
 
 export { TABLE_PAGE_SIZE, TablePagination, useTablePagination } from "./table-pagination";
+export {
+  INVENTARIO_TABLE_COL_COUNT,
+  INVENTARIO_TABLE_COL_WIDTHS_PCT,
+  inventarioTableColWidths,
+} from "./inventario-table-cols";
+export { TableActionsOverflow, type TableActionItem } from "./table-actions-overflow";
+export * from "./panel-table-layout";
+export * from "./panel-action-buttons";
 export * from "./panel-view-toggle";
 export * from "./panel-list-table";
+export * from "./panel-nav-icons";
+export * from "./panel-sidebar";
+export * from "./reportes-panel";

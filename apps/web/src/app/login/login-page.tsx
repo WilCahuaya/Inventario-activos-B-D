@@ -53,7 +53,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-muted to-primary/15 p-4">
+    <div className="public-main-scroll relative flex h-dvh min-h-0 items-center justify-center overflow-x-clip bg-gradient-to-br from-background via-muted to-primary/15 p-4">
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>

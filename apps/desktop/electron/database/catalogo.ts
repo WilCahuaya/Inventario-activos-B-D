@@ -179,6 +179,27 @@ export function getCatalogMeta(): CatalogoMeta {
   };
 }
 
+export function deleteCatalogRow(codigo: string): void {
+  if (!db) throw new Error("Base de datos no inicializada");
+  db.prepare("DELETE FROM catalogo_nacional WHERE codigo = @codigo").run({
+    codigo: codigo.trim(),
+  });
+}
+
+export function listCatalogoPropioLocal(): CatalogoRow[] {
+  if (!db) throw new Error("Base de datos no inicializada");
+  return db
+    .prepare(
+      `
+      SELECT *
+      FROM catalogo_nacional
+      WHERE origen = 'PROPIO' OR codigo LIKE 'BD%'
+      ORDER BY codigo
+    `,
+    )
+    .all() as CatalogoRow[];
+}
+
 export function closeCatalogDatabase(): void {
   db?.close();
   db = null;

@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
-import { UsuariosPanel } from "@/components/panel/UsuariosPanel";
 import { PanelPageHeader } from "@/components/panel/panel-ui";
+import { UsuariosPageClient } from "@/components/panel/UsuariosPageClient";
 import { listUsuarios } from "@/lib/actions/usuarios";
 import { requireProfile } from "@/lib/auth/profile";
 
 export default async function ContadorUsuariosPage() {
+  let profile;
   try {
-    await requireProfile("CONTADOR");
+    profile = await requireProfile("CONTADOR");
   } catch {
     redirect("/login");
   }
@@ -19,7 +20,7 @@ export default async function ContadorUsuariosPage() {
         title="Usuarios"
         subtitle="Gestione contadores del estudio e invíte administradores al crear una entidad."
       />
-      <UsuariosPanel usuarios={usuarios} />
+      <UsuariosPageClient usuarios={usuarios} currentUserId={profile.id} />
     </div>
   );
 }

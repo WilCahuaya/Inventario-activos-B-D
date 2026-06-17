@@ -5,7 +5,7 @@ import { PUBLIC_NAV } from "@/lib/routes";
 
 export function Footer() {
   return (
-    <footer className="mt-auto border-t bg-card">
+    <footer className="border-t bg-card">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 md:grid-cols-3">
         <div>
           <p className="font-medium text-foreground">{APP_CLIENT}</p>

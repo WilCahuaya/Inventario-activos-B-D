@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Button } from "@inventario/ui";
+import { Button, FileInput } from "@inventario/ui";
 import { updateActivoPaths } from "@/lib/actions/activos";
 import { createClient } from "@/lib/supabase/client";
 
@@ -107,36 +107,34 @@ export function ActivoUpload({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3 text-sm">
-      <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground">Foto</span>
-        <input
-          type="file"
+    <div className="space-y-3 text-sm">
+      <div className="space-y-1">
+        <span className="text-sm font-medium">Foto</span>
+        <FileInput
           accept="image/jpeg,image/png,image/webp"
           disabled={loading}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
+          buttonLabel="Seleccionar foto"
+          emptyLabel="Sin foto adjunta"
+          hint={fotoPath ? `Actual: ${fotoPath.split("/").pop()}` : undefined}
+          onFileChange={(file) => {
             if (file) void uploadFile(file, "foto");
           }}
         />
-        {fotoPath && <span className="text-xs text-primary">✓ {fotoPath.split("/").pop()}</span>}
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground">Comprobante PDF</span>
-        <input
-          type="file"
+      </div>
+      <div className="space-y-1">
+        <span className="text-sm font-medium">Comprobante PDF</span>
+        <FileInput
           accept="application/pdf,image/jpeg,image/png"
           disabled={loading}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
+          buttonLabel="Seleccionar PDF"
+          emptyLabel="Sin archivo adjunto"
+          hint={comprobantePath ? `Actual: ${comprobantePath.split("/").pop()}` : undefined}
+          onFileChange={(file) => {
             if (file) void uploadFile(file, "comprobante");
           }}
         />
-        {comprobantePath && (
-          <span className="text-xs text-primary">✓ {comprobantePath.split("/").pop()}</span>
-        )}
-      </label>
-      {status && <p className="w-full text-xs text-muted-foreground">{status}</p>}
+      </div>
+      {status && <p className="text-xs text-destructive">{status}</p>}
       {loading && (
         <Button type="button" variant="secondary" size="sm" disabled>
           Subiendo…

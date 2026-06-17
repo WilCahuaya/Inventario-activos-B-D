@@ -19,6 +19,7 @@ import { InventarioGlobalView } from "./components/InventarioGlobalView";
 import { PrintBatchLabelDialog } from "./components/PrintBatchLabelDialog";
 import { PrintLabelDialog } from "./components/PrintLabelDialog";
 import { CatalogoView } from "./components/CatalogoView";
+import { ReportesView } from "./components/ReportesView";
 import { UsuariosView } from "./components/UsuariosView";
 import { LoginDebugPanel } from "./components/LoginDebugPanel";
 import { type AuthLoginDebug, signInWithGoogle, signOut, useAuth } from "./hooks/useAuth";
@@ -33,6 +34,7 @@ import { useSelectedEntidad } from "./hooks/useSelectedEntidad";
 import { useSyncQueue } from "./hooks/useSyncQueue";
 import type { ActivoConUbicacion } from "./lib/activos";
 import { labelZplInputForActivo, labelZplInputsForActivos } from "./lib/label-print";
+import { desktopNavSections } from "./lib/panel-nav";
 
 type AmbienteContext = {
   entidadId: string;
@@ -44,7 +46,11 @@ type AmbienteContext = {
 
 type EntidadesFlow =
   | { type: "list" }
-  | { type: "ambientes"; entidadId: string }
+  | {
+      type: "ambientes";
+      entidadId: string;
+      initialTab?: "ambientes" | "responsables" | "sucursales";
+    }
   | { type: "activos"; context: AmbienteContext }
   | { type: "ficha"; activo: ActivoConUbicacion; context: AmbienteContext }
   | { type: "register"; context: AmbienteContext; initialCodigo?: string }
@@ -160,7 +166,7 @@ function ConfigWarning() {
   );
 }
 
-function MainApp({ userId, email }: { userId: string; email: string }) {
+function MainApp({ userId }: { userId: string; email: string }) {
   const online = useOnline();
   const { profile, loading: profileLoading, error: profileError } = useProfile(userId);
   const catalog = useCatalogSync(Boolean(profile), online);
@@ -179,10 +185,10 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
   const [inventarioFlow, setInventarioFlow] = useState<InventarioFlow>({ type: "list" });
   const [printTarget, setPrintTarget] = useState<ActivoConUbicacion | null>(null);
   const [batchPrintTargets, setBatchPrintTargets] = useState<ActivoConUbicacion[] | null>(null);
-  const [catalogoPrefill, setCatalogoPrefill] = useState({ denominacion: "", codigo: "" });
+  const [catalogoPrefillDenominacion, setCatalogoPrefillDenominacion] = useState("");
 
   function openCatalogoFromSearch(query: string) {
-    setCatalogoPrefill({ denominacion: query, codigo: "" });
+    setCatalogoPrefillDenominacion(query);
     setMainNav("catalogo");
   }
 
@@ -225,7 +231,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
     } else if (nav === "inventario") {
       setInventarioFlow({ type: "list" });
     } else if (nav === "catalogo") {
-      setCatalogoPrefill({ denominacion: "", codigo: "" });
+      setCatalogoPrefillDenominacion("");
     }
   }
 
@@ -236,6 +242,15 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
   function goAmbientes(entidadIdTarget: string) {
     setEntidadId(entidadIdTarget);
     setEntidadesFlow({ type: "ambientes", entidadId: entidadIdTarget });
+  }
+
+  function goResponsables(entidadIdTarget: string) {
+    setEntidadId(entidadIdTarget);
+    setEntidadesFlow({
+      type: "ambientes",
+      entidadId: entidadIdTarget,
+      initialTab: "responsables",
+    });
   }
 
   function goActivosAmbiente(context: AmbienteContext) {
@@ -274,57 +289,97 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
   if (mainNav === "entidades") {
     if (entidadesFlow.type === "ambientes" && drillEntidad) {
       subheader = {
-        title: "Gestión de ambientes",
-        subtitle: drillEntidad.nombre,
-        onBack: goEntidadesList,
-        backLabel: "Entidades",
+        breadcrumbs: [
+          { label: "Entidades", onClick: goEntidadesList },
+          { label: drillEntidad.nombre },
+        ],
+        subtitle: drillEntidad.ruc
+          ? `RUC ${drillEntidad.ruc} · Ambientes, responsables y sucursales`
+          : "Ambientes, responsables y sucursales",
       };
     } else if (entidadesFlow.type === "activos") {
       subheader = {
-        title: "Inventario de activos",
-        subtitle: entidadesFlow.context.ambienteNombre,
-        onBack: () => goAmbientes(entidadesFlow.context.entidadId),
-        backLabel: drillEntidad?.nombre ?? "Ambientes",
+        breadcrumbs: [
+          {
+            label: drillEntidad?.nombre ?? "Entidad",
+            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
+          },
+          { label: entidadesFlow.context.ambienteNombre },
+        ],
+        subtitle: entidadesFlow.context.ambienteResponsable
+          ? `Responsable: ${entidadesFlow.context.ambienteResponsable}`
+          : undefined,
       };
     } else if (entidadesFlow.type === "ficha") {
       subheader = {
-        title: "Ficha del activo",
-        subtitle: entidadesFlow.activo.nombre,
-        onBack: () => goActivosListFromContext(entidadesFlow.context),
+        breadcrumbs: [
+          {
+            label: drillEntidad?.nombre ?? "Entidad",
+            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
+          },
+          {
+            label: entidadesFlow.context.ambienteNombre,
+            onClick: () => goActivosListFromContext(entidadesFlow.context),
+          },
+          { label: entidadesFlow.activo.nombre },
+        ],
       };
     } else if (entidadesFlow.type === "register") {
       subheader = {
-        title: "Registrar activo",
-        subtitle: entidadesFlow.context.ambienteNombre,
-        onBack: () => goActivosListFromContext(entidadesFlow.context),
+        breadcrumbs: [
+          {
+            label: drillEntidad?.nombre ?? "Entidad",
+            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
+          },
+          {
+            label: entidadesFlow.context.ambienteNombre,
+            onClick: () => goActivosListFromContext(entidadesFlow.context),
+          },
+          { label: "Crear activo" },
+        ],
       };
     } else if (entidadesFlow.type === "edit") {
       subheader = {
-        title: "Editar activo",
-        subtitle: entidadesFlow.activo.nombre,
-        onBack: () =>
-          setEntidadesFlow({
-            type: "ficha",
-            activo: entidadesFlow.activo,
-            context: entidadesFlow.context,
-          }),
-        backLabel: "Volver a ficha",
+        breadcrumbs: [
+          {
+            label: drillEntidad?.nombre ?? "Entidad",
+            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
+          },
+          {
+            label: entidadesFlow.context.ambienteNombre,
+            onClick: () => goActivosListFromContext(entidadesFlow.context),
+          },
+          {
+            label: entidadesFlow.activo.nombre,
+            onClick: () =>
+              setEntidadesFlow({
+                type: "ficha",
+                activo: entidadesFlow.activo,
+                context: entidadesFlow.context,
+              }),
+          },
+          { label: "Editar activo" },
+        ],
       };
     }
   } else if (mainNav === "inventario") {
     if (inventarioFlow.type === "ficha") {
       subheader = {
-        title: "Ficha del activo",
-        subtitle: inventarioFlow.activo.nombre,
-        onBack: () => setInventarioFlow({ type: "list" }),
-        backLabel: "Inventario global",
+        breadcrumbs: [
+          { label: "Inventario global", onClick: () => setInventarioFlow({ type: "list" }) },
+          { label: inventarioFlow.activo.nombre },
+        ],
       };
     } else if (inventarioFlow.type === "edit") {
       subheader = {
-        title: "Editar activo",
-        subtitle: inventarioFlow.activo.nombre,
-        onBack: () => setInventarioFlow({ type: "ficha", activo: inventarioFlow.activo }),
-        backLabel: "Volver a ficha",
+        breadcrumbs: [
+          { label: "Inventario global", onClick: () => setInventarioFlow({ type: "list" }) },
+          {
+            label: inventarioFlow.activo.nombre,
+            onClick: () => setInventarioFlow({ type: "ficha", activo: inventarioFlow.activo }),
+          },
+          { label: "Editar activo" },
+        ],
       };
     }
   }
@@ -333,15 +388,20 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
     return entidades.find((e) => e.id === activo.entidad_id);
   }
 
+  const preregistrados = globalActivos.activos.filter(
+    (a) => a.estado_registro === "PREREGISTRADO",
+  ).length;
+
   return (
     <AppShell
       activeNav={mainNav}
       onNavChange={handleNavChange}
+      navSections={desktopNavSections(preregistrados)}
       subheader={subheader}
       online={online}
       pendingSync={pending}
       syncing={syncing}
-      userEmail={email}
+      user={{ nombre: profile.nombre, email: profile.email }}
     >
       {mainNav === "entidades" && entidadesFlow.type === "list" && (
         <EntidadesView
@@ -349,6 +409,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           online={online}
           onEntidadesChange={setEntidadesList}
           onViewAmbientes={goAmbientes}
+          onViewResponsables={goResponsables}
         />
       )}
 
@@ -357,6 +418,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           entidades={entidades}
           entidad={drillEntidad}
           entidadId={entidadesFlow.entidadId}
+          initialTab={entidadesFlow.initialTab}
           drillDown
           online={online}
           onViewActivos={(amb) =>
@@ -384,6 +446,8 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
             activos={activosCache.activos}
             loading={activosCache.loading}
             online={online}
+            usuarioNombre={profile.nombre}
+            usuarioEmail={profile.email}
             onRegister={() =>
               setEntidadesFlow({ type: "register", context: entidadesFlow.context })
             }
@@ -411,6 +475,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
             })
           }
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
+          onPrintBatch={setBatchPrintTargets}
         />
       )}
 
@@ -464,10 +529,13 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           syncMessage={lastResult}
           onSyncNow={() => void handleSyncNow()}
           syncing={syncing}
+          usuarioNombre={profile.nombre}
+          usuarioEmail={profile.email}
           onOpenFicha={(activo) => setInventarioFlow({ type: "ficha", activo })}
           onPrintLabel={setPrintTarget}
           onPrintBatch={setBatchPrintTargets}
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
+          onActivosImported={() => void refreshActivos()}
         />
       )}
 
@@ -484,6 +552,7 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
           online={online}
           onEdit={() => setInventarioFlow({ type: "edit", activo: inventarioFlow.activo })}
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
+          onPrintBatch={setBatchPrintTargets}
         />
       )}
 
@@ -506,13 +575,19 @@ function MainApp({ userId, email }: { userId: string; email: string }) {
       )}
 
       {mainNav === "catalogo" && (
-        <CatalogoView
-          initialDenominacion={catalogoPrefill.denominacion}
-          initialCodigo={catalogoPrefill.codigo}
-        />
+        <CatalogoView initialDenominacion={catalogoPrefillDenominacion} />
       )}
 
       {mainNav === "usuarios" && <UsuariosView />}
+
+      {mainNav === "reportes" && (
+        <ReportesView
+          entidades={entidades}
+          usuarioNombre={profile.nombre}
+          usuarioEmail={profile.email}
+          online={online}
+        />
+      )}
 
       {printTarget?.codigo_barras && (
         <PrintLabelDialog

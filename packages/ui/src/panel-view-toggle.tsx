@@ -7,7 +7,7 @@ export type PanelViewMode = "cards" | "list";
 
 export function useStoredViewMode(
   storageKey: string,
-  defaultMode: PanelViewMode = "cards",
+  defaultMode: PanelViewMode = "list",
 ): [PanelViewMode, (mode: PanelViewMode) => void] {
   const [mode, setMode] = useState<PanelViewMode>(defaultMode);
 

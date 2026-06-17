@@ -1,0 +1,131 @@
+import type { ReactNode } from "react";
+import { cn } from "./components";
+
+/** @deprecated Usar ENTIDADES_TABLE_COLS con layout="auto" en PanelDataTable. */
+export const ENTIDADES_TABLE_COL_WIDTHS_PCT = [24, 9, 15, 24, 8, 20] as const;
+
+/** grow = ocupa el espacio libre; shrink = solo el ancho del contenido */
+export type PanelTableColSpec = { type: "grow" } | { type: "shrink" };
+
+/** Razón social, RUC, administrador, dirección, ambientes, estado, acciones */
+export const ENTIDADES_TABLE_COLS: PanelTableColSpec[] = [
+  { type: "grow" },
+  { type: "shrink" },
+  { type: "grow" },
+  { type: "grow" },
+  { type: "shrink" },
+  { type: "shrink" },
+  { type: "shrink" },
+];
+
+/** nombre, cargo, correo, teléfono, ambientes, estado, acciones */
+export const RESPONSABLES_TABLE_COLS: PanelTableColSpec[] = [
+  { type: "grow" },
+  { type: "shrink" },
+  { type: "grow" },
+  { type: "shrink" },
+  { type: "grow" },
+  { type: "shrink" },
+  { type: "shrink" },
+];
+
+export const panelTableShrinkCellClass = "w-0 whitespace-nowrap";
+
+/** Compacta al contenido sin colapsar la celda (p. ej. estado, acciones). */
+export const panelTableNowrapCellClass = "whitespace-nowrap";
+
+/** Anchos % — ambientes: nombre, responsable, descripción, sucursal, activos, estado, acciones */
+export const AMBIENTES_TABLE_COL_WIDTHS_PCT = [16, 12, 22, 10, 8, 8, 24] as const;
+
+/** Anchos % — sucursales: nombre, # ambientes, tipo, acciones */
+export const SUCURSALES_TABLE_COL_WIDTHS_PCT = [44, 10, 14, 32] as const;
+
+export function panelTableColWidths(widths: readonly number[]): string[] {
+  return widths.map((w) => `${w}%`);
+}
+
+export function PanelTableColgroup({
+  widths,
+  cols,
+}: {
+  widths?: readonly number[];
+  cols?: PanelTableColSpec[];
+}) {
+  if (cols) {
+    return (
+      <colgroup>
+        {cols.map((col, i) => (
+          <col key={i} style={col.type === "shrink" ? { width: "1%" } : undefined} />
+        ))}
+      </colgroup>
+    );
+  }
+
+  const pctCols = panelTableColWidths(widths ?? []);
+  return (
+    <colgroup>
+      {pctCols.map((w, i) => (
+        <col key={i} style={{ width: w }} />
+      ))}
+    </colgroup>
+  );
+}
+
+export function PanelTableTh({
+  children,
+  className,
+  align,
+}: {
+  children: ReactNode;
+  className?: string;
+  align?: "left" | "center" | "right";
+}) {
+  const nowrap = className?.includes("whitespace-nowrap");
+
+  return (
+    <th
+      className={cn(
+        "overflow-hidden px-2 py-2.5 text-xs font-semibold uppercase tracking-wide sm:px-3",
+        nowrap ? "w-0 whitespace-nowrap" : "max-w-0",
+        align === "right" && "text-right",
+        align === "center" && "text-center",
+        className,
+      )}
+    >
+      <span className={cn("block", !nowrap && "truncate")}>{children}</span>
+    </th>
+  );
+}
+
+export function PanelTableTd({
+  children,
+  className,
+  align,
+  title,
+}: {
+  children: ReactNode;
+  className?: string;
+  align?: "left" | "center" | "right";
+  title?: string;
+}) {
+  const nowrap = className?.includes("whitespace-nowrap");
+
+  return (
+    <td
+      className={cn(
+        "overflow-hidden px-2 py-2.5 align-middle text-sm sm:px-3",
+        nowrap ? "w-0 whitespace-nowrap" : "max-w-0",
+        align === "right" && "text-right",
+        align === "center" && "text-center",
+        className,
+      )}
+      title={title}
+    >
+      {typeof children === "string" || typeof children === "number" ? (
+        <span className={cn("block", !nowrap && "truncate")}>{children}</span>
+      ) : (
+        children
+      )}
+    </td>
+  );
+}

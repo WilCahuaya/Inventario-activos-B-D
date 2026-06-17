@@ -3,32 +3,32 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { APP_CLIENT, APP_NAME } from "@inventario/types";
-import { LogoutButton } from "@/components/shared/LogoutButton";
-import type { PanelNavItem } from "./panel-nav-icons";
+import { ThemeToggle } from "@inventario/ui/theme-toggle";
+import type { PanelNavSection } from "./panel-nav-icons";
 import { IconMenu } from "./panel-nav-icons";
 import { PanelSidebar } from "./PanelSidebar";
 
 interface PanelLayoutProps {
   panelLabel: string;
   homeHref: string;
-  sidebarTitle: string;
-  links: PanelNavItem[];
+  sections: PanelNavSection[];
+  user?: { nombre: string; email: string };
   children: ReactNode;
 }
 
 export function PanelLayout({
   panelLabel,
   homeHref,
-  sidebarTitle,
-  links,
+  sections,
+  user,
   children,
 }: PanelLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted/30">
+    <div className="panel-shell flex h-dvh w-full max-w-full flex-col overflow-hidden bg-muted/30">
       <header className="border-b border-border/70 bg-card shadow-sm">
-        <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4">
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-5 sm:py-3">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -48,19 +48,19 @@ export function PanelLayout({
               </p>
             </Link>
           </div>
-          <LogoutButton />
+          <ThemeToggle />
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col md:flex-row">
+      <div className="flex min-h-0 w-full max-w-full flex-1 overflow-hidden md:flex-row">
         <PanelSidebar
-          title={sidebarTitle}
-          links={links}
+          sections={sections}
+          user={user}
           mobileOpen={mobileOpen}
           onMobileClose={() => setMobileOpen(false)}
         />
-        <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6 lg:p-8">
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+        <main className="panel-main-scroll min-w-0 flex-1 px-3 pb-3 pt-1.5 sm:px-4 sm:pb-4 md:px-5 lg:px-6">
+          <div className="mx-auto min-w-0 w-full max-w-[1600px]">{children}</div>
         </main>
       </div>
     </div>
