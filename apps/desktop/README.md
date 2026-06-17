@@ -65,7 +65,7 @@ Cada instalación tiene su propia base SQLite local (caché offline). La sesión
 ### Notas de despliegue
 
 - Windows puede mostrar «aplicación no reconocida» (instalador sin firma digital).
-- Durante el login, la app usa los puertos locales **3000** y **54324**. Si falla con «puerto 3000 en uso», cierre la app web en desarrollo.
+- Durante el login, la app escucha en **54324** (callback OAuth). Opcionalmente intenta capturar el Site URL en **3000**; si ese puerto está ocupado (p. ej. app web en desarrollo), el login continúa igual vía 54324.
 - No incluya `SUPABASE_SERVICE_ROLE_KEY` en builds de producción salvo que necesite invitaciones desde escritorio.
 
 ## Impresión Honeywell (50×25 mm, 2 columnas)

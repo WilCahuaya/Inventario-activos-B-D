@@ -8,7 +8,7 @@ import { ensureDesktopOAuthRedirect, extractOAuthRedirectTo } from "../../shared
 import { ensureOAuthCallbackServer, setOAuthCallbackHandler } from "./callback-server";
 import { openSystemBrowser } from "./open-browser";
 import { setProtocolAuthHandler } from "./protocol";
-import { ensureSiteUrlCatchServer, stopSiteUrlCatchServer } from "./site-url-catch";
+import { stopSiteUrlCatchServer, tryEnsureSiteUrlCatchServer } from "./site-url-catch";
 
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -31,15 +31,7 @@ export async function runGoogleAuthFlow(
   console.info("[auth] redirect_to:", extractOAuthRedirectTo(fixedOAuthUrl));
 
   await ensureOAuthCallbackServer();
-  try {
-    await ensureSiteUrlCatchServer();
-  } catch (error) {
-    const message =
-      error instanceof Error && error.message.includes("EADDRINUSE")
-        ? "El puerto 3000 está en uso (¿app web corriendo?). Ciérrela e intente de nuevo."
-        : "No se pudo iniciar la captura en localhost:3000";
-    throw new Error(message);
-  }
+  await tryEnsureSiteUrlCatchServer();
 
   deps.setOAuthInProgress(true);
 

@@ -54,8 +54,7 @@ export function LoginDebugPanel({ debug, forceVisible = false }: LoginDebugPanel
             <p className="text-[11px]">
               Tras Google debe abrirse{" "}
               <code className="text-foreground">http://localhost:54324/auth/callback</code> en el
-              navegador. El Site URL <code className="text-foreground">localhost:3000</code> es para
-              la web; la app lo captura automáticamente durante el login.
+              navegador. Si el puerto 3000 está ocupado (app web), el login sigue usando el 54324.
             </p>
           )}
           <Button

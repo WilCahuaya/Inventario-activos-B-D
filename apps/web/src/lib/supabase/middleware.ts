@@ -1,7 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { homePathForRole, type RolUsuario } from "@inventario/types";
 import { isPublicPath } from "@/lib/routes";
+
+type RolUsuario = "CONTADOR" | "ADMIN_ENTIDAD";
+
+function homePathForRole(rol: RolUsuario): string {
+  return rol === "ADMIN_ENTIDAD" ? "/admin/inventario" : "/contador";
+}
 
 function isPrivatePath(pathname: string): boolean {
   return pathname.startsWith("/contador") || pathname.startsWith("/admin");

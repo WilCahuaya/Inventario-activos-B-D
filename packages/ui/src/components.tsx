@@ -202,8 +202,20 @@ export function CardHeader({ className, children }: { className?: string; childr
   return <div className={cn("flex flex-col space-y-1.5 p-6", className)}>{children}</div>;
 }
 
-export function CardTitle({ className, children }: { className?: string; children: ReactNode }) {
-  return <h3 className={cn("text-2xl font-semibold leading-none tracking-tight", className)}>{children}</h3>;
+export function CardTitle({
+  className,
+  children,
+  title,
+}: {
+  className?: string;
+  children: ReactNode;
+  title?: string;
+}) {
+  return (
+    <h3 className={cn("text-2xl font-semibold leading-none tracking-tight", className)} title={title}>
+      {children}
+    </h3>
+  );
 }
 
 export function CardDescription({ className, children }: { className?: string; children: ReactNode }) {

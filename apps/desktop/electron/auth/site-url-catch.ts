@@ -63,6 +63,23 @@ export function ensureSiteUrlCatchServer(): Promise<void> {
   return catchServerReady;
 }
 
+/** Si el puerto 3000 está ocupado (p. ej. app web), el login sigue vía :54324. */
+export async function tryEnsureSiteUrlCatchServer(): Promise<boolean> {
+  try {
+    await ensureSiteUrlCatchServer();
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === "EADDRINUSE") {
+      console.warn(
+        `[auth] Puerto ${SITE_URL_PORT} en uso; se omite captura Site URL. OAuth usará :${OAUTH_CALLBACK_PORT}.`,
+      );
+      return false;
+    }
+    throw error;
+  }
+}
+
 export function stopSiteUrlCatchServer(): void {
   if (!catchServer) return;
   catchServer.close();

@@ -118,7 +118,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background via-muted to-primary/15 p-6">
+    <div className="relative flex min-h-screen flex-col items-center justify-start bg-gradient-to-br from-background via-muted to-primary/15 px-6 pb-8 pt-12 sm:pt-16">
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
