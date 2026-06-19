@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { APP_CLIENT, APP_NAME } from "@inventario/types";
 import {
   Button,
@@ -9,8 +9,8 @@ import {
   CardTitle,
 } from "@inventario/ui";
 import { ThemeToggle } from "@inventario/ui/theme-toggle";
-import { ActivoFichaView } from "./components/ActivoFichaView";
 import { ActivoFormDesktop } from "./components/ActivoFormDesktop";
+import { ActivoEditWithScopeDesktop } from "./components/ActivoEditWithScopeDesktop";
 import { ActivosAmbienteView } from "./components/ActivosAmbienteView";
 import { AmbientesView } from "./components/AmbientesView";
 import { AppShell, type AppSubheader, type MainNav } from "./components/AppShell";
@@ -32,6 +32,7 @@ import { useOnline } from "./hooks/useOnline";
 import { useProfile } from "./hooks/useProfile";
 import { useSelectedEntidad } from "./hooks/useSelectedEntidad";
 import { useSyncQueue } from "./hooks/useSyncQueue";
+import { useActivosRealtime } from "./hooks/useActivosRealtime";
 import type { ActivoConUbicacion } from "./lib/activos";
 import { labelZplInputForActivo, labelZplInputsForActivos } from "./lib/label-print";
 import { desktopNavSections } from "./lib/panel-nav";
@@ -40,8 +41,11 @@ type AmbienteContext = {
   entidadId: string;
   ambienteId: string;
   sedeId: string;
+  sedeNombre?: string | null;
   ambienteNombre: string;
   ambienteResponsable?: string | null;
+  ambienteResponsableId?: string | null;
+  esAmbientePreregistro?: boolean;
 };
 
 type EntidadesFlow =
@@ -52,13 +56,11 @@ type EntidadesFlow =
       initialTab?: "ambientes" | "responsables" | "sucursales";
     }
   | { type: "activos"; context: AmbienteContext }
-  | { type: "ficha"; activo: ActivoConUbicacion; context: AmbienteContext }
   | { type: "register"; context: AmbienteContext; initialCodigo?: string }
   | { type: "edit"; activo: ActivoConUbicacion; context: AmbienteContext };
 
 type InventarioFlow =
   | { type: "list" }
-  | { type: "ficha"; activo: ActivoConUbicacion }
   | { type: "edit"; activo: ActivoConUbicacion };
 
 function entidadIdFromFlow(flow: EntidadesFlow): string {
@@ -198,6 +200,17 @@ function MainApp({ userId }: { userId: string; email: string }) {
   const activosCache = useActivosCache(activosEntidadId, Boolean(profile) && Boolean(activosEntidadId));
   const globalActivos = useGlobalActivosCache(entidades, Boolean(profile));
 
+  const refreshActivos = useCallback(async () => {
+    await activosCache.refresh();
+    await globalActivos.refresh();
+  }, [activosCache.refresh, globalActivos.refresh]);
+
+  useActivosRealtime({
+    enabled: Boolean(profile) && online,
+    entidadId: profile?.rol === "ADMIN_ENTIDAD" ? profile.entidad_id : null,
+    onRefresh: refreshActivos,
+  });
+
   if (profileLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -262,16 +275,23 @@ function MainApp({ userId }: { userId: string; email: string }) {
     setEntidadesFlow({ type: "activos", context });
   }
 
-  async function refreshActivos() {
-    await activosCache.refresh();
-    await globalActivos.refresh();
+  function goAmbienteFromActivo(activo: ActivoConUbicacion) {
+    if (!activo.ambiente_id || !activo.sede_id) return;
+    setMainNav("entidades");
+    goActivosAmbiente({
+      entidadId: activo.entidad_id,
+      ambienteId: activo.ambiente_id,
+      sedeId: activo.sede_id,
+      sedeNombre: activo.sede_nombre,
+      ambienteNombre: activo.ambiente_nombre ?? "Ambiente",
+    });
   }
 
-  async function handleActivoUpdated(activo: ActivoConUbicacion) {
-    if (entidadesFlow.type === "ficha" || entidadesFlow.type === "edit") {
-      setEntidadesFlow({ type: "ficha", activo, context: entidadesFlow.context });
-    } else if (inventarioFlow.type === "ficha" || inventarioFlow.type === "edit") {
-      setInventarioFlow({ type: "ficha", activo });
+  async function handleActivoUpdated(_activo: ActivoConUbicacion) {
+    if (entidadesFlow.type === "edit") {
+      setEntidadesFlow({ type: "activos", context: entidadesFlow.context });
+    } else if (inventarioFlow.type === "edit") {
+      setInventarioFlow({ type: "list" });
     }
     await refreshActivos();
   }
@@ -310,20 +330,6 @@ function MainApp({ userId }: { userId: string; email: string }) {
           ? `Responsable: ${entidadesFlow.context.ambienteResponsable}`
           : undefined,
       };
-    } else if (entidadesFlow.type === "ficha") {
-      subheader = {
-        breadcrumbs: [
-          {
-            label: drillEntidad?.nombre ?? "Entidad",
-            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
-          },
-          {
-            label: entidadesFlow.context.ambienteNombre,
-            onClick: () => goActivosListFromContext(entidadesFlow.context),
-          },
-          { label: entidadesFlow.activo.nombre },
-        ],
-      };
     } else if (entidadesFlow.type === "register") {
       subheader = {
         breadcrumbs: [
@@ -351,33 +357,18 @@ function MainApp({ userId }: { userId: string; email: string }) {
           },
           {
             label: entidadesFlow.activo.nombre,
-            onClick: () =>
-              setEntidadesFlow({
-                type: "ficha",
-                activo: entidadesFlow.activo,
-                context: entidadesFlow.context,
-              }),
+            onClick: () => goActivosListFromContext(entidadesFlow.context),
           },
           { label: "Editar activo" },
         ],
       };
     }
   } else if (mainNav === "inventario") {
-    if (inventarioFlow.type === "ficha") {
+    if (inventarioFlow.type === "edit") {
       subheader = {
         breadcrumbs: [
           { label: "Inventario global", onClick: () => setInventarioFlow({ type: "list" }) },
           { label: inventarioFlow.activo.nombre },
-        ],
-      };
-    } else if (inventarioFlow.type === "edit") {
-      subheader = {
-        breadcrumbs: [
-          { label: "Inventario global", onClick: () => setInventarioFlow({ type: "list" }) },
-          {
-            label: inventarioFlow.activo.nombre,
-            onClick: () => setInventarioFlow({ type: "ficha", activo: inventarioFlow.activo }),
-          },
           { label: "Editar activo" },
         ],
       };
@@ -426,8 +417,11 @@ function MainApp({ userId }: { userId: string; email: string }) {
               entidadId: entidadesFlow.entidadId,
               ambienteId: amb.id,
               sedeId: amb.sede_id,
+              sedeNombre: amb.sede_nombre,
               ambienteNombre: amb.nombre,
               ambienteResponsable: amb.responsable,
+              ambienteResponsableId: amb.responsable_id,
+              esAmbientePreregistro: amb.es_preregistro,
             })
           }
         />
@@ -442,7 +436,10 @@ function MainApp({ userId }: { userId: string; email: string }) {
             ambienteId={entidadesFlow.context.ambienteId}
             ambienteNombre={entidadesFlow.context.ambienteNombre}
             ambienteResponsable={entidadesFlow.context.ambienteResponsable}
+            ambienteResponsableId={entidadesFlow.context.ambienteResponsableId}
             sedeId={entidadesFlow.context.sedeId}
+            sedeNombre={entidadesFlow.context.sedeNombre}
+            esAmbientePreregistro={entidadesFlow.context.esAmbientePreregistro}
             activos={activosCache.activos}
             loading={activosCache.loading}
             online={online}
@@ -451,52 +448,44 @@ function MainApp({ userId }: { userId: string; email: string }) {
             onRegister={() =>
               setEntidadesFlow({ type: "register", context: entidadesFlow.context })
             }
-            onOpenFicha={(activo) =>
-              setEntidadesFlow({ type: "ficha", activo, context: entidadesFlow.context })
-            }
             onPrintLabel={setPrintTarget}
             onPrintBatch={setBatchPrintTargets}
+            onEditActivo={(activo) =>
+              setEntidadesFlow({
+                type: "edit",
+                activo,
+                context: entidadesFlow.context,
+              })
+            }
             onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
           />
         )}
-
-      {mainNav === "entidades" && entidadesFlow.type === "ficha" && activosEntidadId && (
-        <ActivoFichaView
-          activo={entidadesFlow.activo}
-          entidadId={activosEntidadId}
-          entidadNombre={drillEntidad?.nombre ?? ""}
-          entidadNombreEtiqueta={drillEntidad?.nombre_etiqueta}
-          online={online}
-          onEdit={() =>
-            setEntidadesFlow({
-              type: "edit",
-              activo: entidadesFlow.activo,
-              context: entidadesFlow.context,
-            })
-          }
-          onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
-          onPrintBatch={setBatchPrintTargets}
-        />
-      )}
 
       {mainNav === "entidades" && entidadesFlow.type === "register" && activosEntidadId && (
         <ActivoFormDesktop
           entidadId={activosEntidadId}
           entidadNombre={drillEntidad?.nombre ?? ""}
           entidadNombreEtiqueta={drillEntidad?.nombre_etiqueta}
-          fixedSedeId={entidadesFlow.context.sedeId}
-          fixedAmbienteId={entidadesFlow.context.ambienteId}
+          fixedSedeId={
+            entidadesFlow.context.esAmbientePreregistro
+              ? undefined
+              : entidadesFlow.context.sedeId
+          }
+          fixedAmbienteId={
+            entidadesFlow.context.esAmbientePreregistro
+              ? undefined
+              : entidadesFlow.context.ambienteId
+          }
+          modoPreregistro={entidadesFlow.context.esAmbientePreregistro}
           initialCatalogoCodigo={entidadesFlow.initialCodigo}
           onAddCatalogoMissing={openCatalogoFromSearch}
-          onSuccess={(activo) =>
-            setEntidadesFlow({ type: "ficha", activo, context: entidadesFlow.context })
-          }
+          onSuccess={() => goActivosListFromContext(entidadesFlow.context)}
           onCancel={() => goActivosListFromContext(entidadesFlow.context)}
         />
       )}
 
       {mainNav === "entidades" && entidadesFlow.type === "edit" && activosEntidadId && (
-        <ActivoFormDesktop
+        <ActivoEditWithScopeDesktop
           entidadId={activosEntidadId}
           entidadNombre={drillEntidad?.nombre ?? ""}
           entidadNombreEtiqueta={drillEntidad?.nombre_etiqueta}
@@ -504,16 +493,8 @@ function MainApp({ userId }: { userId: string; email: string }) {
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           activo={entidadesFlow.activo}
           onAddCatalogoMissing={openCatalogoFromSearch}
-          onSuccess={(activo) =>
-            setEntidadesFlow({ type: "ficha", activo, context: entidadesFlow.context })
-          }
-          onCancel={() =>
-            setEntidadesFlow({
-              type: "ficha",
-              activo: entidadesFlow.activo,
-              context: entidadesFlow.context,
-            })
-          }
+          onSuccess={() => goActivosListFromContext(entidadesFlow.context)}
+          onCancel={() => goActivosListFromContext(entidadesFlow.context)}
         />
       )}
 
@@ -529,35 +510,17 @@ function MainApp({ userId }: { userId: string; email: string }) {
           syncMessage={lastResult}
           onSyncNow={() => void handleSyncNow()}
           syncing={syncing}
-          usuarioNombre={profile.nombre}
-          usuarioEmail={profile.email}
-          onOpenFicha={(activo) => setInventarioFlow({ type: "ficha", activo })}
           onPrintLabel={setPrintTarget}
           onPrintBatch={setBatchPrintTargets}
+          onEditActivo={(activo) => setInventarioFlow({ type: "edit", activo })}
+          onIrAmbiente={goAmbienteFromActivo}
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
           onActivosImported={() => void refreshActivos()}
         />
       )}
 
-      {mainNav === "inventario" && inventarioFlow.type === "ficha" && (
-        <ActivoFichaView
-          activo={inventarioFlow.activo}
-          entidadId={inventarioFlow.activo.entidad_id}
-          entidadNombre={
-            entidadForActivo(inventarioFlow.activo)?.nombre ??
-            inventarioFlow.activo.entidad_nombre ??
-            ""
-          }
-          entidadNombreEtiqueta={entidadForActivo(inventarioFlow.activo)?.nombre_etiqueta}
-          online={online}
-          onEdit={() => setInventarioFlow({ type: "edit", activo: inventarioFlow.activo })}
-          onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
-          onPrintBatch={setBatchPrintTargets}
-        />
-      )}
-
       {mainNav === "inventario" && inventarioFlow.type === "edit" && (
-        <ActivoFormDesktop
+        <ActivoEditWithScopeDesktop
           entidadId={inventarioFlow.activo.entidad_id}
           entidadNombre={
             entidadForActivo(inventarioFlow.activo)?.nombre ??
@@ -569,8 +532,8 @@ function MainApp({ userId }: { userId: string; email: string }) {
           fixedAmbienteId={inventarioFlow.activo.ambiente_id ?? undefined}
           activo={inventarioFlow.activo}
           onAddCatalogoMissing={openCatalogoFromSearch}
-          onSuccess={(activo) => setInventarioFlow({ type: "ficha", activo })}
-          onCancel={() => setInventarioFlow({ type: "ficha", activo: inventarioFlow.activo })}
+          onSuccess={() => setInventarioFlow({ type: "list" })}
+          onCancel={() => setInventarioFlow({ type: "list" })}
         />
       )}
 

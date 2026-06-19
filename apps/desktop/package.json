@@ -15,9 +15,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@inventario/realtime": "workspace:*",
     "@inventario/types": "workspace:*",
     "@inventario/ui": "workspace:*",
-    "@supabase/supabase-js": "^2.47.10",
+    "@supabase/supabase-js": "^2.108.2",
     "better-sqlite3": "^11.7.0",
     "jsbarcode": "^3.11.6",
     "jspdf": "^4.2.1",

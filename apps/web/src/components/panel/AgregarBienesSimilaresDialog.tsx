@@ -2,22 +2,36 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Ambiente, Sede } from "@inventario/types";
 import { MAX_ACTIVOS_SIMILARES_CANTIDAD } from "@inventario/types";
-import { ConfirmDialog, Input, Label } from "@inventario/ui";
+import { ConfirmDialog, Input, Label, Select } from "@inventario/ui";
 import {
   createActivosSimilares,
   previewActivosSimilares,
 } from "@/lib/actions/activos";
+import { listAmbientes, listSedes } from "@/lib/actions/ubicacion";
+
+type DestinoUbicacion = "actual" | "otro";
 
 interface AgregarBienesSimilaresDialogProps {
   open: boolean;
   onClose: () => void;
   activoId: string;
   entidadId: string;
+  sedeId: string;
+  ambienteId: string;
+  sedeNombre?: string;
+  ambienteNombre?: string;
   codigoCatalogo: string;
   nombre: string;
   esRegistrado: boolean;
   onSuccess?: (creados: number) => void;
+}
+
+function ubicacionActualLabel(sedeNombre?: string, ambienteNombre?: string): string {
+  if (sedeNombre && ambienteNombre) return `${sedeNombre} · ${ambienteNombre}`;
+  if (ambienteNombre) return ambienteNombre;
+  return "Ubicación actual del activo";
 }
 
 export function AgregarBienesSimilaresDialog({
@@ -25,6 +39,10 @@ export function AgregarBienesSimilaresDialog({
   onClose,
   activoId,
   entidadId,
+  sedeId,
+  ambienteId,
+  sedeNombre,
+  ambienteNombre,
   codigoCatalogo,
   nombre,
   esRegistrado,
@@ -32,6 +50,11 @@ export function AgregarBienesSimilaresDialog({
 }: AgregarBienesSimilaresDialogProps) {
   const router = useRouter();
   const [cantidad, setCantidad] = useState("10");
+  const [destinoUbicacion, setDestinoUbicacion] = useState<DestinoUbicacion>("actual");
+  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [ambientes, setAmbientes] = useState<Ambiente[]>([]);
+  const [otraSedeId, setOtraSedeId] = useState("");
+  const [otroAmbienteId, setOtroAmbienteId] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -39,15 +62,35 @@ export function AgregarBienesSimilaresDialog({
 
   const qty = Math.floor(Number(cantidad) || 0);
   const cantidadValida = qty >= 1 && qty <= MAX_ACTIVOS_SIMILARES_CANTIDAD;
+  const ubicacionOtroValida = destinoUbicacion === "actual" || Boolean(otraSedeId && otroAmbienteId);
+  const puedeConfirmar = cantidadValida && ubicacionOtroValida;
 
   useEffect(() => {
     if (!open) {
       setCantidad("10");
+      setDestinoUbicacion("actual");
+      setOtraSedeId("");
+      setOtroAmbienteId("");
+      setAmbientes([]);
       setError(null);
       setPending(false);
       setPreviewText(null);
       return;
     }
+
+    void listSedes(entidadId).then(setSedes);
+  }, [open, entidadId]);
+
+  useEffect(() => {
+    if (!open || destinoUbicacion !== "otro" || !otraSedeId) {
+      if (!open || destinoUbicacion !== "otro") setAmbientes([]);
+      return;
+    }
+    void listAmbientes(otraSedeId).then(setAmbientes);
+  }, [open, destinoUbicacion, otraSedeId]);
+
+  useEffect(() => {
+    if (!open) return;
 
     if (!cantidadValida) {
       setPreviewText(null);
@@ -87,10 +130,18 @@ export function AgregarBienesSimilaresDialog({
       setError(`Indique una cantidad entre 1 y ${MAX_ACTIVOS_SIMILARES_CANTIDAD}.`);
       return;
     }
+    if (destinoUbicacion === "otro" && (!otraSedeId || !otroAmbienteId)) {
+      setError("Seleccione sede y ambiente de destino.");
+      return;
+    }
 
     setPending(true);
     setError(null);
-    const result = await createActivosSimilares(activoId, qty);
+    const ubicacion =
+      destinoUbicacion === "otro"
+        ? { sedeId: otraSedeId, ambienteId: otroAmbienteId }
+        : undefined;
+    const result = await createActivosSimilares(activoId, qty, ubicacion);
     setPending(false);
 
     if (result.error) {
@@ -112,10 +163,10 @@ export function AgregarBienesSimilaresDialog({
       confirmLabel={cantidadValida ? `Crear ${qty} activo${qty === 1 ? "" : "s"}` : "Crear"}
       pending={pending}
       error={error}
-      confirmDisabled={!cantidadValida}
+      confirmDisabled={!puedeConfirmar}
       onConfirm={() => void handleConfirm()}
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="cantidad_similares">Cantidad a registrar</Label>
           <Input
@@ -134,6 +185,91 @@ export function AgregarBienesSimilaresDialog({
             {!esRegistrado && " Como plantilla preregistrada, las copias también serán preregistros."}
           </p>
         </div>
+
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium text-foreground">Ubicación de los nuevos activos</legend>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border/60 px-3 py-2.5 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5">
+            <input
+              type="radio"
+              name="destino_ubicacion_similares"
+              className="mt-0.5"
+              checked={destinoUbicacion === "actual"}
+              onChange={() => {
+                setDestinoUbicacion("actual");
+                if (error) setError(null);
+              }}
+            />
+            <span className="min-w-0 text-sm">
+              <span className="font-medium text-foreground">Este ambiente</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {ubicacionActualLabel(sedeNombre, ambienteNombre)}
+              </span>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border/60 px-3 py-2.5 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5">
+            <input
+              type="radio"
+              name="destino_ubicacion_similares"
+              className="mt-0.5"
+              checked={destinoUbicacion === "otro"}
+              onChange={() => {
+                setDestinoUbicacion("otro");
+                if (error) setError(null);
+              }}
+            />
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="font-medium text-foreground">Otro ambiente</span>
+              {destinoUbicacion === "otro" && (
+                <span className="mt-2 block space-y-3" onClick={(e) => e.preventDefault()}>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="similares_sede" className="text-xs">
+                      Sede
+                    </Label>
+                    <Select
+                      id="similares_sede"
+                      value={otraSedeId}
+                      onChange={(value) => {
+                        setOtraSedeId(value);
+                        setOtroAmbienteId("");
+                        if (error) setError(null);
+                      }}
+                      options={[
+                        { value: "", label: "Seleccione sede…" },
+                        ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+                      ]}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="similares_ambiente" className="text-xs">
+                      Ambiente
+                    </Label>
+                    <Select
+                      id="similares_ambiente"
+                      value={otroAmbienteId}
+                      disabled={!otraSedeId}
+                      onChange={(value) => {
+                        setOtroAmbienteId(value);
+                        if (error) setError(null);
+                      }}
+                      options={[
+                        { value: "", label: "Seleccione ambiente…" },
+                        ...ambientes
+                          .filter((a) => a.id !== ambienteId || otraSedeId !== sedeId)
+                          .map((a) => ({ value: a.id, label: a.nombre })),
+                      ]}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    No se contarán como ejemplares del ambiente actual del activo plantilla.
+                  </p>
+                </span>
+              )}
+            </span>
+          </label>
+        </fieldset>
+
         {previewLoading && <p className="text-xs text-muted-foreground">Calculando códigos…</p>}
         {!previewLoading && previewText && (
           <p className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-xs text-foreground">

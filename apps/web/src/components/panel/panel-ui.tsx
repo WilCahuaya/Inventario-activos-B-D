@@ -22,6 +22,9 @@ export {
   panelFieldsetClass,
   panelLegendClass,
   panelModalClass,
+  panelFilterRowClass,
+  panelStickyToolbarClass,
+  panelToolbarActionsClass,
   type PanelBreadcrumbItem,
 } from "@inventario/ui/panel";
 

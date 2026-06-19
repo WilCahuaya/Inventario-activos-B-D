@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@inventario/realtime": "workspace:*",
     "@inventario/types": "workspace:*",
     "@inventario/ui": "workspace:*",
     "@supabase/ssr": "^0.12.0",

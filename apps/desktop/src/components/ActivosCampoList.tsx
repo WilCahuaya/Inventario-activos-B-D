@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Ambiente, Entidad, EstadoRegistro, Sede } from "@inventario/types";
 import { Button, Select } from "@inventario/ui";
 import { listAmbientes, listAmbientesPorEntidad, listSedes } from "../lib/ubicacion";
-import { PanelSearchInput } from "@inventario/ui/panel";
+import { PanelSearchInput, panelFilterRowClass, panelStickyToolbarClass, panelToolbarActionsClass } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
 import type { InventarioExportMeta } from "../lib/inventario-export";
 import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
@@ -12,6 +12,12 @@ const FILTROS_ESTADO: { value: "" | EstadoRegistro; label: string }[] = [
   { value: "", label: "Todos" },
   { value: "REGISTRADO", label: "Registrados" },
   { value: "PREREGISTRADO", label: "Preregistrados" },
+  { value: "DADO_DE_BAJA", label: "Dados de baja" },
+];
+
+const FILTROS_ESTADO_AMBIENTE: { value: "" | EstadoRegistro; label: string }[] = [
+  { value: "", label: "Todos" },
+  { value: "REGISTRADO", label: "Registrados" },
   { value: "DADO_DE_BAJA", label: "Dados de baja" },
 ];
 
@@ -31,13 +37,16 @@ interface ActivosCampoListProps {
   online: boolean;
   fixedSedeId?: string;
   fixedAmbienteId?: string;
+  esAmbientePreregistro?: boolean;
   ambienteFilter?: { id: string; nombre: string };
   onClearAmbienteFilter?: () => void;
-  onOpenFicha: (activo: ActivoConUbicacion) => void;
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
+  onEditActivo?: (activo: ActivoConUbicacion) => void;
+  onIrAmbiente?: (activo: ActivoConUbicacion) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
   exportMeta?: InventarioExportMeta;
+  reportesExport?: ReactNode;
 }
 
 export function ActivosCampoList({
@@ -54,19 +63,24 @@ export function ActivosCampoList({
   online,
   fixedSedeId,
   fixedAmbienteId,
+  esAmbientePreregistro = false,
   ambienteFilter,
   onClearAmbienteFilter,
-  onOpenFicha,
   onPrintLabel,
   onPrintBatch,
+  onEditActivo,
+  onIrAmbiente,
   onActivoUpdated,
   exportMeta,
+  reportesExport,
 }: ActivosCampoListProps) {
   const isGlobal = variant === "global";
   const isAmbiente = variant === "ambiente";
   const hideUbicacionFilters = isAmbiente;
   const [filter, setFilter] = useState("");
-  const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>("");
+  const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
+    esAmbientePreregistro ? "PREREGISTRADO" : "",
+  );
   const [filterEntidadId, setFilterEntidadId] = useState("");
   const [sedeId, setSedeId] = useState(fixedSedeId ?? "");
   const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? ambienteFilter?.id ?? "");
@@ -155,7 +169,7 @@ export function ActivosCampoList({
     if (isGlobal) setFilterEntidadId("");
     if (!fixedSedeId) setSedeId("");
     if (!fixedAmbienteId) setAmbienteId("");
-    setEstadoRegistro("");
+    setEstadoRegistro(esAmbientePreregistro ? "PREREGISTRADO" : "");
     setFilter("");
     setSedes([]);
     setAmbientes([]);
@@ -179,7 +193,13 @@ export function ActivosCampoList({
       const ambienteFiltro = fixedAmbienteId ?? ambienteId;
       if (sedeFiltro && a.sede_id !== sedeFiltro) return false;
       if (ambienteFiltro && a.ambiente_id !== ambienteFiltro) return false;
-      if (estadoRegistro && a.estado_registro !== estadoRegistro) return false;
+      if (isAmbiente && esAmbientePreregistro) {
+        if (a.estado_registro !== "PREREGISTRADO") return false;
+      } else if (isAmbiente && a.estado_registro === "PREREGISTRADO") {
+        return false;
+      } else if (estadoRegistro && a.estado_registro !== estadoRegistro) {
+        return false;
+      }
       if (!q) return true;
       const haystack = [
         a.nombre,
@@ -209,6 +229,7 @@ export function ActivosCampoList({
     isAmbiente,
     filterEntidadId,
     entidadId,
+    esAmbientePreregistro,
   ]);
 
   const emptyMessage = isAmbiente
@@ -237,17 +258,17 @@ export function ActivosCampoList({
     <div className={`${useCompactGlobal ? "flex min-h-0 min-w-0 flex-col gap-1.5" : "space-y-3"} ${className ?? ""}`}>
       {useCompactGlobal ? (
         <>
-          <div className="sticky top-0 z-20 shrink-0 space-y-2 rounded-lg border border-border/60 bg-card/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/90">
+          <div className={panelStickyToolbarClass}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <h1 className="text-base font-semibold leading-tight text-foreground">
+              <div className="panel-toolbar-title min-w-0">
+                <h1 className="panel-toolbar-heading text-foreground">
                   Inventario global
                 </h1>
-                <p className="hidden text-xs text-muted-foreground md:block">
+                <p className="panel-toolbar-subtitle">
                   Consulta y gestión de activos en todas las entidades
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className={panelToolbarActionsClass}>
                 {toolbarExtra}
                 {exportMeta && (
                   <InventarioExportButtons activos={filtered} meta={exportMeta} />
@@ -264,11 +285,7 @@ export function ActivosCampoList({
               </div>
             </div>
 
-            <div
-              className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-2"
-              role="tablist"
-              aria-label="Estado del activo"
-            >
+            <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
               <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
                 {FILTROS_ESTADO.map((f) => (
                   <button
@@ -355,32 +372,35 @@ export function ActivosCampoList({
       ) : isAmbiente ? (
         <>
           <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto pb-0.5">
-            <div
-              className="inline-flex shrink-0 gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
-              role="tablist"
-              aria-label="Estado del activo"
-            >
-              {FILTROS_ESTADO.map((f) => (
-                <button
-                  key={f.value || "all"}
-                  type="button"
-                  role="tab"
-                  aria-selected={estadoRegistro === f.value}
-                  className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                    estadoRegistro === f.value
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setEstadoRegistro(f.value)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex shrink-0 flex-nowrap items-center gap-2">
-              {exportMeta && (
-                <InventarioExportButtons activos={filtered} meta={exportMeta} />
-              )}
+            {!esAmbientePreregistro && (
+              <div
+                className="inline-flex shrink-0 gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                role="tablist"
+                aria-label="Estado del activo"
+              >
+                {FILTROS_ESTADO_AMBIENTE.map((f) => (
+                  <button
+                    key={f.value || "all"}
+                    type="button"
+                    role="tab"
+                    aria-selected={estadoRegistro === f.value}
+                    className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                      estadoRegistro === f.value
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setEstadoRegistro(f.value)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className={`flex shrink-0 flex-nowrap items-center gap-2 ${esAmbientePreregistro ? "ml-auto w-full justify-between" : ""}`}>
+              {reportesExport ??
+                (exportMeta && (
+                  <InventarioExportButtons activos={filtered} meta={exportMeta} />
+                ))}
               {onPrintBatch && selectedActivos.length > 0 && (
                 <Button type="button" size="sm" className="h-8 shrink-0 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
                   Imprimir lote ({selectedActivos.length})
@@ -506,10 +526,12 @@ export function ActivosCampoList({
         entidadId={entidadId}
         online={online}
         emptyMessage={emptyMessage}
-        onOpenFicha={onOpenFicha}
+        mostrarPosibleAmbiente={esAmbientePreregistro}
         onPrintLabel={onPrintLabel}
         onActivoUpdated={onActivoUpdated}
         onPrintBatch={onPrintBatch}
+        onEditActivo={onEditActivo}
+        onIrAmbiente={isGlobal ? onIrAmbiente : undefined}
         onSelectionChange={setSelectedActivos}
       />
     </div>

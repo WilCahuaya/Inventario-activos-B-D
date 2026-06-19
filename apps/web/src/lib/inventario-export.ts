@@ -26,6 +26,10 @@ export const INVENTARIO_EXPORT_HEADERS = [
 export interface InventarioExportMeta {
   ambienteNombre: string;
   responsable?: string | null;
+  responsableDni?: string | null;
+  sedeNombre?: string | null;
+  adminNombre?: string | null;
+  adminDni?: string | null;
   entidadNombre?: string;
   usuarioNombre?: string;
   usuarioEmail?: string;
@@ -50,12 +54,13 @@ function toActivoReporte(activo: Activo, meta: InventarioExportMeta): ActivoRepo
     ...row,
     entidad_nombre: meta.entidadNombre ?? row.entidad_nombre,
     ambiente_nombre: meta.ambienteNombre,
+    sede_nombre: meta.sedeNombre ?? row.sede_nombre,
   };
 }
 
 function pickReporteId(meta: InventarioExportMeta, valorizado: boolean): ReporteId {
   if (isExportacionGlobal(meta)) {
-    return valorizado ? "inventario_entidad_valorizado" : "inventario_entidad_sin_valores";
+    return valorizado ? "inventario_entidad_valorizado" : "inventario_entidad_activos_fijos";
   }
   return valorizado ? "inventario_ambiente_valorizado" : "inventario_ambiente_sin_valores";
 }
@@ -67,7 +72,11 @@ function buildContext(meta: InventarioExportMeta, reporteId: ReporteId) {
     reporteId,
     entidadNombre: meta.entidadNombre ?? "Entidad",
     ambienteNombre: global ? null : meta.ambienteNombre,
+    sedeNombre: global ? null : meta.sedeNombre,
     responsable: meta.responsable,
+    responsableDni: meta.responsableDni,
+    adminNombre: meta.adminNombre,
+    adminDni: meta.adminDni,
     usuarioNombre: meta.usuarioNombre ?? "Usuario",
     usuarioEmail: meta.usuarioEmail ?? "",
     fechaGeneracion: new Date(),

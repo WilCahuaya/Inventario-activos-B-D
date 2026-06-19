@@ -18,7 +18,7 @@ export default async function AdminReportesPage() {
     <div className="space-y-6">
       <PanelPageHeader
         title="Reportes"
-        subtitle="Inventarios físicos de su entidad (sin valores monetarios) en PDF o Excel"
+        subtitle="Fichas e inventarios físicos de su entidad, y reporte de bajas, en PDF o Excel"
       />
       <ReportesPanel
         entidades={entidades}

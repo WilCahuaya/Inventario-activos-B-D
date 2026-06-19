@@ -5,17 +5,23 @@ import { Button } from "@inventario/ui";
 import { ValidarPreregistroDialog } from "./ValidarPreregistroDialog";
 
 export function RegistrarActivoButton({
+  entidadId,
   activoId,
   nombre,
   codigoCatalogo,
+  posibleAmbienteId,
+  posibleAmbienteNombre,
   compact = false,
   label,
   className,
   onValidated,
 }: {
+  entidadId: string;
   activoId: string;
   nombre: string;
   codigoCatalogo?: string;
+  posibleAmbienteId?: string | null;
+  posibleAmbienteNombre?: string | null;
   compact?: boolean;
   label?: string;
   className?: string;
@@ -39,9 +45,12 @@ export function RegistrarActivoButton({
       <ValidarPreregistroDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
+        entidadId={entidadId}
         activoId={activoId}
         nombre={nombre}
         codigoCatalogo={codigoCatalogo}
+        posibleAmbienteId={posibleAmbienteId}
+        posibleAmbienteNombre={posibleAmbienteNombre}
         onSuccess={onValidated}
       />
     </>

@@ -193,6 +193,14 @@ export function nombreRequiereEtiquetaOverride(nombre: string): boolean {
   return fit.shrunk || fit.truncated;
 }
 
+/** True si la razón social no cabe cómodamente en el pie de la etiqueta 50×25 mm. */
+export function entidadNombreRequiereEtiquetaOverride(nombre: string): boolean {
+  const sanitized = sanitizeLabelPrintText(nombre.toUpperCase());
+  if (!sanitized) return false;
+  const fit = fitLabelPrintLine(sanitized, LABEL_PRINT_LAYOUT_FONTS.entidad);
+  return fit.shrunk || fit.truncated;
+}
+
 /** Sugerencia editable cuando el nombre oficial no cabe en 50 mm. */
 export function suggestNombreEtiqueta(
   nombre: string,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CatalogoNacional, CategoriaBien } from "@inventario/types";
+import type { ActivoEditScope } from "@inventario/ui/panel";
 import {
   CATEGORIA_BIEN_AYUDA,
   CATEGORIA_BIEN_LABELS,
@@ -41,6 +42,7 @@ import {
   createActivo,
   previewCodigoBarras,
   updateActivo,
+  updateActivosSimilares,
 } from "../lib/activos";
 import { createAmbiente, listAmbientes, listSedes } from "../lib/ubicacion";
 import {
@@ -67,15 +69,18 @@ function formatSoles(value: number | null) {
   return `S/ ${value.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-interface ActivoFormDesktopProps {
+export interface ActivoFormDesktopProps {
   entidadId: string;
   entidadNombre: string;
   entidadNombreEtiqueta?: string | null;
   fixedSedeId?: string;
   fixedAmbienteId?: string;
+  modoPreregistro?: boolean;
   activo?: ActivoConUbicacion;
   initialCatalogoCodigo?: string;
   onAddCatalogoMissing?: (query: string) => void;
+  editScope?: ActivoEditScope;
+  ejemplaresTotal?: number;
   onSuccess: (activo: ActivoConUbicacion) => void;
   onCancel: () => void;
 }
@@ -86,14 +91,22 @@ export function ActivoFormDesktop({
   entidadNombreEtiqueta,
   fixedSedeId,
   fixedAmbienteId,
+  modoPreregistro = false,
   activo,
   initialCatalogoCodigo,
   onAddCatalogoMissing,
+  editScope = "single",
+  ejemplaresTotal = 0,
   onSuccess,
   onCancel,
 }: ActivoFormDesktopProps) {
   const isEdit = Boolean(activo);
-  const hideUbicacion = Boolean(fixedSedeId && fixedAmbienteId);
+  const esEdicionMasiva = Boolean(
+    isEdit && ejemplaresTotal > 1 && editScope === "bulk",
+  );
+  const mostrarPosibleAmbiente =
+    modoPreregistro || (isEdit && activo?.estado_registro === "PREREGISTRADO");
+  const hideUbicacion = mostrarPosibleAmbiente || Boolean(fixedSedeId && fixedAmbienteId);
   const [catalogo, setCatalogo] = useState<CatalogoNacional | null>(null);
   const [nombre, setNombre] = useState(activo?.nombre ?? "");
   const [nombreEtiqueta, setNombreEtiqueta] = useState(activo?.nombre_etiqueta ?? "");
@@ -126,6 +139,9 @@ export function ActivoFormDesktop({
   const [ambientes, setAmbientes] = useState<{ id: string; nombre: string }[]>([]);
   const [sedeId, setSedeId] = useState(fixedSedeId ?? activo?.sede_id ?? "");
   const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? activo?.ambiente_id ?? "");
+  const [posibleSedeId, setPosibleSedeId] = useState("");
+  const [posibleAmbienteId, setPosibleAmbienteId] = useState(activo?.posible_ambiente_id ?? "");
+  const [posibleAmbientes, setPosibleAmbientes] = useState<{ id: string; nombre: string }[]>([]);
   const [nuevoAmbiente, setNuevoAmbiente] = useState("");
   const [codigoBarrasPreview, setCodigoBarrasPreview] = useState<string | null>(
     activo?.codigo_barras ?? null,
@@ -148,6 +164,29 @@ export function ActivoFormDesktop({
     }
     void listAmbientes(sedeId).then(setAmbientes);
   }, [sedeId]);
+
+  useEffect(() => {
+    if (!posibleSedeId) {
+      setPosibleAmbientes([]);
+      return;
+    }
+    void listAmbientes(posibleSedeId).then(setPosibleAmbientes);
+  }, [posibleSedeId]);
+
+  useEffect(() => {
+    if (!activo?.posible_ambiente_id || !isEdit) return;
+    void listSedes(entidadId).then(async (sedesList) => {
+      for (const sede of sedesList) {
+        const ambientesSede = await listAmbientes(sede.id);
+        const match = ambientesSede.find((a) => a.id === activo.posible_ambiente_id);
+        if (match) {
+          setPosibleSedeId(sede.id);
+          setPosibleAmbienteId(match.id);
+          break;
+        }
+      }
+    });
+  }, [activo, isEdit, entidadId]);
 
   useEffect(() => {
     if (!activo || !isEdit) return;
@@ -290,6 +329,10 @@ export function ActivoFormDesktop({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (esEdicionMasiva && !navigator.onLine) {
+      setMessage("La edición masiva de ejemplares requiere conexión a internet.");
+      return;
+    }
     if (!catalogo) {
       setMessage("Seleccione un ítem del catálogo nacional.");
       return;
@@ -341,13 +384,23 @@ export function ActivoFormDesktop({
       valor_es_mercado: valorEsMercado,
       fecha_adquisicion: parseFechaDDMMYYYY(fechaAdquisicion) || undefined,
       ...(!valorEsMercado && { comprobante_serie: comprobanteSerie.trim() || undefined }),
-      sede_id: (fixedSedeId ?? sedeId) || undefined,
-      ambiente_id: (fixedAmbienteId ?? ambienteId) || undefined,
+      ...(mostrarPosibleAmbiente
+        ? { posible_ambiente_id: posibleAmbienteId || null }
+        : {
+            sede_id: (fixedSedeId ?? sedeId) || undefined,
+            ambiente_id: (fixedAmbienteId ?? ambienteId) || undefined,
+          }),
     };
 
     const sedeNombre = sedes.find((s) => s.id === sedeId)?.nombre;
     const ambienteNombre = ambientes.find((a) => a.id === ambienteId)?.nombre;
     const online = navigator.onLine;
+
+    if (!online && esEdicionMasiva) {
+      setPending(false);
+      setMessage("La edición masiva de ejemplares requiere conexión a internet.");
+      return;
+    }
 
     if (!online) {
       const files: {
@@ -441,8 +494,36 @@ export function ActivoFormDesktop({
 
     const result =
       isEdit && activo
-        ? await updateActivo(activo.id, payload)
-        : await createActivo({ entidad_id: entidadId, ...payload });
+        ? esEdicionMasiva
+          ? await updateActivosSimilares(activo.id, {
+              codigo_catalogo: catalogo.codigo,
+              nombre: payload.nombre,
+              nombre_etiqueta: payload.nombre_etiqueta ?? null,
+              categoria: payload.categoria,
+              estado_bien: payload.estado_bien,
+              marca: payload.marca ?? null,
+              modelo: payload.modelo ?? null,
+              color: payload.color ?? null,
+              medidas: payload.medidas ?? null,
+              observacion: payload.observacion ?? null,
+              valor_adquisicion: payload.valor_adquisicion ?? null,
+              valor_es_mercado: payload.valor_es_mercado,
+              fecha_adquisicion: payload.fecha_adquisicion ?? null,
+              depreciacion: payload.depreciacion ?? null,
+              vida_util_meses: payload.vida_util_meses ?? null,
+              ...(mostrarPosibleAmbiente
+                ? { posible_ambiente_id: posibleAmbienteId || null }
+                : {
+                    sede_id: (fixedSedeId ?? sedeId) || null,
+                    ambiente_id: (fixedAmbienteId ?? ambienteId) || null,
+                  }),
+            })
+          : await updateActivo(activo.id, payload)
+        : await createActivo({
+            entidad_id: entidadId,
+            ...payload,
+            estado_registro: mostrarPosibleAmbiente ? "PREREGISTRADO" : "REGISTRADO",
+          });
 
     if (result.error) {
       setPending(false);
@@ -450,36 +531,53 @@ export function ActivoFormDesktop({
       return;
     }
 
-    const activoId = isEdit && activo ? activo.id : result.data!.id;
+    const activoId =
+      isEdit && activo
+        ? activo.id
+        : result.data && "id" in result.data
+          ? result.data.id
+          : undefined;
 
-    if (valorEsMercado) {
-      if (activo?.comprobante_path || activo?.comprobante_serie) {
-        await updateActivoPaths(activoId, {
-          comprobante_path: null,
-          comprobante_serie: null,
-        });
+    if (!esEdicionMasiva && activoId) {
+      if (valorEsMercado) {
+        if (activo?.comprobante_path || activo?.comprobante_serie) {
+          await updateActivoPaths(activoId, {
+            comprobante_path: null,
+            comprobante_serie: null,
+          });
+        }
+      } else if (comprobanteFile) {
+        const upload = await uploadActivoFile(entidadId, activoId, comprobanteFile, "comprobante");
+        if (upload.path) {
+          await updateActivoPaths(activoId, {
+            comprobante_path: upload.path,
+            comprobante_serie: comprobanteSerie.trim() || null,
+          });
+        }
+      } else if (comprobanteSerie.trim()) {
+        await updateActivoPaths(activoId, { comprobante_serie: comprobanteSerie.trim() });
       }
-    } else if (comprobanteFile) {
-      const upload = await uploadActivoFile(entidadId, activoId, comprobanteFile, "comprobante");
-      if (upload.path) {
-        await updateActivoPaths(activoId, {
-          comprobante_path: upload.path,
-          comprobante_serie: comprobanteSerie.trim() || null,
-        });
-      }
-    } else if (comprobanteSerie.trim()) {
-      await updateActivoPaths(activoId, { comprobante_serie: comprobanteSerie.trim() });
-    }
 
-    if (fotoFile) {
-      const upload = await uploadActivoFile(entidadId, activoId, fotoFile, "foto");
-      if (upload.path) {
-        await updateActivoPaths(activoId, { foto_path: upload.path });
+      if (fotoFile) {
+        const upload = await uploadActivoFile(entidadId, activoId, fotoFile, "foto");
+        if (upload.path) {
+          await updateActivoPaths(activoId, { foto_path: upload.path });
+        }
       }
     }
 
     setPending(false);
-    const saved = result.data!;
+    if (esEdicionMasiva && activo) {
+      setMessage(
+        `${(result.data as { actualizados?: number })?.actualizados ?? ejemplaresTotal} ejemplares actualizados correctamente.`,
+      );
+      onSuccess(activo);
+      return;
+    }
+
+    if (!result.data || !("id" in result.data)) return;
+
+    const saved = result.data;
     const mapped = {
       ...saved,
       sede_nombre: sedeNombre,
@@ -505,6 +603,14 @@ export function ActivoFormDesktop({
       onSubmit={(e) => void handleSubmit(e)}
       className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2"
     >
+      {esEdicionMasiva && (
+        <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
+          Los cambios se aplicarán a los{" "}
+          <strong>{ejemplaresTotal} ejemplares</strong> de este bien en el ambiente. Cada
+          unidad conserva su código de barras, serie, foto y comprobante propios.
+        </div>
+      )}
+
       <fieldset className={fieldsetCompact}>
         <legend className={panelLegendClass}>Identificación</legend>
 
@@ -515,7 +621,7 @@ export function ActivoFormDesktop({
           onClear={handleCatalogoClear}
           selectedCodigo={catalogo?.codigo ?? activo?.codigo_catalogo}
           selectedDenominacion={catalogo?.denominacion}
-          disabled={pending}
+          disabled={pending || esEdicionMasiva}
           renderAddMissing={
             onAddCatalogoMissing
               ? (q) => (
@@ -615,6 +721,7 @@ export function ActivoFormDesktop({
             onChange={setModelo}
             onSearch={searchAtributo}
           />
+          {!esEdicionMasiva && (
           <ActivoAtributoAutocomplete
             id="serie"
             label="Serie"
@@ -623,6 +730,7 @@ export function ActivoFormDesktop({
             onChange={setSerie}
             onSearch={searchAtributo}
           />
+          )}
           <ActivoAtributoAutocomplete
             id="color"
             label="Color"
@@ -713,7 +821,7 @@ export function ActivoFormDesktop({
             )}
           </div>
         </div>
-        {!valorEsMercado && (
+        {!valorEsMercado && !esEdicionMasiva && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="comprobante_serie">Serie del comprobante</Label>
@@ -742,6 +850,7 @@ export function ActivoFormDesktop({
             </div>
           </div>
         )}
+        {!esEdicionMasiva && (
         <div className="space-y-2">
           <Label htmlFor="foto_activo">Foto del activo</Label>
           <FileInput
@@ -756,6 +865,7 @@ export function ActivoFormDesktop({
             }
           />
         </div>
+        )}
         {mostrarDepreciacion && (
         <>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -823,6 +933,46 @@ export function ActivoFormDesktop({
           </div>
         </div>
       </fieldset>
+
+      {mostrarPosibleAmbiente && (
+        <fieldset className={fieldsetWide}>
+          <legend className={panelLegendClass}>Posible ambiente</legend>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Sugerencia de destino (opcional). Al validar podrá confirmarla o elegir otra.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="posible-sede">Sede</Label>
+              <Select
+                id="posible-sede"
+                value={posibleSedeId}
+                onChange={(next) => {
+                  setPosibleSedeId(next);
+                  setPosibleAmbienteId("");
+                }}
+                options={[
+                  { value: "", label: "Sin sugerencia…" },
+                  ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+                ]}
+              />
+            </div>
+            {posibleSedeId && (
+              <div className="space-y-2">
+                <Label htmlFor="posible-ambiente">Ambiente</Label>
+                <Select
+                  id="posible-ambiente"
+                  value={posibleAmbienteId}
+                  onChange={setPosibleAmbienteId}
+                  options={[
+                    { value: "", label: "Sin sugerencia…" },
+                    ...posibleAmbientes.map((a) => ({ value: a.id, label: a.nombre })),
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+        </fieldset>
+      )}
 
       {!hideUbicacion && (
       <fieldset className={fieldsetWide}>
@@ -896,7 +1046,13 @@ export function ActivoFormDesktop({
 
       <div className="col-span-1 flex flex-wrap gap-2 lg:col-span-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Guardando…" : isEdit ? "Guardar cambios" : "Registrar activo"}
+          {pending
+            ? "Guardando…"
+            : isEdit
+              ? esEdicionMasiva
+                ? `Guardar en ${ejemplaresTotal} ejemplares`
+                : "Guardar cambios"
+              : "Registrar activo"}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar

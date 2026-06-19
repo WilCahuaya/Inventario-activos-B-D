@@ -80,6 +80,21 @@ function ResponsableFormFields({
         />
       </div>
       <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}_dni`}>DNI</Label>
+        <Input
+          id={`${idPrefix}_dni`}
+          name="dni"
+          required
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={8}
+          pattern="[0-9]{8}"
+          title="8 dígitos"
+          placeholder="12345678"
+          defaultValue={responsable?.dni ?? ""}
+        />
+      </div>
+      <div className="space-y-2">
         <Label htmlFor={`${idPrefix}_cargo`}>Cargo</Label>
         <Input
           id={`${idPrefix}_cargo`}
@@ -115,6 +130,7 @@ function ResponsableFormFields({
 function responsableFromForm(form: FormData): CreateResponsableInput {
   return {
     nombre: String(form.get("nombre") || ""),
+    dni: String(form.get("dni") || ""),
     email: String(form.get("email") || ""),
     telefono: String(form.get("telefono") || ""),
   };
@@ -162,6 +178,7 @@ export function ResponsablesPanel({
     return list.filter(
       (r) =>
         r.nombre.toLowerCase().includes(q) ||
+        (r.dni?.includes(q) ?? false) ||
         (r.email?.toLowerCase().includes(q) ?? false) ||
         (r.cargo?.toLowerCase().includes(q) ?? false) ||
         (r.telefono?.toLowerCase().includes(q) ?? false),
@@ -278,7 +295,7 @@ export function ResponsablesPanel({
               <PanelSearchInput
                 value={busqueda}
                 onChange={setBusqueda}
-                placeholder="Buscar por nombre, correo o teléfono…"
+                placeholder="Buscar por nombre, DNI, correo o teléfono…"
               />
             </div>
             <Button
@@ -320,6 +337,7 @@ export function ResponsablesPanel({
           <thead className={panelTableStickyHeadClass}>
             <tr className={panelTableHeadRowClass}>
               <PanelTableTh>Nombre</PanelTableTh>
+              <PanelTableTh className={panelTableShrinkCellClass}>DNI</PanelTableTh>
               <PanelTableTh className={panelTableShrinkCellClass}>Cargo</PanelTableTh>
               <PanelTableTh>Correo</PanelTableTh>
               <PanelTableTh className={panelTableShrinkCellClass}>Teléfono</PanelTableTh>
@@ -340,6 +358,12 @@ export function ResponsablesPanel({
                       <StatusBadge variant="pending">Administrador</StatusBadge>
                     )}
                   </span>
+                </PanelTableTd>
+                <PanelTableTd
+                  className={`${panelTableMutedClass} ${panelTableShrinkCellClass} font-mono tabular-nums`}
+                  title={item.dni ?? undefined}
+                >
+                  {formatOptional(item.dni)}
                 </PanelTableTd>
                 <PanelTableTd
                   className={`${panelTableMutedClass} ${panelTableShrinkCellClass}`}

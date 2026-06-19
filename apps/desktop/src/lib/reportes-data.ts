@@ -77,4 +77,6 @@ export {
   buildReporteRows,
   exportReporte,
   reporteHeaders,
+  reportesDisponiblesParaRol,
+  reportesAmbienteParaRol,
 } from "@reportes";

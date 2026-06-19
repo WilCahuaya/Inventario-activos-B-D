@@ -1,6 +1,8 @@
 import type { Config } from "tailwindcss";
+import { panelTailwindPreset } from "../../packages/ui/tailwind-preset";
 
 const config: Config = {
+  presets: [panelTailwindPreset],
   darkMode: ["class"],
   content: [
     "./index.html",
@@ -9,6 +11,14 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      screens: {
+        "3xl": "1920px",
+      },
+      maxWidth: {
+        panel: "1600px",
+        "panel-xl": "1720px",
+        "panel-3xl": "1920px",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

@@ -3,19 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Activo, Entidad, EstadoRegistro } from "@inventario/types";
-import { Button, Dialog, Select } from "@inventario/ui";
+import { ActivoEditScopeNav, type ActivoEditScope } from "@inventario/ui/panel";
+import { Button, Select } from "@inventario/ui";
 import { listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 import type { Ambiente, Sede } from "@inventario/types";
-import { ActivoFichaView, type ActivoFicha } from "./ActivoFichaView";
 import { ActivoForm } from "./ActivoForm";
 import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
-import { InventarioExportButtons } from "./InventarioExportButtons";
 import { InventarioImportDialog } from "./InventarioImportDialog";
+import { useEjemplaresResumen } from "@/hooks/useEjemplaresResumen";
 import {
   PanelCountLabel,
   PanelPageHeader,
   PanelSearchInput,
-  panelModalClass,
+  panelFilterRowClass,
+  panelStickyToolbarClass,
+  panelToolbarActionsClass,
   type PanelBreadcrumbItem,
 } from "./panel-ui";
 
@@ -42,10 +44,6 @@ const FILTROS_ESTADO: { value: "" | EstadoRegistro; label: string }[] = [
   { value: "DADO_DE_BAJA", label: "Dados de baja" },
 ];
 
-function labelEditarAdmin(activo: Activo) {
-  return activo.estado_registro === "PREREGISTRADO" ? "Editar preregistro" : "Editar ubicación";
-}
-
 export function InventarioGlobalPanel({
   entidades,
   activos,
@@ -64,7 +62,13 @@ export function InventarioGlobalPanel({
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [ambientes, setAmbientes] = useState<Ambiente[]>([]);
   const [editActivo, setEditActivo] = useState<InventarioItem | null>(null);
-  const [fichaActivo, setFichaActivo] = useState<ActivoFicha | null>(null);
+  const [editScope, setEditScope] = useState<ActivoEditScope>("single");
+  const { resumen: ejemplaresResumen } = useEjemplaresResumen(editActivo?.id);
+  const ejemplaresTotal = ejemplaresResumen?.total ?? 0;
+
+  useEffect(() => {
+    setEditScope("single");
+  }, [editActivo?.id]);
   const [importOpen, setImportOpen] = useState(false);
 
   const activeEntidadId = isAdmin ? (fixedEntidadId ?? "") : entidadId;
@@ -73,14 +77,6 @@ export function InventarioGlobalPanel({
     if (!isAdmin || !fixedEntidadId) return;
     void listSedes(fixedEntidadId).then(setSedes);
   }, [isAdmin, fixedEntidadId]);
-
-  useEffect(() => {
-    if (!fichaActivo) return;
-    const fresh = activos.find((a) => a.id === fichaActivo.id);
-    if (fresh) {
-      setFichaActivo((prev) => (prev ? { ...prev, ...fresh } : null));
-    }
-  }, [activos, fichaActivo?.id]);
 
   async function handleEntidadChange(value: string) {
     setEntidadId(value);
@@ -129,15 +125,15 @@ export function InventarioGlobalPanel({
     (!isAdmin && entidadId) || sedeId || ambienteId || estadoRegistro || busqueda.trim(),
   );
 
-  const fichaBreadcrumbs: PanelBreadcrumbItem[] = isAdmin
-    ? [
-        { label: "Inventario global", href: "/admin/inventario" },
-        { label: fichaActivo?.nombre ?? "Activo" },
-      ]
-    : [
-        { label: "Inventario global", onClick: () => setFichaActivo(null) },
-        { label: fichaActivo?.nombre ?? "Activo" },
-      ];
+  function irAlAmbiente(activo: InventarioItem) {
+    if (!activo.ambiente_id) return;
+    const href = isAdmin
+      ? `/admin/ambientes/${activo.ambiente_id}`
+      : activo.entidad_id
+        ? `/contador/entidades/${activo.entidad_id}/ambientes/${activo.ambiente_id}`
+        : null;
+    if (href) router.push(href);
+  }
 
   function handleSuccess() {
     setEditActivo(null);
@@ -156,67 +152,58 @@ export function InventarioGlobalPanel({
     setBusqueda("");
   }
 
-  const exportMeta = isAdmin
-    ? {
-        ambienteNombre: "Todos los ambientes",
-        entidadNombre: fixedEntidadNombre ?? "Entidad",
-      }
-    : {
-        ambienteNombre: "Inventario global",
-        entidadNombre: "Todas las entidades",
-      };
+  if (editActivo) {
+    const editTitle =
+      isAdmin && editActivo.estado_registro !== "PREREGISTRADO"
+        ? "Editar ubicación"
+        : isAdmin && editActivo.estado_registro === "PREREGISTRADO"
+          ? "Editar preregistro"
+          : "Editar activo";
 
-  if (fichaActivo) {
-    const puedeEditarFicha =
-      !isAdmin || fichaActivo.estado_registro === "PREREGISTRADO";
+    const editBreadcrumbs: PanelBreadcrumbItem[] = isAdmin
+      ? [
+          { label: "Inventario global", href: "/admin/inventario" },
+          { label: editActivo.nombre, onClick: () => setEditActivo(null) },
+          { label: editTitle },
+        ]
+      : [
+          { label: "Inventario global", onClick: () => setEditActivo(null) },
+          { label: editActivo.nombre },
+          { label: editTitle },
+        ];
 
     return (
-      <div className="space-y-4">
-        <PanelPageHeader breadcrumbs={fichaBreadcrumbs} />
-        <ActivoFichaView
-          activo={fichaActivo}
-          onEdit={puedeEditarFicha ? () => setEditActivo(fichaActivo) : undefined}
-          puedeDarDeBaja={!isAdmin}
-          puedeValidarPreregistro={!isAdmin}
-          editarLabel={
-            isAdmin ? labelEditarAdmin(fichaActivo) : undefined
-          }
+      <div className="space-y-5">
+        <PanelPageHeader breadcrumbs={editBreadcrumbs} />
+        <ActivoEditScopeNav
+          scope={editScope}
+          ejemplaresTotal={ejemplaresTotal}
+          onScopeChange={setEditScope}
         />
-
-        <Dialog
-          open={!!editActivo}
-          onClose={() => setEditActivo(null)}
-          title={
-            editActivo && isAdmin
-              ? editActivo.estado_registro === "PREREGISTRADO"
-                ? "Editar preregistro"
-                : "Editar ubicación"
-              : "Editar activo"
+        <ActivoForm
+          entidades={entidades}
+          fixedEntidadId={editActivo.entidad_id}
+          fixedSedeId={isAdmin ? undefined : editActivo.sede_id ?? undefined}
+          fixedAmbienteId={isAdmin ? undefined : editActivo.ambiente_id ?? undefined}
+          activo={editActivo}
+          mode="edit"
+          editScope={editScope}
+          ejemplaresTotal={ejemplaresTotal}
+          submitLabel={
+            editScope === "bulk" && ejemplaresTotal > 1
+              ? `Guardar en ${ejemplaresTotal} ejemplares`
+              : isAdmin
+                ? editActivo.estado_registro === "PREREGISTRADO"
+                  ? "Guardar preregistro"
+                  : "Guardar ubicación"
+                : "Guardar cambios"
           }
-          className={panelModalClass}
-        >
-          {editActivo && (
-            <ActivoForm
-              entidades={entidades}
-              fixedEntidadId={editActivo.entidad_id}
-              fixedSedeId={isAdmin ? undefined : editActivo.sede_id ?? undefined}
-              fixedAmbienteId={isAdmin ? undefined : editActivo.ambiente_id ?? undefined}
-              activo={editActivo}
-              mode="edit"
-              submitLabel={
-                isAdmin
-                  ? editActivo.estado_registro === "PREREGISTRADO"
-                    ? "Guardar preregistro"
-                    : "Guardar ubicación"
-                  : "Guardar cambios"
-              }
-              soloUbicacion={isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
-              asignaCodigoInmediato={!isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
-              variant="modal"
-              onSuccess={handleSuccess}
-            />
-          )}
-        </Dialog>
+          soloUbicacion={isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
+          asignaCodigoInmediato={!isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
+          variant="page"
+          onSuccess={handleSuccess}
+          onCancel={() => setEditActivo(null)}
+        />
       </div>
     );
   }
@@ -230,19 +217,17 @@ export function InventarioGlobalPanel({
         </p>
       )}
       <div className="flex min-h-0 min-w-0 flex-col gap-2">
-        <div className="sticky top-0 z-20 shrink-0 space-y-2 rounded-lg border border-border/60 bg-card/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/90">
+        <div className="panel-sticky-toolbar">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="text-base font-semibold leading-tight text-foreground">
-                Inventario global
-              </h1>
-              <p className="hidden text-xs text-muted-foreground md:block">
+            <div className="panel-toolbar-title min-w-0">
+              <h1 className="panel-toolbar-heading text-foreground">Inventario global</h1>
+              <p className="panel-toolbar-subtitle">
                 {isAdmin
                   ? `Todos los activos de ${fixedEntidadNombre ?? "su entidad"} en todos los ambientes`
                   : "Consulta y gestión de activos en todas las entidades"}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="panel-toolbar-actions">
               <PanelCountLabel count={filtrados.length} singular="activo" plural="activos" />
               {!isAdmin && (
                 <Button
@@ -255,19 +240,10 @@ export function InventarioGlobalPanel({
                   Importar activos
                 </Button>
               )}
-              <InventarioExportButtons
-                activos={filtrados}
-                sinValores={isAdmin}
-                meta={exportMeta}
-              />
             </div>
           </div>
 
-          <div
-            className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-2"
-            role="tablist"
-            aria-label="Estado del activo"
-          >
+          <div className="panel-filter-row" role="tablist" aria-label="Estado del activo">
             <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
               {FILTROS_ESTADO.map((f) => (
                 <button
@@ -349,7 +325,7 @@ export function InventarioGlobalPanel({
         <ActivosInventarioExcelView
           activos={filtrados}
           onEditActivo={setEditActivo}
-          onOpenFicha={setFichaActivo}
+          onIrAmbiente={irAlAmbiente}
           puedeDarDeBaja={!isAdmin}
           puedeValidarPreregistro={!isAdmin}
           modoAdmin={isAdmin}
@@ -357,41 +333,6 @@ export function InventarioGlobalPanel({
           editarLabel={isAdmin ? undefined : "Editar activo"}
         />
       </div>
-
-      <Dialog
-        open={!!editActivo}
-        onClose={() => setEditActivo(null)}
-        title={
-          editActivo && isAdmin
-            ? editActivo.estado_registro === "PREREGISTRADO"
-              ? "Editar preregistro"
-              : "Editar ubicación"
-            : "Editar activo"
-        }
-        className={panelModalClass}
-      >
-        {editActivo && (
-          <ActivoForm
-            entidades={entidades}
-            fixedEntidadId={editActivo.entidad_id}
-            fixedSedeId={isAdmin ? undefined : editActivo.sede_id ?? undefined}
-            fixedAmbienteId={isAdmin ? undefined : editActivo.ambiente_id ?? undefined}
-            activo={editActivo}
-            mode="edit"
-            submitLabel={
-              isAdmin
-                ? editActivo.estado_registro === "PREREGISTRADO"
-                  ? "Guardar preregistro"
-                  : "Guardar ubicación"
-                : "Guardar cambios"
-            }
-            soloUbicacion={isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
-            asignaCodigoInmediato={!isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
-            variant="modal"
-            onSuccess={handleSuccess}
-          />
-        )}
-      </Dialog>
 
       {!isAdmin && (
         <InventarioImportDialog

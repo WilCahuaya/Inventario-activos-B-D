@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { ActivosAmbientePanel } from "@/components/panel/ActivosAmbientePanel";
 import { listActivosPorAmbiente } from "@/lib/actions/activos";
+import { resolveFichaAsignacionExportMeta } from "@/lib/actions/ficha-asignacion-meta";
 import { getEntidad } from "@/lib/actions/entidades";
 import { getAmbiente } from "@/lib/actions/ubicacion";
 import { getProfile } from "@/lib/auth/profile";
@@ -26,6 +27,12 @@ export default async function AdminAmbienteInventarioPage({
     notFound();
   }
 
+  const fichaExportMeta = await resolveFichaAsignacionExportMeta(
+    entidad,
+    ambienteData.ambiente,
+    ambienteData.sede_nombre,
+  );
+
   return (
     <ActivosAmbientePanel
       mode="admin"
@@ -35,7 +42,11 @@ export default async function AdminAmbienteInventarioPage({
       ambienteNombre={ambienteData.ambiente.nombre}
       ambienteResponsable={ambienteData.ambiente.responsable}
       sedeId={ambienteData.ambiente.sede_id}
+      fichaExportMeta={fichaExportMeta}
+      esAmbientePreregistro={ambienteData.ambiente.es_preregistro}
       activos={activos}
+      usuarioNombre={profile.nombre}
+      usuarioEmail={profile.email}
     />
   );
 }

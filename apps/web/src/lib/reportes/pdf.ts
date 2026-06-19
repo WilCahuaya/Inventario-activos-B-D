@@ -1,11 +1,36 @@
 import { formatFechaISOToDDMMYYYY, formatMonedaPE } from "@inventario/types";
 import { buildInstitutionalHeader } from "./header-meta";
+import {
+  addAmbienteDisenoHeaderPdf,
+  addFichaAsignacionFirmasPdf,
+  ambienteDisenoExportFilename,
+  esReporteAmbienteDiseno,
+  FICHA_TABLE_ALT_ROW_RGB,
+  FICHA_TABLE_HEAD_RGB,
+  measureAmbienteDisenoHeaderEndY,
+  reporteAmbienteIncluyeFirmas,
+} from "./ficha-asignacion";
+import {
+  addEntidadDisenoHeaderPdf,
+  addEntidadInventarioFirmasPdf,
+  entidadDisenoExportFilename,
+  esReporteEntidadDiseno,
+  measureEntidadDisenoHeaderEndY,
+  reporteEntidadIncluyeFirmas,
+} from "./inventario-entidad-diseno";
 import { addPdfLogoWatermark, getBrandLogoPngDataUrl } from "./logo-watermark";
 import {
+  buildPdfTableHead,
   buildReporteRows,
   buildValorizacionTotalesFila,
+  buildValorizacionTotalesFilaPdf,
+  esReporteValorizadoTablaAmbiente,
+  esReporteDisenoExtendido,
   esReporteInventarioValorizado,
-  reporteHeaders,
+  reporteDisenoPdfColumnStyles,
+  reporteHeaderMultilinea,
+  reporteIncluyeResumenClasificacion,
+  reporteTableHeaderDefs,
   reporteTitulo,
 } from "./rows";
 import {
@@ -94,44 +119,6 @@ function addPageNumbers(doc: JsPDFDoc) {
   }
 }
 
-function addActaFirmas(doc: JsPDFDoc, y: number) {
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const margin = 14;
-  const colGap = 10;
-  const colWidth = (pageW - margin * 2 - colGap * 2) / 3;
-  let startY = y + 10;
-  if (startY > pageH - 38) {
-    doc.addPage();
-    startY = 30;
-  }
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text("Conformidad y firmas", margin, startY);
-  startY += 9;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  const bloques = ["Contador / Auditor", "Representante de la entidad", "Fecha"];
-  const labelY = startY;
-  const lineY = startY + 12;
-
-  bloques.forEach((titulo, index) => {
-    const x = margin + index * (colWidth + colGap);
-    doc.text(titulo, x, labelY, { maxWidth: colWidth });
-    doc.text("_________________________", x, lineY, { maxWidth: colWidth });
-  });
-
-  doc.setFontSize(8);
-  doc.text(
-    "Las partes declaran haber verificado físicamente los bienes detallados en el presente acta.",
-    margin,
-    lineY + 12,
-    { maxWidth: pageW - margin * 2 },
-  );
-}
-
 export async function exportReportePdf(
   activos: ActivoReporte[],
   ctx: ReporteContexto,
@@ -141,11 +128,23 @@ export async function exportReportePdf(
 
   const def = REPORTES.find((r) => r.id === ctx.reporteId)!;
   const fechaCorte = new Date(ctx.fechaCorte + "T12:00:00");
+  const useAmbienteDiseno = esReporteAmbienteDiseno(ctx.reporteId);
+  const useEntidadDiseno = esReporteEntidadDiseno(ctx.reporteId);
+  const useDisenoExtendido = esReporteDisenoExtendido(ctx.reporteId);
   const titulo = reporteTitulo(ctx.reporteId, def.valorizado);
-  const headers = reporteHeaders(ctx.reporteId, def.valorizado);
+  const headerDefs = reporteTableHeaderDefs(ctx.reporteId, def.valorizado);
+  const pdfHead = buildPdfTableHead(headerDefs);
+  const multilineHead = reporteHeaderMultilinea(headerDefs);
   const rows = buildReporteRows(activos, ctx.reporteId, def.valorizado, fechaCorte);
+  const tableFontSize = useDisenoExtendido ? (def.valorizado ? 6 : 7) : 6;
+  const tableCellPadding = useDisenoExtendido ? (def.valorizado ? 1 : 1.5) : 1;
+  const ambienteValorizado = esReporteValorizadoTablaAmbiente(ctx.reporteId);
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
   let logoPng: string | null = null;
   try {
     logoPng = await getBrandLogoPngDataUrl();
@@ -153,29 +152,80 @@ export async function exportReportePdf(
     /* sin marca de agua si falla la rasterización del SVG */
   }
 
-  const startY = addInstitutionalHeader(doc, ctx, titulo, activos.length);
+  const startY = useAmbienteDiseno
+    ? measureAmbienteDisenoHeaderEndY(ctx)
+    : useEntidadDiseno
+      ? measureEntidadDisenoHeaderEndY()
+      : addInstitutionalHeader(doc, ctx, titulo, activos.length);
   const inventarioValorizado = esReporteInventarioValorizado(ctx.reporteId);
   const totales =
     inventarioValorizado && activos.length > 0
       ? buildValorizacionTotales(activos, fechaCorte)
       : null;
 
+  const totalesFila =
+    totales != null
+      ? buildValorizacionTotalesFila(headerDefs, totales, ctx.reporteId)
+      : null;
+
+  const tableMargin = { left: 10, right: 10, top: 10, bottom: 14 };
+  const pageW = doc.internal.pageSize.getWidth();
+  const tableWidth = pageW - tableMargin.left - tableMargin.right;
+
   autoTable(doc, {
-    head: [[...headers]],
+    head: pdfHead,
     body: rows,
-    foot: totales ? [buildValorizacionTotalesFila(headers, totales)] : undefined,
+    foot: totalesFila ? [buildValorizacionTotalesFilaPdf(totalesFila)] : undefined,
     showFoot: totales ? "lastPage" : undefined,
+    showHead: "everyPage",
     startY,
-    styles: { fontSize: 6, cellPadding: 1 },
-    headStyles: { fillColor: [30, 64, 120], fontSize: 6 },
-    footStyles: TOTAL_ROW_STYLES,
-    margin: { left: 10, right: 10, top: 8, bottom: 14 },
+    tableWidth: useDisenoExtendido ? tableWidth : undefined,
+    columnStyles: useDisenoExtendido
+      ? reporteDisenoPdfColumnStyles(tableWidth, ctx.reporteId)
+      : undefined,
+    didParseCell: (data) => {
+      if (data.section === "head" && useDisenoExtendido) {
+        data.cell.styles.fillColor = FICHA_TABLE_HEAD_RGB;
+        data.cell.styles.textColor = [255, 255, 255];
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+    styles: {
+      fontSize: tableFontSize,
+      cellPadding: tableCellPadding,
+      lineColor: [210, 210, 210],
+      lineWidth: useDisenoExtendido ? { top: 0.1, bottom: 0.1, left: 0, right: 0 } : 0.1,
+    },
+    headStyles: {
+      fillColor: useDisenoExtendido ? FICHA_TABLE_HEAD_RGB : [30, 64, 120],
+      fontSize: ambienteValorizado ? 5.5 : tableFontSize,
+      textColor: [255, 255, 255],
+      halign: "center",
+      valign: "middle",
+      minCellHeight: useDisenoExtendido ? (multilineHead ? 11 : 8) : undefined,
+      cellPadding: ambienteValorizado ? { top: 1.5, bottom: 1.5, left: 0.8, right: 0.8 } : tableCellPadding,
+      lineWidth: useDisenoExtendido ? { top: 0, bottom: 0.1, left: 0, right: 0 } : 0.1,
+    },
+    alternateRowStyles: useDisenoExtendido ? { fillColor: FICHA_TABLE_ALT_ROW_RGB } : undefined,
+    footStyles: {
+      ...TOTAL_ROW_STYLES,
+      halign: ambienteValorizado ? "center" : "left",
+    },
+    margin: tableMargin,
   });
+
+  if (useAmbienteDiseno) {
+    doc.setPage(1);
+    addAmbienteDisenoHeaderPdf(doc, ctx, activos.length);
+  } else if (useEntidadDiseno) {
+    doc.setPage(1);
+    addEntidadDisenoHeaderPdf(doc, ctx, activos.length);
+  }
 
   const finalY = (doc as JsPDFDoc & { lastAutoTable?: { finalY: number } }).lastAutoTable
     ?.finalY;
 
-  if (def.valorizado && activos.length > 0) {
+  if (reporteIncluyeResumenClasificacion(ctx.reporteId) && activos.length > 0) {
     const resumen = buildClasificacionResumen(activos, fechaCorte);
     const totalesResumen = totales ?? buildValorizacionTotales(activos, fechaCorte);
     const resumenY = (finalY ?? startY) + 8;
@@ -203,19 +253,29 @@ export async function exportReportePdf(
     });
   }
 
-  if (ctx.reporteId === "acta_inventario") {
-    const actaY =
+  if (useAmbienteDiseno && reporteAmbienteIncluyeFirmas(ctx.reporteId)) {
+    const firmasY =
       (doc as JsPDFDoc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
       startY;
-    addActaFirmas(doc, actaY);
+    addFichaAsignacionFirmasPdf(doc, firmasY, ctx);
+  } else if (reporteEntidadIncluyeFirmas(ctx.reporteId)) {
+    const firmasY =
+      (doc as JsPDFDoc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+      startY;
+    addEntidadInventarioFirmasPdf(doc, firmasY, ctx);
   }
 
   if (logoPng) {
     addPdfLogoWatermark(doc, logoPng);
   }
-  addPageNumbers(doc);
+  if (!useDisenoExtendido) {
+    addPageNumbers(doc);
+  }
 
-  const slug = slugFilename(ctx.ambienteNombre ?? ctx.entidadNombre);
-  const fecha = ctx.fechaGeneracion.toISOString().slice(0, 10);
-  doc.save(`reporte-${ctx.reporteId}-${slug}-${fecha}.pdf`);
+  const baseName = useAmbienteDiseno
+    ? ambienteDisenoExportFilename(ctx)
+    : useEntidadDiseno
+      ? entidadDisenoExportFilename(ctx)
+      : `reporte-${ctx.reporteId}-${slugFilename(ctx.ambienteNombre ?? ctx.entidadNombre)}-${ctx.fechaGeneracion.toISOString().slice(0, 10)}`;
+  doc.save(`${baseName}.pdf`);
 }

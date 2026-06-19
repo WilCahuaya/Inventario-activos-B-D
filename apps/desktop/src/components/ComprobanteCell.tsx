@@ -14,7 +14,7 @@ export function ComprobanteCell({ activo }: ComprobanteCellProps) {
   if (!serie && !tienePdf) {
     return (
       <td
-        className={`border-b border-r border-border/40 px-1.5 py-2 text-center ${cpTextClass} text-muted-foreground last:border-r-0`}
+        className={`border-b border-r border-border/40 px-3 py-2 text-center ${cpTextClass} text-muted-foreground last:border-r-0`}
       >
         SIN CP
       </td>
@@ -22,7 +22,7 @@ export function ComprobanteCell({ activo }: ComprobanteCellProps) {
   }
 
   return (
-    <td className="border-b border-r border-border/40 px-1.5 py-2 text-center last:border-r-0">
+    <td className="border-b border-r border-border/40 px-3 py-2 text-center last:border-r-0">
       <ComprobanteInline activo={activo} className={cpTextClass} />
     </td>
   );

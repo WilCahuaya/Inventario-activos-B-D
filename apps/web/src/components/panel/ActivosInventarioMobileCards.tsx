@@ -3,15 +3,12 @@
 import type { Activo } from "@inventario/types";
 import {
   buildDescripcionBien,
-  calcDepreciacionAcumulada,
-  calcPeriodoMeses,
-  calcValorNeto,
-  categoriaBienCorto,
-  estadoBienLabel,
   formatCorrelativoDisplay,
-  formatFechaISOToDDMMYYYY,
+  formatFechaISOToCortoES,
   formatMonedaPE,
+  categoriaBienLetra,
 } from "@inventario/types";
+import { EstadoBienBadge, inventarioDepreciacionFila } from "@inventario/ui/panel";
 import { ActivoAccionesBar } from "./ActivoAccionesBar";
 import { ComprobanteInline } from "./ComprobanteInline";
 import { panelCardClass } from "./panel-ui";
@@ -19,7 +16,7 @@ import { panelCardClass } from "./panel-ui";
 interface ActivosInventarioMobileCardsProps {
   activos: Activo[];
   onEditActivo: (activo: Activo) => void;
-  onOpenFicha: (activo: Activo) => void;
+  onIrAmbiente?: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
   editarLabel?: string;
@@ -37,10 +34,20 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+function ValorCardItem({ activo }: { activo: Activo }) {
+  const esMercado = activo.valor_es_mercado;
+  const monto = activo.valor_adquisicion;
+  if (monto == null) return <InfoItem label="Precio" />;
+  const etiqueta = esMercado ? "VM" : "PA";
+  return (
+    <InfoItem label="Precio" value={`${etiqueta} S/ ${formatMonedaPE(monto)}`} />
+  );
+}
+
 export function ActivosInventarioMobileCards({
   activos,
   onEditActivo,
-  onOpenFicha,
+  onIrAmbiente,
   puedeDarDeBaja = true,
   puedeValidarPreregistro = false,
   editarLabel,
@@ -67,49 +74,42 @@ export function ActivosInventarioMobileCards({
           activo.medidas,
         );
         const inactivo = activo.estado_registro === "DADO_DE_BAJA";
-        const periodo = calcPeriodoMeses(activo.fecha_adquisicion);
-        const depAcum = calcDepreciacionAcumulada(
-          activo.valor_adquisicion,
-          activo.vida_util_meses,
-          periodo,
-          inactivo,
-        );
-        const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum, inactivo);
-        const precioAdq = !activo.valor_es_mercado ? activo.valor_adquisicion : null;
-        const valorMercado = activo.valor_es_mercado ? activo.valor_adquisicion : null;
+        const { valorNeto } = inventarioDepreciacionFila(activo, inactivo);
         const preregistrado = activo.estado_registro === "PREREGISTRADO";
 
         return (
           <article
             key={activo.id}
-            className={`${panelCardClass} p-4 ${inactivo ? "opacity-60" : ""} ${
-              preregistrado ? "border-amber-500/40 bg-amber-500/5" : ""
+            className={`${panelCardClass} p-4 ${
+              inactivo
+                ? "border-red-500/40 bg-red-500/5"
+                : preregistrado
+                  ? "border-amber-500/40 bg-amber-500/5"
+                  : ""
             }`}
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-muted-foreground">
-                  #{index + 1} · {categoriaBienCorto(activo.categoria)} ·{" "}
-                  {preregistrado ? "Preregistrado" : formatCorrelativoDisplay(activo.correlativo)}
+                  #{index + 1} · {categoriaBienLetra(activo.categoria)} ·{" "}
+                  {inactivo
+                    ? "Dado de baja"
+                    : preregistrado
+                      ? "Preregistrado"
+                      : formatCorrelativoDisplay(activo.correlativo)}
                 </p>
-                <h3 className="mt-1 text-base font-semibold leading-snug text-foreground">
+                <h3
+                  className={`mt-1 text-base font-semibold leading-snug text-foreground ${
+                    inactivo ? "line-through decoration-red-400/60" : ""
+                  }`}
+                >
                   {activo.nombre}
                 </h3>
                 <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                   {activo.codigo_catalogo}
                 </p>
               </div>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  activo.estado_bien === "BUENO"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : activo.estado_bien === "REGULAR"
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-red-100 text-red-700"
-                }`}
-              >
-                {estadoBienLabel(activo.estado_bien)}
-              </span>
+              <EstadoBienBadge estado={activo.estado_bien} />
             </div>
 
             {descripcion && (
@@ -117,18 +117,11 @@ export function ActivosInventarioMobileCards({
             )}
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <InfoItem label="Fecha adq." value={formatFechaISOToDDMMYYYY(activo.fecha_adquisicion)} />
               <InfoItem
-                label="Precio / Mercado"
-                value={
-                  precioAdq != null
-                    ? `S/ ${formatMonedaPE(precioAdq)}`
-                    : valorMercado != null
-                      ? `Mercado S/ ${formatMonedaPE(valorMercado)}`
-                      : undefined
-                }
+                label="Fecha adq."
+                value={formatFechaISOToCortoES(activo.fecha_adquisicion)}
               />
-              <InfoItem label="% Deprec." value={activo.depreciacion} />
+              <ValorCardItem activo={activo} />
               <InfoItem
                 label="Valor neto"
                 value={valorNeto != null ? `S/ ${formatMonedaPE(valorNeto)}` : undefined}
@@ -154,7 +147,7 @@ export function ActivosInventarioMobileCards({
               <ActivoAccionesBar
                 activo={activo}
                 onEdit={onEditActivo}
-                onOpenFicha={onOpenFicha}
+                onIrAmbiente={onIrAmbiente}
                 puedeDarDeBaja={puedeDarDeBaja}
                 puedeValidarPreregistro={puedeValidarPreregistro}
                 editarLabel={editarLabel}

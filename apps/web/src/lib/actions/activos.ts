@@ -7,6 +7,8 @@ import {
   type ActivosSimilaresPreview,
   type CreateActivosSimilaresResult,
   type EjemplaresSimilaresResumen,
+  type UpdateActivosSimilaresInput,
+  type UpdateActivosSimilaresResult,
 } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
@@ -37,6 +39,9 @@ export interface CreateActivoInput {
   vida_util_meses?: number;
   sede_id?: string;
   ambiente_id?: string;
+  posible_ambiente_id?: string | null;
+  /** Solo contador: REGISTRADO = alta directa; omitir o PREREGISTRADO = preregistrar */
+  estado_registro?: EstadoRegistro;
   comprobante_serie?: string;
 }
 
@@ -53,7 +58,14 @@ export interface ActivoListRow {
   entidad_nombre?: string;
   sede_nombre?: string;
   ambiente_nombre?: string;
+  posible_ambiente_nombre?: string;
 }
+
+const ACTIVO_SELECT =
+  "*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre)";
+
+const ACTIVO_SELECT_SIN_ENTIDAD =
+  "*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre)";
 
 export async function previewCodigoBarras(entidadId: string, codigoCatalogo: string) {
   const profile = await getProfile();
@@ -75,17 +87,21 @@ export async function createActivo(input: CreateActivoInput) {
 
   const supabase = await createClient();
 
+  const esAdminEntidad = profile.rol === "ADMIN_ENTIDAD";
+  const esPreregistro = esAdminEntidad || input.estado_registro !== "REGISTRADO";
+
   let responsable = input.responsable?.trim() || null;
-  if (!responsable && input.ambiente_id) {
+  const ambienteResponsableId = esPreregistro
+    ? input.posible_ambiente_id
+    : input.ambiente_id;
+  if (!responsable && ambienteResponsableId) {
     const { data: ambiente } = await supabase
       .from("ambientes")
       .select("responsable")
-      .eq("id", input.ambiente_id)
+      .eq("id", ambienteResponsableId)
       .maybeSingle();
     responsable = ambiente?.responsable?.trim() || null;
   }
-
-  const esAdminEntidad = profile.rol === "ADMIN_ENTIDAD";
 
   const payload: Record<string, unknown> = {
     entidad_id: esAdminEntidad ? profile.entidad_id! : input.entidad_id,
@@ -109,9 +125,21 @@ export async function createActivo(input: CreateActivoInput) {
     valor_adquisicion: input.valor_adquisicion ?? null,
     valor_es_mercado: input.valor_es_mercado ?? false,
     fecha_adquisicion: input.fecha_adquisicion || null,
-    sede_id: input.sede_id || null,
-    ambiente_id: input.ambiente_id || null,
   };
+
+  if (esPreregistro) {
+    payload.posible_ambiente_id = input.posible_ambiente_id || null;
+    if (profile.rol === "CONTADOR") {
+      payload.estado_registro = "PREREGISTRADO";
+    }
+  } else {
+    payload.estado_registro = "REGISTRADO";
+    payload.sede_id = input.sede_id || null;
+    payload.ambiente_id = input.ambiente_id || null;
+    if (!payload.sede_id || !payload.ambiente_id) {
+      return { error: "Seleccione sede y ambiente para registrar el activo." };
+    }
+  }
 
   if (esAdminEntidad) {
     payload.depreciacion = null;
@@ -167,7 +195,7 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
 
   const { data: existing, error: fetchError } = await supabase
     .from("activos")
-    .select("entidad_id, ambiente_id, estado_registro")
+    .select("entidad_id, ambiente_id, posible_ambiente_id, estado_registro")
     .eq("id", activoId)
     .maybeSingle();
 
@@ -182,11 +210,16 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
   const ambienteId = input.ambiente_id ?? existing.ambiente_id;
   let responsable: string | null = null;
 
-  if (ambienteId) {
+  const responsableAmbienteId =
+    profile.rol === "ADMIN_ENTIDAD" && existing.estado_registro === "PREREGISTRADO"
+      ? input.posible_ambiente_id ?? existing.posible_ambiente_id
+      : ambienteId;
+
+  if (responsableAmbienteId) {
     const { data: ambiente } = await supabase
       .from("ambientes")
       .select("responsable")
-      .eq("id", ambienteId)
+      .eq("id", responsableAmbienteId)
       .maybeSingle();
     responsable = ambiente?.responsable?.trim() || null;
   }
@@ -194,30 +227,6 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
   let payload: Record<string, unknown>;
 
   if (profile.rol === "ADMIN_ENTIDAD") {
-    if (!input.sede_id || !ambienteId) {
-      return { error: "Seleccione sede y ambiente." };
-    }
-
-    const { data: sede } = await supabase
-      .from("sedes")
-      .select("entidad_id")
-      .eq("id", input.sede_id)
-      .maybeSingle();
-
-    if (!sede || sede.entidad_id !== profile.entidad_id) {
-      return { error: "La sede seleccionada no pertenece a su entidad." };
-    }
-
-    const { data: ambiente } = await supabase
-      .from("ambientes")
-      .select("sede_id")
-      .eq("id", ambienteId)
-      .maybeSingle();
-
-    if (!ambiente || ambiente.sede_id !== input.sede_id) {
-      return { error: "El ambiente no pertenece a la sede seleccionada." };
-    }
-
     if (existing.estado_registro === "PREREGISTRADO") {
       const codigo = input.codigo_catalogo.trim();
       const nombre = input.nombre.trim();
@@ -249,11 +258,34 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         fecha_adquisicion: input.fecha_adquisicion || null,
         vida_util_meses: null,
         comprobante_serie: input.comprobante_serie?.trim() || null,
-        sede_id: input.sede_id,
-        ambiente_id: ambienteId,
+        posible_ambiente_id: input.posible_ambiente_id ?? null,
         updated_by: profile.id,
       };
     } else {
+      if (!input.sede_id || !ambienteId) {
+        return { error: "Seleccione sede y ambiente." };
+      }
+
+      const { data: sede } = await supabase
+        .from("sedes")
+        .select("entidad_id")
+        .eq("id", input.sede_id)
+        .maybeSingle();
+
+      if (!sede || sede.entidad_id !== profile.entidad_id) {
+        return { error: "La sede seleccionada no pertenece a su entidad." };
+      }
+
+      const { data: ambiente } = await supabase
+        .from("ambientes")
+        .select("sede_id")
+        .eq("id", ambienteId)
+        .maybeSingle();
+
+      if (!ambiente || ambiente.sede_id !== input.sede_id) {
+        return { error: "El ambiente no pertenece a la sede seleccionada." };
+      }
+
       payload = {
         sede_id: input.sede_id,
         ambiente_id: ambienteId,
@@ -264,39 +296,69 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
   } else {
     responsable = input.responsable?.trim() || responsable;
 
-    payload = {
-      codigo_catalogo: input.codigo_catalogo.trim(),
-      nombre: input.nombre.trim(),
-      nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
-      descripcion: input.descripcion?.trim() || null,
-      caracteristicas: input.caracteristicas?.trim() || null,
-      categoria: input.categoria ?? "ACTIVO",
-      estado_bien: input.estado_bien ?? "BUENO",
-      marca: input.marca?.trim() || null,
-      modelo: input.modelo?.trim() || null,
-      serie: input.serie?.trim() || null,
-      color: input.color?.trim() || null,
-      medidas: input.medidas?.trim() || null,
-      medida_largo: input.medida_largo ?? null,
-      medida_ancho: input.medida_ancho ?? null,
-      medida_altura: input.medida_altura ?? null,
-      depreciacion: input.depreciacion?.trim() || null,
-      observacion: input.observacion?.trim() || null,
-      responsable,
-      valor_adquisicion: input.valor_adquisicion ?? null,
-      valor_es_mercado: input.valor_es_mercado ?? false,
-      fecha_adquisicion: input.fecha_adquisicion || null,
-      vida_util_meses: input.vida_util_meses ?? null,
-      sede_id: input.sede_id || null,
-      ambiente_id: ambienteId,
-      comprobante_serie: input.comprobante_serie?.trim() || null,
-      updated_by: profile.id,
-    };
+    if (existing.estado_registro === "PREREGISTRADO") {
+      payload = {
+        codigo_catalogo: input.codigo_catalogo.trim(),
+        nombre: input.nombre.trim(),
+        nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
+        descripcion: input.descripcion?.trim() || null,
+        caracteristicas: input.caracteristicas?.trim() || null,
+        categoria: input.categoria ?? "ACTIVO",
+        estado_bien: input.estado_bien ?? "BUENO",
+        marca: input.marca?.trim() || null,
+        modelo: input.modelo?.trim() || null,
+        serie: input.serie?.trim() || null,
+        color: input.color?.trim() || null,
+        medidas: input.medidas?.trim() || null,
+        medida_largo: input.medida_largo ?? null,
+        medida_ancho: input.medida_ancho ?? null,
+        medida_altura: input.medida_altura ?? null,
+        depreciacion: input.depreciacion?.trim() || null,
+        observacion: input.observacion?.trim() || null,
+        responsable,
+        valor_adquisicion: input.valor_adquisicion ?? null,
+        valor_es_mercado: input.valor_es_mercado ?? false,
+        fecha_adquisicion: input.fecha_adquisicion || null,
+        vida_util_meses: input.vida_util_meses ?? null,
+        comprobante_serie: input.comprobante_serie?.trim() || null,
+        posible_ambiente_id: input.posible_ambiente_id ?? null,
+        updated_by: profile.id,
+      };
+    } else {
+      payload = {
+        codigo_catalogo: input.codigo_catalogo.trim(),
+        nombre: input.nombre.trim(),
+        nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
+        descripcion: input.descripcion?.trim() || null,
+        caracteristicas: input.caracteristicas?.trim() || null,
+        categoria: input.categoria ?? "ACTIVO",
+        estado_bien: input.estado_bien ?? "BUENO",
+        marca: input.marca?.trim() || null,
+        modelo: input.modelo?.trim() || null,
+        serie: input.serie?.trim() || null,
+        color: input.color?.trim() || null,
+        medidas: input.medidas?.trim() || null,
+        medida_largo: input.medida_largo ?? null,
+        medida_ancho: input.medida_ancho ?? null,
+        medida_altura: input.medida_altura ?? null,
+        depreciacion: input.depreciacion?.trim() || null,
+        observacion: input.observacion?.trim() || null,
+        responsable,
+        valor_adquisicion: input.valor_adquisicion ?? null,
+        valor_es_mercado: input.valor_es_mercado ?? false,
+        fecha_adquisicion: input.fecha_adquisicion || null,
+        vida_util_meses: input.vida_util_meses ?? null,
+        sede_id: input.sede_id || null,
+        ambiente_id: ambienteId,
+        comprobante_serie: input.comprobante_serie?.trim() || null,
+        updated_by: profile.id,
+      };
 
-    const codigo = payload.codigo_catalogo as string;
-    const nombre = payload.nombre as string;
-    if (!codigo || !nombre) {
-      return { error: "Código catálogo y nombre son obligatorios." };
+      const codigo = payload.codigo_catalogo as string;
+      const nombre = payload.nombre as string;
+      if (!codigo || !nombre) {
+        return { error: "Código catálogo y nombre son obligatorios." };
+      }
     }
   }
 
@@ -444,6 +506,50 @@ export async function darDeBajaActivo(activoId: string, motivo: string) {
   return { success: true };
 }
 
+export async function recuperarActivo(activoId: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") {
+    return { error: "Solo el contador puede recuperar activos dados de baja." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id, estado_registro, codigo_barras")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (existing.estado_registro !== "DADO_DE_BAJA") {
+    return { error: "El activo no está dado de baja." };
+  }
+
+  const nuevoEstado: EstadoRegistro = existing.codigo_barras?.trim()
+    ? "REGISTRADO"
+    : "PREREGISTRADO";
+
+  const { error } = await supabase
+    .from("activos")
+    .update({
+      estado_registro: nuevoEstado,
+      motivo_baja: null,
+      updated_by: profile.id,
+    })
+    .eq("id", activoId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  return { success: true, estado_registro: nuevoEstado };
+}
+
 export async function previewActivosSimilares(
   entidadId: string,
   codigoCatalogo: string,
@@ -475,9 +581,15 @@ export async function previewActivosSimilares(
   };
 }
 
+export type CreateActivosSimilaresUbicacion = {
+  sedeId: string;
+  ambienteId: string;
+};
+
 export async function createActivosSimilares(
   activoId: string,
   cantidad: number,
+  ubicacion?: CreateActivosSimilaresUbicacion,
 ): Promise<{ data?: CreateActivosSimilaresResult; error?: string }> {
   const profile = await getProfile();
   if (!profile) return { error: "Sesión no válida." };
@@ -503,15 +615,32 @@ export async function createActivosSimilares(
     return { error: "No puede duplicar un activo dado de baja." };
   }
 
-  const { data, error } = await supabase.rpc("create_activos_similares", {
+  const rpcParams: {
+    p_activo_id: string;
+    p_cantidad: number;
+    p_sede_id?: string;
+    p_ambiente_id?: string;
+  } = {
     p_activo_id: activoId,
     p_cantidad: qty,
-  });
+  };
+  if (ubicacion) {
+    rpcParams.p_sede_id = ubicacion.sedeId;
+    rpcParams.p_ambiente_id = ubicacion.ambienteId;
+  }
+
+  const { data, error } = await supabase.rpc("create_activos_similares", rpcParams);
 
   if (error) return { error: error.message };
 
-  const result = data as CreateActivosSimilaresResult;
+  const result = data as CreateActivosSimilaresResult & {
+    ambiente_id?: string | null;
+  };
   revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  const destinoAmbienteId = result.ambiente_id ?? ubicacion?.ambienteId ?? existing.ambiente_id;
+  if (destinoAmbienteId && destinoAmbienteId !== existing.ambiente_id) {
+    revalidateActivoPaths(existing.entidad_id, destinoAmbienteId);
+  }
   return { data: result };
 }
 
@@ -539,6 +668,63 @@ export async function getEjemplaresSimilaresResumen(
   };
 }
 
+function buildActivosSimilaresPatch(
+  input: UpdateActivosSimilaresInput,
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) {
+      patch[key] = value;
+    }
+  }
+  return patch;
+}
+
+export async function updateActivosSimilares(
+  activoId: string,
+  input: UpdateActivosSimilaresInput,
+): Promise<{ data?: UpdateActivosSimilaresResult; error?: string }> {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+
+  const patch = buildActivosSimilaresPatch(input);
+  if (Object.keys(patch).length === 0) {
+    return { error: "No hay cambios para aplicar." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (profile.rol === "ADMIN_ENTIDAD" && existing.entidad_id !== profile.entidad_id) {
+    return { error: "No autorizado." };
+  }
+
+  const { data, error } = await supabase.rpc("update_activos_similares", {
+    p_activo_id: activoId,
+    p_patch: patch,
+  });
+
+  if (error) return { error: error.message };
+
+  const result = data as { actualizados?: number };
+  revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  const nuevoAmbienteId = (patch.ambiente_id as string | null | undefined) ?? existing.ambiente_id;
+  if (nuevoAmbienteId && nuevoAmbienteId !== existing.ambiente_id) {
+    revalidateActivoPaths(existing.entidad_id, nuevoAmbienteId);
+  }
+
+  return { data: { actualizados: result.actualizados ?? 0 } };
+}
+
 export async function listActivosPorAmbiente(ambienteId: string) {
   const profile = await getProfile();
   if (!profile) return [];
@@ -546,7 +732,7 @@ export async function listActivosPorAmbiente(ambienteId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("activos")
-    .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .select(ACTIVO_SELECT_SIN_ENTIDAD)
     .eq("ambiente_id", ambienteId)
     .order("created_at", { ascending: false });
 
@@ -561,12 +747,14 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
     const entidades = row.entidades as { nombre: string } | null;
     const sedes = row.sedes as { nombre: string } | null;
     const ambientes = row.ambientes as { nombre: string } | null;
-    const { entidades: _e, sedes: _s, ambientes: _a, ...activo } = row;
+    const posibleAmbiente = row.posible_ambiente as { nombre: string } | null;
+    const { entidades: _e, sedes: _s, ambientes: _a, posible_ambiente: _p, ...activo } = row;
     return {
       ...(activo as unknown as Activo),
       entidad_nombre: entidades?.nombre,
       sede_nombre: sedes?.nombre,
       ambiente_nombre: ambientes?.nombre,
+      posible_ambiente_nombre: posibleAmbiente?.nombre,
     };
   });
 }
@@ -576,10 +764,7 @@ export async function listActivos(entidadId?: string, filters?: ListActivosFilte
   if (!profile) return [];
 
   const supabase = await createClient();
-  let query = supabase
-    .from("activos")
-    .select("*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
-    .order("created_at", { ascending: false });
+  let query = supabase.from("activos").select(ACTIVO_SELECT).order("created_at", { ascending: false });
 
   if (profile.rol === "ADMIN_ENTIDAD") {
     query = query.eq("entidad_id", profile.entidad_id!);
@@ -606,13 +791,50 @@ export async function listActivos(entidadId?: string, filters?: ListActivosFilte
   return mapActivoRows(data as Record<string, unknown>[]);
 }
 
-export async function registrarActivo(activoId: string) {
+export async function registrarActivo(
+  activoId: string,
+  destino: { sedeId: string; ambienteId: string },
+) {
   await requireProfile("CONTADOR");
   const supabase = await createClient();
 
+  if (!destino.sedeId || !destino.ambienteId) {
+    return { error: "Seleccione sede y ambiente destino." };
+  }
+
+  const { data: ambienteDestino } = await supabase
+    .from("ambientes")
+    .select("id, sede_id, es_preregistro, responsable")
+    .eq("id", destino.ambienteId)
+    .maybeSingle();
+
+  if (!ambienteDestino || ambienteDestino.sede_id !== destino.sedeId) {
+    return { error: "El ambiente no pertenece a la sede seleccionada." };
+  }
+  if (ambienteDestino.es_preregistro) {
+    return { error: "Seleccione un ambiente real, no el de preregistros." };
+  }
+
+  const { data: existing } = await supabase
+    .from("activos")
+    .select("entidad_id, ambiente_id")
+    .eq("id", activoId)
+    .eq("estado_registro", "PREREGISTRADO")
+    .maybeSingle();
+
+  if (!existing) {
+    return { error: "Preregistro no encontrado o ya fue registrado." };
+  }
+
   const { error } = await supabase
     .from("activos")
-    .update({ estado_registro: "REGISTRADO" as EstadoRegistro })
+    .update({
+      estado_registro: "REGISTRADO" as EstadoRegistro,
+      sede_id: destino.sedeId,
+      ambiente_id: destino.ambienteId,
+      posible_ambiente_id: null,
+      responsable: ambienteDestino.responsable?.trim() || null,
+    })
     .eq("id", activoId)
     .eq("estado_registro", "PREREGISTRADO");
 
@@ -620,18 +842,8 @@ export async function registrarActivo(activoId: string) {
     return { error: error.message };
   }
 
-  const { data: activo } = await supabase
-    .from("activos")
-    .select("entidad_id, ambiente_id")
-    .eq("id", activoId)
-    .maybeSingle();
-
-  if (activo) {
-    revalidateActivoPaths(activo.entidad_id, activo.ambiente_id);
-  } else {
-    revalidatePath("/contador/inventario");
-    revalidatePath("/admin/activos");
-  }
+  revalidateActivoPaths(existing.entidad_id, existing.ambiente_id);
+  revalidateActivoPaths(existing.entidad_id, destino.ambienteId);
 
   return { success: true };
 }

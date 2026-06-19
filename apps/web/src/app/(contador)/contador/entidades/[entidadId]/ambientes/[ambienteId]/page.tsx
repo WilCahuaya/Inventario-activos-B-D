@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { ActivosAmbientePanel } from "@/components/panel/ActivosAmbientePanel";
 import { listActivosPorAmbiente } from "@/lib/actions/activos";
+import { resolveFichaAsignacionExportMeta } from "@/lib/actions/ficha-asignacion-meta";
 import { getEntidad } from "@/lib/actions/entidades";
 import { getAmbiente } from "@/lib/actions/ubicacion";
 import { requireProfile } from "@/lib/auth/profile";
@@ -10,8 +11,9 @@ export default async function AmbienteActivosPage({
 }: {
   params: Promise<{ entidadId: string; ambienteId: string }>;
 }) {
+  let profile;
   try {
-    await requireProfile("CONTADOR");
+    profile = await requireProfile("CONTADOR");
   } catch {
     redirect("/login");
   }
@@ -27,6 +29,12 @@ export default async function AmbienteActivosPage({
     notFound();
   }
 
+  const fichaExportMeta = await resolveFichaAsignacionExportMeta(
+    entidad,
+    ambienteData.ambiente,
+    ambienteData.sede_nombre,
+  );
+
   return (
     <ActivosAmbientePanel
       entidadId={entidadId}
@@ -35,7 +43,11 @@ export default async function AmbienteActivosPage({
       ambienteNombre={ambienteData.ambiente.nombre}
       ambienteResponsable={ambienteData.ambiente.responsable}
       sedeId={ambienteData.ambiente.sede_id}
+      fichaExportMeta={fichaExportMeta}
+      esAmbientePreregistro={ambienteData.ambiente.es_preregistro}
       activos={activos}
+      usuarioNombre={profile.nombre}
+      usuarioEmail={profile.email}
     />
   );
 }

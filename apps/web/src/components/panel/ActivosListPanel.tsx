@@ -113,9 +113,16 @@ export function ActivosListPanel({
                 />
                 {activo.estado_registro === "PREREGISTRADO" && (
                   <RegistrarActivoButton
+                    entidadId={activo.entidad_id}
                     activoId={activo.id}
                     nombre={activo.nombre}
                     codigoCatalogo={activo.codigo_catalogo}
+                    posibleAmbienteId={activo.posible_ambiente_id}
+                    posibleAmbienteNombre={
+                      "posible_ambiente_nombre" in activo
+                        ? (activo as { posible_ambiente_nombre?: string }).posible_ambiente_nombre
+                        : undefined
+                    }
                   />
                 )}
               </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { EntidadConConteo } from "@inventario/types";
 import {
   LABEL_PRINT_LAYOUT_FONTS,
+  entidadNombreRequiereEtiquetaOverride,
   suggestNombreEtiqueta,
 } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
@@ -43,10 +44,12 @@ import {
 function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadConConteo; requireAdmin?: boolean }) {
   const [nombre, setNombre] = useState(entidad?.nombre ?? "");
   const [nombreEtiqueta, setNombreEtiqueta] = useState(entidad?.nombre_etiqueta ?? "");
+  const [etiquetaManual, setEtiquetaManual] = useState(Boolean(entidad?.nombre_etiqueta?.trim()));
 
   useEffect(() => {
     setNombre(entidad?.nombre ?? "");
     setNombreEtiqueta(entidad?.nombre_etiqueta ?? "");
+    setEtiquetaManual(Boolean(entidad?.nombre_etiqueta?.trim()));
   }, [entidad]);
 
   const nombreEtiquetaSugerido = useMemo(
@@ -56,6 +59,21 @@ function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadCon
         : "",
     [nombre],
   );
+
+  const mostrarNombreEtiqueta = useMemo(
+    () => entidadNombreRequiereEtiquetaOverride(nombre),
+    [nombre],
+  );
+
+  useEffect(() => {
+    if (!mostrarNombreEtiqueta) {
+      setNombreEtiqueta("");
+      return;
+    }
+    if (!etiquetaManual && nombreEtiquetaSugerido) {
+      setNombreEtiqueta(nombreEtiquetaSugerido);
+    }
+  }, [mostrarNombreEtiqueta, nombreEtiquetaSugerido, etiquetaManual]);
 
   return (
     <>
@@ -69,35 +87,25 @@ function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadCon
           onChange={(e) => setNombre(e.target.value)}
         />
       </div>
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-end justify-between gap-2">
+      {mostrarNombreEtiqueta && (
+        <div className="space-y-2">
           <Label htmlFor="nombre_etiqueta">Nombre en etiqueta</Label>
-          {nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombre.trim().toUpperCase() && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setNombreEtiqueta(nombreEtiquetaSugerido)}
-            >
-              Usar sugerencia
-            </Button>
-          )}
+          <Input
+            id="nombre_etiqueta"
+            name="nombre_etiqueta"
+            value={nombreEtiqueta}
+            onChange={(e) => {
+              setEtiquetaManual(true);
+              setNombreEtiqueta(e.target.value);
+            }}
+            placeholder={nombreEtiquetaSugerido || "Texto corto para la etiqueta"}
+          />
+          <p className="text-xs text-muted-foreground">
+            La razón social es larga para la etiqueta 50×25 mm. Se sugiere un texto más corto; puede
+            editarlo si lo necesita.
+          </p>
         </div>
-        <Input
-          id="nombre_etiqueta"
-          name="nombre_etiqueta"
-          value={nombreEtiqueta}
-          onChange={(e) => setNombreEtiqueta(e.target.value)}
-          placeholder={
-            nombreEtiquetaSugerido && nombreEtiquetaSugerido !== nombre.trim().toUpperCase()
-              ? nombreEtiquetaSugerido
-              : "Si está vacío, se usa la razón social"
-          }
-        />
-        <p className="text-xs text-muted-foreground">
-          Opcional. Pie de la etiqueta 50×25 mm. Si está vacío, se usa la razón social.
-        </p>
-      </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="ruc">RUC</Label>
         <Input id="ruc" name="ruc" placeholder="20XXXXXXXXX" defaultValue={entidad?.ruc ?? ""} />
@@ -148,10 +156,14 @@ function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadCon
 }
 
 function entidadFromForm(form: FormData) {
-  const nombreEtiqueta = String(form.get("nombre_etiqueta") || "").trim();
+  const nombre = String(form.get("nombre"));
+  const nombreEtiquetaRaw = String(form.get("nombre_etiqueta") || "").trim();
+  const nombreEtiqueta = entidadNombreRequiereEtiquetaOverride(nombre)
+    ? nombreEtiquetaRaw || null
+    : null;
   return {
-    nombre: String(form.get("nombre")),
-    nombre_etiqueta: nombreEtiqueta || null,
+    nombre,
+    nombre_etiqueta: nombreEtiqueta,
     ruc: String(form.get("ruc") || ""),
     direccion: String(form.get("direccion") || ""),
     admin_nombre: String(form.get("admin_nombre") || ""),

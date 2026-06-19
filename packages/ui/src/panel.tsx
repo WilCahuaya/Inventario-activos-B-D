@@ -262,9 +262,30 @@ export function PanelToolbar({
 export { TABLE_PAGE_SIZE, TablePagination, useTablePagination } from "./table-pagination";
 export {
   INVENTARIO_TABLE_COL_COUNT,
+  INVENTARIO_TABLE_COMPACT_COL_COUNT,
   INVENTARIO_TABLE_COL_WIDTHS_PCT,
   inventarioTableColWidths,
+  inventarioTableColWidthsCompact,
 } from "./inventario-table-cols";
+export {
+  ActivosInventarioTable,
+  type ActivosInventarioTableProps,
+  type InventarioSelectionProps,
+} from "./inventario-activos-table";
+export {
+  EstadoBienBadge,
+  InventarioTablaLeyenda,
+  INVENTARIO_TABLA_LEYENDA,
+  ValorBienCell,
+  inventarioDepreciacionFila,
+  inventarioDescripcion,
+} from "./inventario-table-cells";
+export {
+  ActivoDetalleSheet,
+  type ActivoDetalle,
+} from "./activo-detalle-sheet";
+export { Sheet } from "./sheet";
+export { Tooltip } from "./tooltip";
 export { TableActionsOverflow, type TableActionItem } from "./table-actions-overflow";
 export * from "./panel-table-layout";
 export * from "./panel-action-buttons";
@@ -273,3 +294,6 @@ export * from "./panel-list-table";
 export * from "./panel-nav-icons";
 export * from "./panel-sidebar";
 export * from "./reportes-panel";
+export * from "./ambiente-reportes-export-menu";
+export * from "./activo-edit-scope-nav";
+export * from "./responsive-layout";

@@ -34,6 +34,12 @@ export default async function AdminNuevoActivoPage({
       ambienteId={ambienteId}
       ambienteNombre={ambienteData.ambiente.nombre}
       sedeId={ambienteData.ambiente.sede_id}
+      esAmbientePreregistro={ambienteData.ambiente.es_preregistro}
+      posibleAmbientePreset={
+        ambienteData.ambiente.es_preregistro
+          ? undefined
+          : { sedeId: ambienteData.ambiente.sede_id, ambienteId }
+      }
       listHref={listHref}
       entidadHref="/admin/activos"
     />

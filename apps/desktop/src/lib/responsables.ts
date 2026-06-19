@@ -5,6 +5,7 @@ import type {
   UpdateResponsableInput,
 } from "@inventario/types";
 import {
+  normalizeResponsableDni,
   normalizeResponsableNombre,
   RESPONSABLE_CARGO_DEFAULT,
   validarCreateResponsableInput,
@@ -118,6 +119,7 @@ export async function createResponsable(
     .insert({
       entidad_id: entidadId,
       nombre,
+      dni: normalizeResponsableDni(input.dni),
       email: trimOrNull(input.email),
       telefono: trimOrNull(input.telefono),
       cargo: RESPONSABLE_CARGO_DEFAULT,
@@ -127,6 +129,9 @@ export async function createResponsable(
 
   if (error) {
     if (error.code === "23505") {
+      if (error.message.includes("dni") || error.message.includes("idx_responsables_entidad_dni")) {
+        return { error: "Ya existe un responsable con ese DNI en esta entidad." };
+      }
       return { error: `Ya existe un responsable llamado «${nombre}» en esta entidad.` };
     }
     return { error: error.message };
@@ -163,6 +168,7 @@ export async function updateResponsable(
     .from("responsables")
     .update({
       nombre: normalizeResponsableNombre(input.nombre),
+      dni: normalizeResponsableDni(input.dni),
       email: trimOrNull(input.email),
       telefono: trimOrNull(input.telefono),
       ...(input.activo !== undefined ? { activo: input.activo } : {}),
@@ -171,6 +177,9 @@ export async function updateResponsable(
 
   if (error) {
     if (error.code === "23505") {
+      if (error.message.includes("dni") || error.message.includes("idx_responsables_entidad_dni")) {
+        return { error: "Ya existe otro responsable con ese DNI en la entidad." };
+      }
       return { error: "Ya existe otro responsable con ese nombre en la entidad." };
     }
     return { error: error.message };

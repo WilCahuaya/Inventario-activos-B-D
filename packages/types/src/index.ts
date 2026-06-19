@@ -4,6 +4,11 @@ export type RolUsuario = "CONTADOR" | "ADMIN_ENTIDAD";
 /** Ciclo de vida del registro del activo */
 export type EstadoRegistro = "PREREGISTRADO" | "REGISTRADO" | "DADO_DE_BAJA";
 
+/** Nombre del ambiente sistema donde se alojan los preregistros de una entidad. */
+export function buildAmbientePreregistroNombre(year = new Date().getFullYear()): string {
+  return `Adquisiciones preregistrados ${year}`;
+}
+
 /** Estado físico del bien */
 export type EstadoBien = "BUENO" | "REGULAR" | "MALO";
 
@@ -62,6 +67,7 @@ export interface Ambiente {
   descripcion: string | null;
   responsable_id: string | null;
   responsable: string | null;
+  es_preregistro: boolean;
   activo: boolean;
   created_at: string;
   updated_at: string;
@@ -72,6 +78,7 @@ export interface Responsable {
   id: string;
   entidad_id: string;
   nombre: string;
+  dni: string | null;
   email: string | null;
   telefono: string | null;
   cargo: string | null;
@@ -90,6 +97,7 @@ export interface ResponsableConConteo extends Responsable {
 
 export interface CreateResponsableInput {
   nombre: string;
+  dni: string;
   email?: string;
   telefono?: string;
   /** @deprecated El cargo se asigna automáticamente al crear. */
@@ -110,9 +118,21 @@ export function normalizeResponsableNombre(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
+/** Normaliza DNI peruano: solo dígitos. */
+export function normalizeResponsableDni(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
 export function validarCreateResponsableInput(input: CreateResponsableInput): string | null {
   if (!normalizeResponsableNombre(input.nombre)) {
     return "El nombre del responsable es obligatorio.";
+  }
+  const dni = normalizeResponsableDni(input.dni ?? "");
+  if (!dni) {
+    return "El DNI del responsable es obligatorio.";
+  }
+  if (dni.length !== 8) {
+    return "El DNI debe tener 8 dígitos.";
   }
   return null;
 }
@@ -126,6 +146,7 @@ export interface Activo {
   entidad_id: string;
   sede_id: string | null;
   ambiente_id: string | null;
+  posible_ambiente_id: string | null;
   codigo_catalogo: string;
   correlativo: number | null;
   codigo_barras: string | null;
@@ -181,6 +202,37 @@ export interface EjemplaresSimilaresResumen {
   total: number;
   registrados: number;
   preregistrados: number;
+}
+
+/** Campos compartidos para edición masiva de ejemplares (sin serie, foto ni comprobante). */
+export interface UpdateActivosSimilaresInput {
+  codigo_catalogo?: string;
+  nombre?: string;
+  nombre_etiqueta?: string | null;
+  descripcion?: string | null;
+  caracteristicas?: string | null;
+  observacion?: string | null;
+  categoria?: CategoriaBien;
+  estado_bien?: EstadoBien;
+  marca?: string | null;
+  modelo?: string | null;
+  color?: string | null;
+  medidas?: string | null;
+  medida_largo?: number | null;
+  medida_ancho?: number | null;
+  medida_altura?: number | null;
+  depreciacion?: string | null;
+  valor_adquisicion?: number | null;
+  valor_es_mercado?: boolean;
+  fecha_adquisicion?: string | null;
+  vida_util_meses?: number | null;
+  sede_id?: string | null;
+  ambiente_id?: string | null;
+  posible_ambiente_id?: string | null;
+}
+
+export interface UpdateActivosSimilaresResult {
+  actualizados: number;
 }
 
 export function formatEjemplaresEnAmbienteTexto(resumen: EjemplaresSimilaresResumen): string {
@@ -255,6 +307,61 @@ export function formatFechaISOToDDMMYYYY(iso: string | null | undefined): string
   const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return iso;
   return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+const MESES_CORTO_ES = [
+  "ene",
+  "feb",
+  "mar",
+  "abr",
+  "may",
+  "jun",
+  "jul",
+  "ago",
+  "sep",
+  "oct",
+  "nov",
+  "dic",
+] as const;
+
+/** ISO (YYYY-MM-DD) → «08 oct 2026» para listados. */
+export function formatFechaISOToCortoES(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return iso;
+  const day = Number(match[3]);
+  const monthIndex = Number(match[2]) - 1;
+  const year = match[1];
+  if (monthIndex < 0 || monthIndex > 11) return formatFechaISOToDDMMYYYY(iso);
+  const mes = MESES_CORTO_ES[monthIndex];
+  return `${String(day).padStart(2, "0")} ${mes} ${year}`;
+}
+
+export function categoriaBienLetra(categoria: CategoriaBien): "A" | "C" {
+  return categoria === "CUENTA_ORDEN" ? "C" : "A";
+}
+
+/** Extrae el número de un texto de depreciación (ej. «10%» → «10»). */
+export function depreciacionPorcentajeNumero(depreciacion: string | null | undefined): string {
+  if (!depreciacion?.trim()) return "—";
+  const m = depreciacion.trim().match(/(\d+(?:[.,]\d+)?)/);
+  if (!m) return "—";
+  return m[1].replace(",", ".");
+}
+
+/** Formato compacto: «10 · 24 · 9.67 = 30.33» (montos sin S/). */
+export function formatDepreciacionResumida(
+  depreciacion: string | null | undefined,
+  periodoMeses: number,
+  depAcumulada: number | null,
+  valorNeto: number | null,
+): string {
+  const pct = depreciacionPorcentajeNumero(depreciacion);
+  const meses = periodoMeses > 0 ? String(Math.round(periodoMeses)) : "—";
+  const dep = depAcumulada != null ? formatMonedaPE(depAcumulada) : "—";
+  const neto = valorNeto != null ? formatMonedaPE(valorNeto) : "—";
+  if (pct === "—" && meses === "—" && dep === "—" && neto === "—") return "—";
+  return `${pct} · ${meses} · ${dep} = ${neto}`;
 }
 
 export type { CodigoBarrasPayload } from "./codigo-barras-types";
@@ -881,6 +988,7 @@ export {
   LABEL_FIT_FONT_STEPS,
   LABEL_PRINT_LAYOUT_FONTS,
   LABEL_PRINT_WIDTH_DOTS,
+  entidadNombreRequiereEtiquetaOverride,
   nombreRequiereEtiquetaOverride,
   resolveNombreEtiqueta,
   sanitizeLabelPrintText,

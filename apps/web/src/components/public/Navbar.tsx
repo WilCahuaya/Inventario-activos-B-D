@@ -50,7 +50,7 @@ export function Navbar() {
 
   return (
     <header className="w-full max-w-full overflow-x-clip border-b bg-card">
-      <div className="mx-auto flex min-w-0 max-w-6xl items-center justify-between gap-3 px-4 py-3">
+      <div className="public-shell-header">
         <BrandLogo />
 
         <div className="hidden min-w-0 items-center gap-1 lg:flex">

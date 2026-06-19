@@ -4,15 +4,19 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { APP_CLIENT, APP_NAME } from "@inventario/types";
 import { ThemeToggle } from "@inventario/ui/theme-toggle";
+import { panelMainScrollClass, panelPageClass } from "@inventario/ui/panel";
 import type { PanelNavSection } from "./panel-nav-icons";
 import { IconMenu } from "./panel-nav-icons";
 import { PanelSidebar } from "./PanelSidebar";
+import { ActivosRealtimeSync } from "./ActivosRealtimeSync";
 
 interface PanelLayoutProps {
   panelLabel: string;
   homeHref: string;
   sections: PanelNavSection[];
   user?: { nombre: string; email: string };
+  /** Admin: limita realtime a la entidad del perfil. */
+  realtimeEntidadId?: string | null;
   children: ReactNode;
 }
 
@@ -21,14 +25,16 @@ export function PanelLayout({
   homeHref,
   sections,
   user,
+  realtimeEntidadId,
   children,
 }: PanelLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="panel-shell flex h-dvh w-full max-w-full flex-col overflow-hidden bg-muted/30">
+      <ActivosRealtimeSync entidadId={realtimeEntidadId} />
       <header className="border-b border-border/70 bg-card shadow-sm">
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-5 sm:py-3">
+        <div className="panel-shell-header">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -59,8 +65,8 @@ export function PanelLayout({
           mobileOpen={mobileOpen}
           onMobileClose={() => setMobileOpen(false)}
         />
-        <main className="panel-main-scroll min-w-0 flex-1 px-3 pb-3 pt-1.5 sm:px-4 sm:pb-4 md:px-5 lg:px-6">
-          <div className="mx-auto min-w-0 w-full max-w-[1600px]">{children}</div>
+        <main className={`${panelMainScrollClass} min-w-0 flex-1`}>
+          <div className={panelPageClass}>{children}</div>
         </main>
       </div>
     </div>

@@ -44,13 +44,15 @@ import {
   cambiarUbicacionActivo,
   updateActivo,
   updateActivoPaths,
+  updateActivosSimilares,
   type UpdateActivoInput,
 } from "@/lib/actions/activos";
 import { suggestActivoAtributo } from "@/lib/actions/atributo-vocab";
 import { getCatalogoByCodigo, searchCatalogo } from "@/lib/actions/catalogo";
-import { createAmbiente, createSede, listAmbientes, listSedes } from "@/lib/actions/ubicacion";
+import { createAmbiente, createSede, getAmbiente, listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 import { uploadActivoFile } from "@/lib/upload-activo-file";
 import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
+import type { ActivoEditScope } from "@inventario/ui/panel";
 import { panelFieldsetClass, panelLegendClass } from "./panel-ui";
 
 const textareaClass =
@@ -66,8 +68,13 @@ interface ActivoFormProps {
   submitLabel?: string;
   /** Contador asigna correlativo al crear; admin preregistra sin código */
   asignaCodigoInmediato?: boolean;
+  /** Admin: posible ambiente sugerido al preregistrar desde un ambiente real */
+  posibleAmbientePreset?: { sedeId: string; ambienteId: string };
   /** Admin entidad: en edición solo puede cambiar sede/ambiente */
   soloUbicacion?: boolean;
+  /** Alcance de edición cuando hay ejemplares similares */
+  editScope?: ActivoEditScope;
+  ejemplaresTotal?: number;
   variant?: "page" | "modal";
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -87,12 +94,18 @@ export function ActivoForm({
   mode = activo ? "edit" : "create",
   submitLabel = "Registrar activo",
   asignaCodigoInmediato = true,
+  posibleAmbientePreset,
   soloUbicacion = false,
+  editScope = "single",
+  ejemplaresTotal = 0,
   variant = "page",
   onSuccess,
   onCancel,
 }: ActivoFormProps) {
   const isEdit = mode === "edit" && Boolean(activo);
+  const esEdicionMasiva = Boolean(
+    isEdit && ejemplaresTotal > 1 && editScope === "bulk",
+  );
   const formRef = useRef<HTMLFormElement>(null);
   const soloUbicacionEdit = isEdit && soloUbicacion;
   /** Alta preregistro admin */
@@ -100,6 +113,9 @@ export function ActivoForm({
   /** Preregistro admin (crear o editar PREREGISTRADO): sin depreciación ni vida útil */
   const esPreregistroAdmin =
     !asignaCodigoInmediato && (!isEdit || activo?.estado_registro === "PREREGISTRADO");
+  const mostrarPosibleAmbiente =
+    (!isEdit && !asignaCodigoInmediato) ||
+    (isEdit && activo?.estado_registro === "PREREGISTRADO");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [catalogo, setCatalogo] = useState<CatalogoNacional | null>(null);
@@ -126,6 +142,9 @@ export function ActivoForm({
   const [ambientes, setAmbientes] = useState<Ambiente[]>([]);
   const [sedeId, setSedeId] = useState("");
   const [ambienteId, setAmbienteId] = useState("");
+  const [posibleSedeId, setPosibleSedeId] = useState("");
+  const [posibleAmbienteId, setPosibleAmbienteId] = useState("");
+  const [posibleAmbientes, setPosibleAmbientes] = useState<Ambiente[]>([]);
   const [nuevaSede, setNuevaSede] = useState("");
   const [nuevoAmbiente, setNuevoAmbiente] = useState("");
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
@@ -180,7 +199,20 @@ export function ActivoForm({
     setCodigoBarrasPreview(activo.codigo_barras);
     if (activo.sede_id) setSedeId(activo.sede_id);
     if (activo.ambiente_id) setAmbienteId(activo.ambiente_id);
+    if (activo.posible_ambiente_id) {
+      void getAmbiente(activo.posible_ambiente_id).then((data) => {
+        if (!data) return;
+        setPosibleSedeId(data.ambiente.sede_id);
+        setPosibleAmbienteId(data.ambiente.id);
+      });
+    }
   }, [activo, isEdit]);
+
+  useEffect(() => {
+    if (isEdit || !posibleAmbientePreset) return;
+    setPosibleSedeId(posibleAmbientePreset.sedeId);
+    setPosibleAmbienteId(posibleAmbientePreset.ambienteId);
+  }, [isEdit, posibleAmbientePreset]);
 
   useEffect(() => {
     if (catalogo) {
@@ -264,6 +296,14 @@ export function ActivoForm({
       }
     });
   }, [sedeId, soloUbicacionEdit, ambienteId]);
+
+  useEffect(() => {
+    if (!posibleSedeId) {
+      setPosibleAmbientes([]);
+      return;
+    }
+    void listAmbientes(posibleSedeId).then(setPosibleAmbientes);
+  }, [posibleSedeId]);
 
   const fechaAdquisicionIso = useMemo(
     () => (fechaAdquisicion.trim() ? parseFechaDDMMYYYY(fechaAdquisicion) : null),
@@ -399,14 +439,25 @@ export function ActivoForm({
         return;
       }
 
-      const result = await cambiarUbicacionActivo(activo.id, sedeId, ambienteId);
+      const result = esEdicionMasiva
+        ? await updateActivosSimilares(activo.id, {
+            sede_id: sedeId,
+            ambiente_id: ambienteId,
+          })
+        : await cambiarUbicacionActivo(activo.id, sedeId, ambienteId);
 
       setPending(false);
       if (result.error) {
         setMessage(result.error);
         return;
       }
-      setMessage("Ubicación actualizada correctamente.");
+      if (esEdicionMasiva) {
+        setMessage(
+          `${"data" in result && result.data ? (result.data as { actualizados?: number }).actualizados : ejemplaresTotal} ejemplares actualizados.`,
+        );
+      } else {
+        setMessage("Ubicación actualizada correctamente.");
+      }
       onSuccess?.();
       return;
     }
@@ -470,9 +521,14 @@ export function ActivoForm({
       valor_adquisicion: valor ? Number(valor) : undefined,
       valor_es_mercado: valorEsMercado,
       fecha_adquisicion: fechaAdquisicionIso || undefined,
-      sede_id: (fixedSedeId ?? sedeId) || undefined,
-      ambiente_id: (fixedAmbienteId ?? ambienteId) || undefined,
     };
+
+    if (mostrarPosibleAmbiente) {
+      payload.posible_ambiente_id = posibleAmbienteId || null;
+    } else {
+      payload.sede_id = (fixedSedeId ?? sedeId) || undefined;
+      payload.ambiente_id = (fixedAmbienteId ?? ambienteId) || undefined;
+    }
 
     if (!valorEsMercado) {
       Object.assign(payload, {
@@ -486,11 +542,37 @@ export function ActivoForm({
       });
     }
 
-    const result = isEdit && activo
-      ? await updateActivo(activo.id, payload)
-      : await createActivo({
+    const result =
+      isEdit && activo
+        ? esEdicionMasiva
+          ? await updateActivosSimilares(activo.id, {
+              codigo_catalogo: catalogo.codigo,
+              nombre: payload.nombre,
+              nombre_etiqueta: payload.nombre_etiqueta,
+              categoria: payload.categoria,
+              estado_bien: payload.estado_bien,
+              marca: payload.marca ?? null,
+              modelo: payload.modelo ?? null,
+              color: payload.color ?? null,
+              medidas: payload.medidas ?? null,
+              observacion: payload.observacion ?? null,
+              valor_adquisicion: payload.valor_adquisicion ?? null,
+              valor_es_mercado: payload.valor_es_mercado,
+              fecha_adquisicion: payload.fecha_adquisicion ?? null,
+              depreciacion: payload.depreciacion ?? null,
+              vida_util_meses: payload.vida_util_meses ?? null,
+              ...(mostrarPosibleAmbiente
+                ? { posible_ambiente_id: posibleAmbienteId || null }
+                : {
+                    sede_id: payload.sede_id ?? null,
+                    ambiente_id: payload.ambiente_id ?? null,
+                  }),
+            })
+          : await updateActivo(activo.id, payload)
+        : await createActivo({
           entidad_id: entidadEfectiva,
           ...payload,
+          estado_registro: mostrarPosibleAmbiente ? "PREREGISTRADO" : "REGISTRADO",
         });
 
     if (result.error) {
@@ -500,7 +582,7 @@ export function ActivoForm({
     }
 
     const activoId = isEdit && activo ? activo.id : result.data?.id;
-    if (activoId && entidadEfectiva) {
+    if (activoId && entidadEfectiva && !esEdicionMasiva) {
       if (valorEsMercado) {
         if (activo?.comprobante_path || activo?.comprobante_serie) {
           await updateActivoPaths(activoId, {
@@ -530,7 +612,15 @@ export function ActivoForm({
 
     setPending(false);
     if (isEdit) {
-      setMessage("Activo actualizado correctamente.");
+      const actualizados =
+        esEdicionMasiva && "data" in result && result.data
+          ? (result.data as { actualizados?: number }).actualizados
+          : undefined;
+      setMessage(
+        esEdicionMasiva
+          ? `${actualizados ?? ejemplaresTotal} ejemplares actualizados correctamente.`
+          : "Activo actualizado correctamente.",
+      );
     } else {
       setMessage(
         result.data?.estado_registro === "REGISTRADO"
@@ -543,7 +633,8 @@ export function ActivoForm({
     onSuccess?.();
   }
 
-  const hideUbicacion = !soloUbicacionEdit && Boolean(fixedAmbienteId && fixedSedeId);
+  const hideUbicacion =
+    mostrarPosibleAmbiente || (!soloUbicacionEdit && Boolean(fixedAmbienteId && fixedSedeId));
   const isGridForm = variant === "modal" || variant === "page";
   const formGridClass =
     isGridForm && soloUbicacionEdit
@@ -581,8 +672,20 @@ export function ActivoForm({
     >
       {variant === "page" && !onCancel && (
         <p className="col-span-1 text-sm font-medium lg:col-span-2">
-          {soloUbicacionEdit ? "Editar ubicación" : isEdit ? "Editar activo" : "Nuevo activo"}
+          {soloUbicacionEdit
+            ? "Editar ubicación"
+            : isEdit
+              ? "Editar activo"
+              : "Nuevo activo"}
         </p>
+      )}
+
+      {esEdicionMasiva && (
+        <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
+          Los cambios se aplicarán a los{" "}
+          <strong>{ejemplaresTotal} ejemplares</strong> de este bien en el ambiente. Cada
+          unidad conserva su código de barras, serie, foto y comprobante propios.
+        </div>
       )}
 
       {soloUbicacionEdit && activo && (
@@ -592,7 +695,9 @@ export function ActivoForm({
             {activo.codigo_barras ?? activo.codigo_catalogo}
           </p>
           <p className="text-xs text-muted-foreground">
-            Seleccione la sede y el ambiente de destino. El bien se moverá dentro de su entidad.
+            {esEdicionMasiva
+              ? `Seleccione sede y ambiente. Se moverán los ${ejemplaresTotal} ejemplares.`
+              : "Seleccione la sede y el ambiente de destino. El bien se moverá dentro de su entidad."}
           </p>
         </div>
       )}
@@ -624,9 +729,10 @@ export function ActivoForm({
           resolveCodigo={getCatalogoByCodigo}
           selectedCodigo={catalogo?.codigo}
           selectedDenominacion={catalogo?.denominacion}
-          disabled={pending}
+          disabled={pending || esEdicionMasiva}
           onSelect={setCatalogo}
           onClear={() => {
+            if (esEdicionMasiva) return;
             setCatalogo(null);
             setNombre("");
             setNombreEtiqueta("");
@@ -738,6 +844,7 @@ export function ActivoForm({
             onChange={setModelo}
             onSearch={searchAtributo}
           />
+          {!esEdicionMasiva && (
           <ActivoAtributoAutocomplete
             id="serie"
             label="Serie"
@@ -746,6 +853,7 @@ export function ActivoForm({
             onChange={setSerie}
             onSearch={searchAtributo}
           />
+          )}
           <ActivoAtributoAutocomplete
             id="color"
             label="Color"
@@ -846,7 +954,7 @@ export function ActivoForm({
             )}
           </div>
         </div>
-        {!valorEsMercado && (
+        {!valorEsMercado && !esEdicionMasiva && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="comprobante_serie">Serie del comprobante</Label>
@@ -875,6 +983,7 @@ export function ActivoForm({
             </div>
           </div>
         )}
+        {!esEdicionMasiva && (
         <div className="space-y-2">
           <Label htmlFor="foto_activo">Foto del activo</Label>
           <FileInput
@@ -889,6 +998,7 @@ export function ActivoForm({
             }
           />
         </div>
+        )}
         {mostrarDepreciacion && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -958,6 +1068,46 @@ export function ActivoForm({
         </div>
       </fieldset>
       </>
+      )}
+
+      {/* Posible ambiente (preregistro) */}
+      {mostrarPosibleAmbiente && !soloUbicacionEdit && (
+        <fieldset className={fieldsetWide}>
+          <legend className={panelLegendClass}>Posible ambiente</legend>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Indique dónde podría ubicarse el bien (opcional). Al validar el preregistro se podrá
+            confirmar o elegir otro ambiente.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="posible_sede_id">Sede</Label>
+            <Select
+              id="posible_sede_id"
+              value={posibleSedeId}
+              onChange={(nextSede) => {
+                setPosibleSedeId(nextSede);
+                setPosibleAmbienteId("");
+              }}
+              options={[
+                { value: "", label: "Sin sugerencia…" },
+                ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+              ]}
+            />
+          </div>
+          {posibleSedeId && (
+            <div className="mt-3 space-y-2">
+              <Label htmlFor="posible_ambiente_id">Ambiente</Label>
+              <Select
+                id="posible_ambiente_id"
+                value={posibleAmbienteId}
+                onChange={setPosibleAmbienteId}
+                options={[
+                  { value: "", label: "Sin sugerencia…" },
+                  ...posibleAmbientes.map((a) => ({ value: a.id, label: a.nombre })),
+                ]}
+              />
+            </div>
+          )}
+        </fieldset>
       )}
 
       {/* Ubicación */}
@@ -1036,7 +1186,11 @@ export function ActivoForm({
 
       <div className={isGridForm ? "col-span-1 flex flex-wrap gap-2 lg:col-span-2" : undefined}>
         <Button type="submit" disabled={pending || (!catalogo && !soloUbicacionEdit)}>
-          {pending ? "Guardando…" : submitLabel}
+          {pending
+            ? "Guardando…"
+            : esEdicionMasiva
+              ? `Guardar en ${ejemplaresTotal} ejemplares`
+              : submitLabel}
         </Button>
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>

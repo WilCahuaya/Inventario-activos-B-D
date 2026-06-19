@@ -13,6 +13,9 @@ interface RegistrarActivoPanelProps {
   listHref: string;
   entidadHref: string;
   mode?: "contador" | "admin";
+  esAmbientePreregistro?: boolean;
+  /** Admin: sugerir posible ambiente al preregistrar desde un ambiente real */
+  posibleAmbientePreset?: { sedeId: string; ambienteId: string };
 }
 
 export function RegistrarActivoPanel({
@@ -24,9 +27,12 @@ export function RegistrarActivoPanel({
   listHref,
   entidadHref,
   mode = "contador",
+  esAmbientePreregistro = false,
+  posibleAmbientePreset,
 }: RegistrarActivoPanelProps) {
   const router = useRouter();
   const isAdmin = mode === "admin";
+  const esPreregistro = isAdmin || esAmbientePreregistro;
 
   function handleDone() {
     router.push(listHref);
@@ -39,11 +45,17 @@ export function RegistrarActivoPanel({
         { label: ambienteNombre, href: listHref },
         { label: "Preregistrar activo" },
       ]
-    : [
-        { label: entidadNombre, href: entidadHref },
-        { label: ambienteNombre, href: listHref },
-        { label: "Crear activo" },
-      ];
+    : esPreregistro
+      ? [
+          { label: entidadNombre, href: entidadHref },
+          { label: ambienteNombre, href: listHref },
+          { label: "Preregistrar activo" },
+        ]
+      : [
+          { label: entidadNombre, href: entidadHref },
+          { label: ambienteNombre, href: listHref },
+          { label: "Crear activo" },
+        ];
 
   return (
     <div className="space-y-5">
@@ -52,10 +64,11 @@ export function RegistrarActivoPanel({
       <ActivoForm
         entidades={[]}
         fixedEntidadId={entidadId}
-        fixedSedeId={sedeId}
-        fixedAmbienteId={ambienteId}
-        submitLabel={isAdmin ? "Preregistrar activo" : "Registrar activo"}
-        asignaCodigoInmediato={!isAdmin}
+        fixedSedeId={esPreregistro ? undefined : sedeId}
+        fixedAmbienteId={esPreregistro ? undefined : ambienteId}
+        submitLabel={esPreregistro ? "Preregistrar activo" : "Registrar activo"}
+        asignaCodigoInmediato={!esPreregistro}
+        posibleAmbientePreset={isAdmin && !esAmbientePreregistro ? posibleAmbientePreset : undefined}
         variant="page"
         onSuccess={handleDone}
         onCancel={handleDone}

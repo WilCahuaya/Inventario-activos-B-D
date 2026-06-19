@@ -256,7 +256,7 @@ function PanelSidebarCore({
     };
   }, [mobileOpen]);
 
-  const sidebarWidth = collapsed ? "md:w-[4.5rem]" : "md:w-60";
+  const sidebarWidth = collapsed ? "md:w-[4.5rem]" : "md:w-60 lg:w-64 xl:w-72";
 
   return (
     <>

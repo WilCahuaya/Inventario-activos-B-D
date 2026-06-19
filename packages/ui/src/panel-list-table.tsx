@@ -30,12 +30,12 @@ export const panelTableHeadRowClass =
   "border-b border-border/60 bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground";
 
 export const panelTableThClass =
-  "max-w-0 overflow-hidden px-2 py-2.5 font-semibold sm:px-3";
+  "max-w-0 overflow-hidden px-2 py-2.5 font-semibold sm:px-3 lg:py-3 xl:px-4 2xl:px-5";
 
 export const panelTableBodyRowClass =
   "border-b border-border/40 last:border-b-0 transition-colors hover:bg-muted/30";
 
 export const panelTableTdClass =
-  "max-w-0 overflow-hidden px-2 py-2.5 align-middle sm:px-3";
+  "max-w-0 overflow-hidden px-2 py-2.5 align-middle sm:px-3 lg:py-3 xl:px-4 2xl:px-5";
 
 export const panelTableMutedClass = "text-muted-foreground";

@@ -20,6 +20,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@inventario/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@inventario/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -27,8 +30,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/ui
       '@supabase/supabase-js':
-        specifier: ^2.47.10
-        version: 2.107.0
+        specifier: ^2.108.2
+        version: 2.108.2
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
@@ -102,6 +105,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@inventario/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@inventario/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -160,6 +166,15 @@ importers:
       tailwindcss:
         specifier: ^3.4.17
         version: 3.4.19
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/realtime:
+    devDependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.47.10
+        version: 2.108.2
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

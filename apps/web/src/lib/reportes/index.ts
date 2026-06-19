@@ -4,7 +4,8 @@ import type { ActivoReporte, ReporteContexto, ReporteFormato } from "./types";
 
 export * from "./types";
 export { REPORTES } from "./types";
-export { buildReporteRows, reporteHeaders, reporteTitulo } from "./rows";
+export { buildReporteRows, reporteHeaders, reporteTableHeaderDefs, reporteTitulo } from "./rows";
+export type { ReporteTableHeaderDef } from "./rows";
 export {
   REPORTE_PREVIEW_MAX_ROWS,
   buildReporteResumenPreview,

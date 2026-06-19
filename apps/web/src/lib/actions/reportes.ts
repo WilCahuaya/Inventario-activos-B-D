@@ -53,7 +53,7 @@ export async function cargarActivosReporte(
   }
 
   if (!reportePermitidoParaRol(input.reporteId as ReporteId, profile.rol)) {
-    return { error: "Los administradores solo pueden generar reportes sin valores." };
+    return { error: "Este reporte no está disponible para su rol." };
   }
 
   const supabase = await createClient();

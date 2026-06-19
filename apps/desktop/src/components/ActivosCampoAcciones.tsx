@@ -1,90 +1,125 @@
 import { useMemo, useState } from "react";
 import type { ActivoConUbicacion } from "../lib/activos";
-import { TableActionsOverflow, type TableActionItem } from "@inventario/ui/panel";
-import { ValidarPreregistroDialog } from "./ValidarPreregistroDialog";
-import { ActivoIconButton, IconEtiqueta, IconValidar, IconVer } from "./activo-icons";
+import {
+  TableActionsOverflow,
+  type TableActionItem,
+} from "@inventario/ui/panel";
+import { FotoPreviewDialog, PdfPreviewDialog } from "./ActivoMediaDialogs";
+import { ActivoDetalleModal } from "./ActivoDetalleModal";
+import { ActivoIconButton, IconAmbiente, IconEtiqueta, IconFoto, IconValidar, IconVer } from "./activo-icons";
+
 interface ActivosCampoAccionesProps {
   entidadId: string;
   activo: ActivoConUbicacion;
   online: boolean;
-  onOpenFicha: (activo: ActivoConUbicacion) => void;
+  onEdit?: (activo: ActivoConUbicacion) => void;
+  onIrAmbiente?: (activo: ActivoConUbicacion) => void;
   onPrintLabel: (activo: ActivoConUbicacion) => void;
+  onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onValidated?: (activo: ActivoConUbicacion) => void;
   compact?: boolean;
+  variant?: "auto" | "menu" | "icons-and-menu" | "icons";
 }
 
 export function ActivosCampoAcciones({
   entidadId,
   activo,
   online,
-  onOpenFicha,
+  onEdit,
+  onIrAmbiente,
   onPrintLabel,
+  onPrintBatch,
   onValidated,
   compact,
+  variant = "auto",
 }: ActivosCampoAccionesProps) {
-  const [validarOpen, setValidarOpen] = useState(false);
+  const [fotoOpen, setFotoOpen] = useState(false);
+  const [pdfOpen, setPdfOpen] = useState(false);
+  const [detalleOpen, setDetalleOpen] = useState(false);
   const esPreregistrado = activo.estado_registro === "PREREGISTRADO";
   const inactivo = activo.estado_registro === "DADO_DE_BAJA";
   const iconSize = compact ? "h-7 w-7" : "h-8 w-8";
+  const overflowVariant = compact ? (variant === "auto" ? "icons" : variant) : variant;
 
   const items = useMemo<TableActionItem[]>(() => {
     const list: TableActionItem[] = [];
-    if (esPreregistrado) {
+    if (activo.foto_path) {
       list.push({
-        id: "validar",
-        label: online ? "Validar preregistro" : "Validar preregistro (requiere conexión)",
-        icon: <IconValidar />,
-        onClick: () => setValidarOpen(true),
-        disabled: !online,
+        id: "foto",
+        label: "Ver foto",
+        icon: <IconFoto />,
+        onClick: () => setFotoOpen(true),
+      });
+    }
+    if (onIrAmbiente && activo.ambiente_id) {
+      list.push({
+        id: "ambiente",
+        label: "Ir al ambiente",
+        icon: <IconAmbiente />,
+        onClick: () => onIrAmbiente(activo),
       });
     }
     list.push({
-      id: "ficha",
-      label: "Ver ficha del activo",
+      id: "ver",
+      label: "Ver activo",
       icon: <IconVer />,
-      onClick: () => onOpenFicha(activo),
+      onClick: () => setDetalleOpen(true),
     });
-    if (!inactivo) {
+    if (esPreregistrado && online) {
+      list.push({
+        id: "validar",
+        label: "Validar preregistro",
+        icon: <IconValidar />,
+        onClick: () => setDetalleOpen(true),
+      });
+    }
+    if (!inactivo && activo.codigo_barras) {
       list.push({
         id: "etiqueta",
-        label: activo.codigo_barras ? "Imprimir etiqueta" : "Sin código de barras asignado",
+        label: "Imprimir etiqueta",
         icon: <IconEtiqueta />,
         onClick: () => onPrintLabel(activo),
-        disabled: !activo.codigo_barras,
       });
     }
     return list;
-  }, [activo, esPreregistrado, inactivo, online, onOpenFicha, onPrintLabel]);
+  }, [activo, esPreregistrado, inactivo, online, onIrAmbiente, onPrintLabel]);
 
   return (
     <>
       {compact ? (
-        <TableActionsOverflow items={items} iconClassName={iconSize} variant="menu" />
+        <TableActionsOverflow items={items} iconClassName={iconSize} variant={overflowVariant} />
       ) : (
         <div className="flex flex-row flex-wrap items-center justify-center gap-1">
-          {esPreregistrado && (
+          {activo.foto_path && (
             <ActivoIconButton
-              label={online ? "Validar preregistro" : "Validar preregistro (requiere conexión)"}
-              variant="primary"
-              disabled={!online}
+              label="Ver foto"
               className={iconSize}
-              onClick={() => setValidarOpen(true)}
+              onClick={() => setFotoOpen(true)}
+            >
+              <IconFoto />
+            </ActivoIconButton>
+          )}
+          <ActivoIconButton
+            label="Ver activo"
+            className={iconSize}
+            onClick={() => setDetalleOpen(true)}
+          >
+            <IconVer />
+          </ActivoIconButton>
+          {esPreregistrado && online && (
+            <ActivoIconButton
+              label="Validar preregistro"
+              variant="primary"
+              className={iconSize}
+              onClick={() => setDetalleOpen(true)}
             >
               <IconValidar />
             </ActivoIconButton>
           )}
-          <ActivoIconButton
-            label="Ver ficha del activo"
-            className={iconSize}
-            onClick={() => onOpenFicha(activo)}
-          >
-            <IconVer />
-          </ActivoIconButton>
-          {!inactivo && (
+          {!inactivo && activo.codigo_barras && (
             <ActivoIconButton
-              label={activo.codigo_barras ? "Imprimir etiqueta" : "Sin código de barras asignado"}
+              label="Imprimir etiqueta"
               className={iconSize}
-              disabled={!activo.codigo_barras}
               onClick={() => onPrintLabel(activo)}
             >
               <IconEtiqueta />
@@ -92,15 +127,35 @@ export function ActivosCampoAcciones({
           )}
         </div>
       )}
-      {esPreregistrado && (
-        <ValidarPreregistroDialog
-          open={validarOpen}
-          onClose={() => setValidarOpen(false)}
-          entidadId={entidadId}
-          activoId={activo.id}
-          nombre={activo.nombre}
-          codigoCatalogo={activo.codigo_catalogo}
-          onSuccess={onValidated}
+
+      <ActivoDetalleModal
+        activo={activo}
+        entidadId={entidadId}
+        open={detalleOpen}
+        onClose={() => setDetalleOpen(false)}
+        online={online}
+        onEdit={onEdit}
+        onIrAmbiente={onIrAmbiente}
+        onActivoUpdated={onValidated}
+        onPrintLabel={onPrintLabel}
+        onPrintBatch={onPrintBatch}
+      />
+
+      {activo.foto_path && (
+        <FotoPreviewDialog
+          open={fotoOpen}
+          onClose={() => setFotoOpen(false)}
+          path={activo.foto_path}
+          titulo={activo.nombre}
+        />
+      )}
+
+      {activo.comprobante_path && (
+        <PdfPreviewDialog
+          open={pdfOpen}
+          onClose={() => setPdfOpen(false)}
+          path={activo.comprobante_path}
+          titulo={activo.comprobante_serie ? `Comprobante ${activo.comprobante_serie}` : undefined}
         />
       )}
     </>

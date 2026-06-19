@@ -264,7 +264,7 @@ export function Dialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center overflow-hidden bg-black/50 p-2 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[300] flex items-end justify-center overflow-hidden bg-black/50 p-2 sm:items-center sm:p-4"
       role="presentation"
       onClick={onClose}
     >
@@ -294,3 +294,4 @@ export function Dialog({
 }
 
 export { cn };
+export { Tooltip } from "./tooltip";

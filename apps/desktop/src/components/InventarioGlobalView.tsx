@@ -17,11 +17,10 @@ interface InventarioGlobalViewProps {
   syncMessage: string | null;
   onSyncNow: () => void;
   syncing: boolean;
-  usuarioNombre: string;
-  usuarioEmail: string;
-  onOpenFicha: (activo: ActivoConUbicacion) => void;
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
+  onEditActivo?: (activo: ActivoConUbicacion) => void;
+  onIrAmbiente?: (activo: ActivoConUbicacion) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
   onActivosImported?: () => void;
 }
@@ -70,11 +69,10 @@ export function InventarioGlobalView({
   syncMessage,
   onSyncNow,
   syncing,
-  usuarioNombre,
-  usuarioEmail,
-  onOpenFicha,
   onPrintLabel,
   onPrintBatch,
+  onEditActivo,
+  onIrAmbiente,
   onActivoUpdated,
   onActivosImported,
 }: InventarioGlobalViewProps) {
@@ -138,15 +136,10 @@ export function InventarioGlobalView({
         online={online}
         toolbarExtra={toolbarExtra}
         statusBanner={statusBanner}
-        exportMeta={{
-          ambienteNombre: "Inventario global",
-          entidadNombre: "Todas las entidades",
-          usuarioNombre,
-          usuarioEmail,
-        }}
-        onOpenFicha={onOpenFicha}
         onPrintLabel={onPrintLabel}
         onPrintBatch={onPrintBatch}
+        onEditActivo={onEditActivo}
+        onIrAmbiente={onIrAmbiente}
         onActivoUpdated={onActivoUpdated}
       />
 

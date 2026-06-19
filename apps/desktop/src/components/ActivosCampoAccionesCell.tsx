@@ -5,7 +5,6 @@ interface ActivosCampoAccionesCellProps {
   entidadId: string;
   activo: ActivoConUbicacion;
   online: boolean;
-  onOpenFicha: (activo: ActivoConUbicacion) => void;
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
 }
@@ -14,7 +13,6 @@ export function ActivosCampoAccionesCell({
   entidadId,
   activo,
   online,
-  onOpenFicha,
   onPrintLabel,
   onActivoUpdated,
 }: ActivosCampoAccionesCellProps) {
@@ -24,7 +22,6 @@ export function ActivosCampoAccionesCell({
         entidadId={entidadId}
         activo={activo}
         online={online}
-        onOpenFicha={onOpenFicha}
         onPrintLabel={onPrintLabel}
         onValidated={onActivoUpdated}
         compact

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "./components";
+import { cn, Tooltip } from "./components";
 
 export interface TableActionItem {
   id: string;
@@ -39,8 +39,8 @@ export function TableActionsOverflow({
 }: {
   items: TableActionItem[];
   iconClassName?: string;
-  /** "menu" = siempre menú ⋮ (celdas de tabla). "auto" = iconos si caben. */
-  variant?: "auto" | "menu";
+  /** "menu" = siempre menú ⋮. "auto" = iconos si caben. "icons-and-menu" = iconos + ⋮. "icons" = solo iconos. */
+  variant?: "auto" | "menu" | "icons-and-menu" | "icons";
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,14 +53,16 @@ export function TableActionsOverflow({
 
   const btnClass = cn(iconBtnClass, iconClassName);
   const forceMenu = variant === "menu";
+  const iconsAndMenu = variant === "icons-and-menu";
+  const iconsOnly = variant === "icons";
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useLayoutEffect(() => {
-    if (forceMenu) {
-      setUseMenu(true);
+    if (forceMenu || iconsAndMenu || iconsOnly) {
+      setUseMenu(forceMenu);
       return;
     }
 
@@ -77,7 +79,7 @@ export function TableActionsOverflow({
     ro.observe(container);
     ro.observe(measure);
     return () => ro.disconnect();
-  }, [items, forceMenu]);
+  }, [items, forceMenu, iconsAndMenu, iconsOnly]);
 
   const updateMenuPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -143,12 +145,27 @@ export function TableActionsOverflow({
     return <span className="text-xs text-muted-foreground">—</span>;
   }
 
+  function ActionButton({ item }: { item: TableActionItem }) {
+    return (
+      <Tooltip label={item.label}>
+        <button
+          type="button"
+          aria-label={item.label}
+          className={btnClass}
+          onClick={item.onClick}
+        >
+          {item.icon}
+        </button>
+      </Tooltip>
+    );
+  }
+
   const menuPortal =
     menuOpen && mounted
       ? createPortal(
           <div
             ref={menuRef}
-            className="fixed z-[300] min-w-[11rem] rounded-md border border-border bg-card py-1 text-card-foreground shadow-lg ring-1 ring-border/50"
+            className="fixed z-[350] min-w-[11rem] rounded-md border border-border bg-card py-1 text-card-foreground shadow-lg ring-1 ring-border/50"
             style={{ top: menuPos.top, left: menuPos.left }}
             role="menu"
           >
@@ -175,10 +192,44 @@ export function TableActionsOverflow({
         )
       : null;
 
-  if (useMenu) {
+  if (iconsOnly) {
+    return (
+      <div ref={containerRef} className="flex items-center justify-center gap-0.5">
+        {items.map((item) => (
+          <ActionButton key={item.id} item={item} />
+        ))}
+      </div>
+    );
+  }
+
+  if (useMenu && !iconsAndMenu) {
     return (
       <>
         <div ref={containerRef} className="flex justify-center">
+          <button
+            ref={triggerRef}
+            type="button"
+            className={btnClass}
+            aria-label="Más acciones"
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <IconKebab className="h-4 w-4" />
+          </button>
+        </div>
+        {menuPortal}
+      </>
+    );
+  }
+
+  if (iconsAndMenu) {
+    return (
+      <>
+        <div ref={containerRef} className="flex items-center justify-center gap-0.5">
+          {items.map((item) => (
+            <ActionButton key={item.id} item={item} />
+          ))}
           <button
             ref={triggerRef}
             type="button"
@@ -211,17 +262,7 @@ export function TableActionsOverflow({
       </div>
       <div className="flex items-center justify-center gap-1">
         {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            title={item.label}
-            aria-label={item.label}
-            disabled={item.disabled}
-            className={btnClass}
-            onClick={item.onClick}
-          >
-            {item.icon}
-          </button>
+          <ActionButton key={item.id} item={item} />
         ))}
       </div>
     </div>

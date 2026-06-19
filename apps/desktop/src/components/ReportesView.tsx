@@ -2,17 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ambiente, Entidad, Sede } from "@inventario/types";
 import { PanelPageHeader, ReportesPanelContent } from "@inventario/ui/panel";
 import {
-  REPORTES,
   REPORTE_PREVIEW_MAX_ROWS,
   buildReporteResumenPreview,
   buildReporteRows,
   cargarActivosReporte,
   exportReporte,
   reporteHeaders,
+  reportesDisponiblesParaRol,
   type ActivoReporte,
   type ReporteFormato,
   type ReporteId,
 } from "../lib/reportes-data";
+import { resolveFichaAsignacionExportMeta } from "../lib/ficha-asignacion-meta";
 import { listAmbientes, listSedes } from "../lib/ubicacion";
 
 interface ReportesViewProps {
@@ -32,7 +33,7 @@ export function ReportesView({
   usuarioEmail,
   online,
 }: ReportesViewProps) {
-  const reportesDisponibles = useMemo(() => REPORTES, []);
+  const reportesDisponibles = useMemo(() => reportesDisponiblesParaRol("CONTADOR"), []);
 
   const [reporteId, setReporteId] = useState<ReporteId>(reportesDisponibles[0]!.id);
   const [entidadId, setEntidadId] = useState(entidades[0]?.id ?? "");
@@ -46,7 +47,13 @@ export function ReportesView({
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<ReporteFormato | null>(null);
 
-  const definicion = reportesDisponibles.find((r) => r.id === reporteId)!;
+  useEffect(() => {
+    if (!reportesDisponibles.some((r) => r.id === reporteId) && reportesDisponibles[0]) {
+      setReporteId(reportesDisponibles[0].id);
+    }
+  }, [reportesDisponibles, reporteId]);
+
+  const definicion = reportesDisponibles.find((r) => r.id === reporteId) ?? reportesDisponibles[0]!;
   const entidad = entidades.find((e) => e.id === entidadId);
   const ambiente = ambientes.find((a) => a.id === ambienteId);
   const sede = sedes.find((s) => s.id === sedeId);
@@ -148,12 +155,20 @@ export function ReportesView({
     setPending(formato);
     setError(null);
     try {
+      const fichaMeta =
+        definicion.scope === "ambiente" && ambiente
+          ? await resolveFichaAsignacionExportMeta(entidad, ambiente, sede?.nombre ?? null)
+          : null;
+
       await exportReporte(formato, data, {
         reporteId,
         entidadNombre: entidad.nombre,
         ambienteNombre: ambiente?.nombre ?? null,
-        sedeNombre: sede?.nombre ?? null,
-        responsable: ambiente?.responsable ?? null,
+        sedeNombre: sede?.nombre ?? fichaMeta?.sedeNombre ?? null,
+        responsable: fichaMeta?.responsable ?? ambiente?.responsable ?? null,
+        responsableDni: fichaMeta?.responsableDni ?? null,
+        adminNombre: fichaMeta?.adminNombre ?? entidad.admin_nombre ?? null,
+        adminDni: fichaMeta?.adminDni ?? null,
         usuarioNombre,
         usuarioEmail,
         fechaGeneracion: new Date(),

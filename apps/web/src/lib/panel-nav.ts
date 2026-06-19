@@ -31,18 +31,30 @@ export function contadorNavSections(preregistrados = 0): PanelNavSection[] {
   ];
 }
 
-export function adminNavSections(preregistrados = 0): PanelNavSection[] {
+export function adminNavSections(
+  preregistrados = 0,
+  preregistroAmbienteHref?: string,
+): PanelNavSection[] {
   return [
     {
       label: "Operación",
       items: [
         {
-          href: "/admin/inventario",
-          label: "Inventario global",
+          href: preregistroAmbienteHref ?? "/admin/inventario?estado=PREREGISTRADO",
+          label: preregistroAmbienteHref ? "Preregistros" : "Inventario global",
           icon: "inventory",
           badge: preregistrados > 0 ? preregistrados : undefined,
           badgeTitle: "Preregistros pendientes de validación",
         },
+        ...(preregistroAmbienteHref
+          ? [
+              {
+                href: "/admin/inventario",
+                label: "Inventario global",
+                icon: "inventory" as const,
+              },
+            ]
+          : []),
         {
           href: "/admin/activos",
           label: "Ambientes",

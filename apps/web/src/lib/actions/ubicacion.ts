@@ -27,6 +27,27 @@ export async function getSedePrincipal(entidadId: string): Promise<Sede | null> 
   return (data as Sede) ?? null;
 }
 
+/** Asegura el ambiente sistema de preregistros (nombre con año actual) y lo devuelve. */
+export async function getAmbientePreregistro(entidadId: string): Promise<Ambiente | null> {
+  const profile = await getProfile();
+  if (!profile) return null;
+
+  const supabase = await createClient();
+  const { data: ambienteId, error } = await supabase.rpc("ensure_ambiente_preregistro", {
+    p_entidad_id: entidadId,
+  });
+
+  if (error || !ambienteId) return null;
+
+  const { data } = await supabase
+    .from("ambientes")
+    .select("*")
+    .eq("id", ambienteId as string)
+    .maybeSingle();
+
+  return (data as Ambiente) ?? null;
+}
+
 export async function listSedesConConteo(entidadId: string): Promise<SedeConConteo[]> {
   const profile = await getProfile();
   if (!profile) return [];
@@ -144,6 +165,7 @@ export async function listAmbientesPorEntidad(
   }));
 
   return withCounts.sort((a, b) => {
+    if (a.es_preregistro !== b.es_preregistro) return a.es_preregistro ? -1 : 1;
     if (a.sede_es_principal !== b.sede_es_principal) {
       return a.sede_es_principal ? -1 : 1;
     }
@@ -164,6 +186,7 @@ export async function listAmbientes(sedeId: string): Promise<Ambiente[]> {
     .select("*")
     .eq("sede_id", sedeId)
     .eq("activo", true)
+    .eq("es_preregistro", false)
     .order("nombre");
 
   if (error) return [];
@@ -315,12 +338,15 @@ export async function updateAmbiente(
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("ambientes")
-    .select("id, sede_id")
+    .select("id, sede_id, es_preregistro")
     .eq("id", ambienteId)
     .eq("activo", true)
     .single();
 
   if (!existing) return { error: "Ambiente no encontrado." };
+  if ((existing as Ambiente).es_preregistro) {
+    return { error: "El ambiente de preregistros no se puede editar." };
+  }
 
   if (profile.rol === "ADMIN_ENTIDAD") {
     const { data: sedeRow } = await supabase
@@ -361,12 +387,15 @@ export async function deleteAmbiente(ambienteId: string) {
 
   const { data: existing } = await supabase
     .from("ambientes")
-    .select("id, sede_id")
+    .select("id, sede_id, es_preregistro")
     .eq("id", ambienteId)
     .eq("activo", true)
     .single();
 
   if (!existing) return { error: "Ambiente no encontrado." };
+  if ((existing as Ambiente).es_preregistro) {
+    return { error: "El ambiente de preregistros no se puede eliminar." };
+  }
 
   const { count } = await supabase
     .from("activos")

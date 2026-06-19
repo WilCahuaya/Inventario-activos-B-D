@@ -18,9 +18,10 @@ export const ENTIDADES_TABLE_COLS: PanelTableColSpec[] = [
   { type: "shrink" },
 ];
 
-/** nombre, cargo, correo, teléfono, ambientes, estado, acciones */
+/** nombre, dni, cargo, correo, teléfono, ambientes, estado, acciones */
 export const RESPONSABLES_TABLE_COLS: PanelTableColSpec[] = [
   { type: "grow" },
+  { type: "shrink" },
   { type: "shrink" },
   { type: "grow" },
   { type: "shrink" },

@@ -4,14 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ambiente, Entidad, Sede } from "@inventario/types";
 import { ReportesPanelContent } from "@inventario/ui/panel";
 import { cargarActivosReporte } from "@/lib/actions/reportes";
+import { resolveFichaAsignacionExportMeta } from "@/lib/actions/ficha-asignacion-meta";
 import { listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 import {
-  REPORTES,
   REPORTE_PREVIEW_MAX_ROWS,
   buildReporteResumenPreview,
   buildReporteRows,
   exportReporte,
   reporteHeaders,
+  reportesDisponiblesParaRol,
   type ActivoReporte,
   type ReporteFormato,
   type ReporteId,
@@ -35,7 +36,7 @@ export function ReportesPanel({
   esAdmin = false,
 }: ReportesPanelProps) {
   const reportesDisponibles = useMemo(
-    () => (esAdmin ? REPORTES.filter((r) => !r.soloContador && !r.valorizado) : REPORTES),
+    () => reportesDisponiblesParaRol(esAdmin ? "ADMIN_ENTIDAD" : "CONTADOR"),
     [esAdmin],
   );
 
@@ -51,7 +52,13 @@ export function ReportesPanel({
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<ReporteFormato | null>(null);
 
-  const definicion = reportesDisponibles.find((r) => r.id === reporteId)!;
+  useEffect(() => {
+    if (!reportesDisponibles.some((r) => r.id === reporteId) && reportesDisponibles[0]) {
+      setReporteId(reportesDisponibles[0].id);
+    }
+  }, [reportesDisponibles, reporteId]);
+
+  const definicion = reportesDisponibles.find((r) => r.id === reporteId) ?? reportesDisponibles[0]!;
   const entidad = entidades.find((e) => e.id === entidadId);
   const ambiente = ambientes.find((a) => a.id === ambienteId);
   const sede = sedes.find((s) => s.id === sedeId);
@@ -150,12 +157,20 @@ export function ReportesPanel({
     setPending(formato);
     setError(null);
     try {
+      const fichaMeta =
+        definicion.scope === "ambiente" && ambiente
+          ? await resolveFichaAsignacionExportMeta(entidad, ambiente, sede?.nombre ?? null)
+          : null;
+
       await exportReporte(formato, data, {
         reporteId,
         entidadNombre: entidad.nombre,
         ambienteNombre: ambiente?.nombre ?? null,
-        sedeNombre: sede?.nombre ?? null,
-        responsable: ambiente?.responsable ?? null,
+        sedeNombre: sede?.nombre ?? fichaMeta?.sedeNombre ?? null,
+        responsable: fichaMeta?.responsable ?? ambiente?.responsable ?? null,
+        responsableDni: fichaMeta?.responsableDni ?? null,
+        adminNombre: fichaMeta?.adminNombre ?? entidad.admin_nombre ?? null,
+        adminDni: fichaMeta?.adminDni ?? null,
         usuarioNombre,
         usuarioEmail,
         fechaGeneracion: new Date(),

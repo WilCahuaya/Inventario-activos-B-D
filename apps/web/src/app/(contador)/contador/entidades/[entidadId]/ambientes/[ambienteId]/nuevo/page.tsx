@@ -35,6 +35,7 @@ export default async function NuevoActivoPage({
       ambienteId={ambienteId}
       ambienteNombre={ambienteData.ambiente.nombre}
       sedeId={ambienteData.ambiente.sede_id}
+      esAmbientePreregistro={ambienteData.ambiente.es_preregistro}
       listHref={listHref}
       entidadHref={entidadHref}
     />

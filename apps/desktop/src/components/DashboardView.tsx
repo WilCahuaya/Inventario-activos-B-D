@@ -24,7 +24,6 @@ interface DashboardViewProps {
   onSyncNow: () => void;
   syncing: boolean;
   onRegister: () => void;
-  onOpenFicha: (activo: ActivoConUbicacion) => void;
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
@@ -89,7 +88,6 @@ export function DashboardView({
   onSyncNow,
   syncing,
   onRegister,
-  onOpenFicha,
   onPrintLabel,
   onPrintBatch,
   onActivoUpdated,
@@ -185,7 +183,6 @@ export function DashboardView({
         online={online}
         ambienteFilter={ambienteFilter}
         onClearAmbienteFilter={onClearAmbienteFilter}
-        onOpenFicha={onOpenFicha}
         onPrintLabel={onPrintLabel}
         onPrintBatch={onPrintBatch}
         onActivoUpdated={onActivoUpdated}

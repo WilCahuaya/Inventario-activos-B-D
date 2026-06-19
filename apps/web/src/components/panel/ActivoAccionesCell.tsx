@@ -6,7 +6,6 @@ import { ActivoAccionesBar } from "./ActivoAccionesBar";
 interface ActivoAccionesCellProps {
   activo: Activo;
   onEdit: (activo: Activo) => void;
-  onOpenFicha: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
   editarLabel?: string;
@@ -16,7 +15,6 @@ interface ActivoAccionesCellProps {
 export function ActivoAccionesCell({
   activo,
   onEdit,
-  onOpenFicha,
   puedeDarDeBaja,
   puedeValidarPreregistro,
   editarLabel,
@@ -27,7 +25,6 @@ export function ActivoAccionesCell({
       <ActivoAccionesBar
         activo={activo}
         onEdit={onEdit}
-        onOpenFicha={onOpenFicha}
         compact
         className="justify-center"
         puedeDarDeBaja={puedeDarDeBaja}

@@ -4,6 +4,8 @@ import {
   type ActivosSimilaresPreview,
   type CreateActivosSimilaresResult,
   type EjemplaresSimilaresResumen,
+  type UpdateActivosSimilaresInput,
+  type UpdateActivosSimilaresResult,
 } from "@inventario/types";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import { fetchProfile } from "./profile";
@@ -13,7 +15,14 @@ export type ActivoConUbicacion = Activo & {
   entidad_nombre?: string;
   sede_nombre?: string;
   ambiente_nombre?: string;
+  posible_ambiente_nombre?: string;
 };
+
+const ACTIVO_SELECT_SIN_ENTIDAD =
+  "*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre)";
+
+const ACTIVO_SELECT_GLOBAL =
+  "*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre)";
 
 export interface CreateActivoInput {
   entidad_id: string;
@@ -37,6 +46,8 @@ export interface CreateActivoInput {
   comprobante_serie?: string;
   sede_id?: string;
   ambiente_id?: string;
+  posible_ambiente_id?: string | null;
+  estado_registro?: EstadoRegistro;
 }
 
 export type UpdateActivoInput = Omit<CreateActivoInput, "entidad_id">;
@@ -45,12 +56,14 @@ function mapActivoRow(row: Record<string, unknown>): ActivoConUbicacion {
   const entidades = row.entidades as { nombre: string } | null;
   const sedes = row.sedes as { nombre: string } | null;
   const ambientes = row.ambientes as { nombre: string } | null;
-  const { entidades: _e, sedes: _s, ambientes: _a, ...activo } = row;
+  const posibleAmbiente = row.posible_ambiente as { nombre: string } | null;
+  const { entidades: _e, sedes: _s, ambientes: _a, posible_ambiente: _p, ...activo } = row;
   return {
     ...(activo as unknown as Activo),
     entidad_nombre: entidades?.nombre,
     sede_nombre: sedes?.nombre,
     ambiente_nombre: ambientes?.nombre,
+    posible_ambiente_nombre: posibleAmbiente?.nombre,
   };
 }
 
@@ -86,7 +99,7 @@ export async function findActivoByCodigo(
 
       const { data, error } = await supabase
         .from("activos")
-        .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+        .select(ACTIVO_SELECT_SIN_ENTIDAD)
         .eq("entidad_id", entidadId)
         .or(orFilter)
         .order("created_at", { ascending: false })
@@ -121,7 +134,7 @@ export async function listActivosForEntidad(entidadId: string): Promise<ActivoCo
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("activos")
-    .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .select(ACTIVO_SELECT_SIN_ENTIDAD)
     .eq("entidad_id", entidadId)
     .order("created_at", { ascending: false });
 
@@ -133,7 +146,7 @@ export async function listActivosPorAmbiente(ambienteId: string): Promise<Activo
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("activos")
-    .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .select(ACTIVO_SELECT_SIN_ENTIDAD)
     .eq("ambiente_id", ambienteId)
     .order("created_at", { ascending: false });
 
@@ -145,7 +158,7 @@ export async function listActivosGlobal(): Promise<ActivoConUbicacion[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("activos")
-    .select("*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .select(ACTIVO_SELECT_GLOBAL)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -160,7 +173,7 @@ export async function getActivoById(activoId: string): Promise<ActivoConUbicacio
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("activos")
-    .select("*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .select(ACTIVO_SELECT_SIN_ENTIDAD)
     .eq("id", activoId)
     .maybeSingle();
 
@@ -174,17 +187,20 @@ export async function createActivo(
 ): Promise<{ data?: Activo; error?: string }> {
   const supabase = getSupabaseClient();
 
+  const esPreregistro = input.estado_registro !== "REGISTRADO";
+
   let responsable: string | null = null;
-  if (input.ambiente_id) {
+  const ambienteResponsableId = esPreregistro ? input.posible_ambiente_id : input.ambiente_id;
+  if (ambienteResponsableId) {
     const { data: ambiente } = await supabase
       .from("ambientes")
       .select("responsable")
-      .eq("id", input.ambiente_id)
+      .eq("id", ambienteResponsableId)
       .maybeSingle();
     responsable = ambiente?.responsable?.trim() || null;
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     entidad_id: input.entidad_id,
     codigo_catalogo: input.codigo_catalogo.trim(),
     nombre: input.nombre.trim(),
@@ -205,9 +221,19 @@ export async function createActivo(
     fecha_adquisicion: input.fecha_adquisicion || null,
     vida_util_meses: input.vida_util_meses ?? null,
     comprobante_serie: input.comprobante_serie?.trim() || null,
-    sede_id: input.sede_id || null,
-    ambiente_id: input.ambiente_id || null,
   };
+
+  if (esPreregistro) {
+    payload.posible_ambiente_id = input.posible_ambiente_id || null;
+    payload.estado_registro = "PREREGISTRADO";
+  } else {
+    payload.estado_registro = "REGISTRADO";
+    payload.sede_id = input.sede_id || null;
+    payload.ambiente_id = input.ambiente_id || null;
+    if (!payload.sede_id || !payload.ambiente_id) {
+      return { error: "Seleccione sede y ambiente para registrar el activo." };
+    }
+  }
 
   if (!payload.codigo_catalogo || !payload.nombre) {
     return { error: "Código catálogo y nombre son obligatorios." };
@@ -226,22 +252,26 @@ export async function updateActivo(
 
   const { data: existing } = await supabase
     .from("activos")
-    .select("ambiente_id")
+    .select("ambiente_id, estado_registro, posible_ambiente_id")
     .eq("id", activoId)
     .maybeSingle();
 
+  const esPreregistro = existing?.estado_registro === "PREREGISTRADO";
   const ambienteId = input.ambiente_id ?? existing?.ambiente_id;
+  const responsableAmbienteId = esPreregistro
+    ? input.posible_ambiente_id ?? existing?.posible_ambiente_id
+    : ambienteId;
   let responsable: string | null = null;
-  if (ambienteId) {
+  if (responsableAmbienteId) {
     const { data: ambiente } = await supabase
       .from("ambientes")
       .select("responsable")
-      .eq("id", ambienteId)
+      .eq("id", responsableAmbienteId)
       .maybeSingle();
     responsable = ambiente?.responsable?.trim() || null;
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     codigo_catalogo: input.codigo_catalogo.trim(),
     nombre: input.nombre.trim(),
     nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
@@ -261,9 +291,14 @@ export async function updateActivo(
     fecha_adquisicion: input.fecha_adquisicion || null,
     vida_util_meses: input.vida_util_meses ?? null,
     comprobante_serie: input.comprobante_serie?.trim() || null,
-    sede_id: input.sede_id || null,
-    ambiente_id: ambienteId,
   };
+
+  if (esPreregistro) {
+    payload.posible_ambiente_id = input.posible_ambiente_id ?? null;
+  } else {
+    payload.sede_id = input.sede_id || null;
+    payload.ambiente_id = ambienteId;
+  }
 
   if (!payload.codigo_catalogo || !payload.nombre) {
     return { error: "Código catálogo y nombre son obligatorios." };
@@ -394,14 +429,83 @@ export async function darDeBajaActivo(
   return { data: activo };
 }
 
-export async function registrarActivo(
+export async function recuperarActivo(
   activoId: string,
 ): Promise<{ data?: ActivoConUbicacion; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") {
+    return { error: "Solo el contador puede recuperar activos dados de baja." };
+  }
+
   const supabase = getSupabaseClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("estado_registro, codigo_barras")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  if (existing.estado_registro !== "DADO_DE_BAJA") {
+    return { error: "El activo no está dado de baja." };
+  }
+
+  const nuevoEstado: EstadoRegistro = existing.codigo_barras?.trim()
+    ? "REGISTRADO"
+    : "PREREGISTRADO";
 
   const { error } = await supabase
     .from("activos")
-    .update({ estado_registro: "REGISTRADO" })
+    .update({
+      estado_registro: nuevoEstado,
+      motivo_baja: null,
+      updated_by: profile.id,
+    })
+    .eq("id", activoId);
+
+  if (error) return { error: error.message };
+
+  const activo = await getActivoById(activoId);
+  if (!activo) return { error: "Activo no encontrado tras recuperar." };
+  return { data: activo };
+}
+
+export async function registrarActivo(
+  activoId: string,
+  destino: { sedeId: string; ambienteId: string },
+): Promise<{ data?: ActivoConUbicacion; error?: string }> {
+  const supabase = getSupabaseClient();
+
+  if (!destino.sedeId || !destino.ambienteId) {
+    return { error: "Seleccione sede y ambiente destino." };
+  }
+
+  const { data: ambienteDestino } = await supabase
+    .from("ambientes")
+    .select("id, sede_id, es_preregistro, responsable")
+    .eq("id", destino.ambienteId)
+    .maybeSingle();
+
+  if (!ambienteDestino || ambienteDestino.sede_id !== destino.sedeId) {
+    return { error: "El ambiente no pertenece a la sede seleccionada." };
+  }
+  if (ambienteDestino.es_preregistro) {
+    return { error: "Seleccione un ambiente real, no el de preregistros." };
+  }
+
+  const { error } = await supabase
+    .from("activos")
+    .update({
+      estado_registro: "REGISTRADO",
+      sede_id: destino.sedeId,
+      ambiente_id: destino.ambienteId,
+      posible_ambiente_id: null,
+      responsable: ambienteDestino.responsable?.trim() || null,
+    })
     .eq("id", activoId)
     .eq("estado_registro", "PREREGISTRADO");
 
@@ -440,9 +544,15 @@ export async function previewActivosSimilares(
   };
 }
 
+export type CreateActivosSimilaresUbicacion = {
+  sedeId: string;
+  ambienteId: string;
+};
+
 export async function createActivosSimilares(
   activoId: string,
   cantidad: number,
+  ubicacion?: CreateActivosSimilaresUbicacion,
 ): Promise<{ data?: CreateActivosSimilaresResult; error?: string }> {
   const qty = Math.floor(cantidad);
   if (qty < 1 || qty > MAX_ACTIVOS_SIMILARES_CANTIDAD) {
@@ -465,10 +575,21 @@ export async function createActivosSimilares(
     return { error: "No puede duplicar un activo dado de baja." };
   }
 
-  const { data, error } = await supabase.rpc("create_activos_similares", {
+  const rpcParams: {
+    p_activo_id: string;
+    p_cantidad: number;
+    p_sede_id?: string;
+    p_ambiente_id?: string;
+  } = {
     p_activo_id: activoId,
     p_cantidad: qty,
-  });
+  };
+  if (ubicacion) {
+    rpcParams.p_sede_id = ubicacion.sedeId;
+    rpcParams.p_ambiente_id = ubicacion.ambienteId;
+  }
+
+  const { data, error } = await supabase.rpc("create_activos_similares", rpcParams);
 
   if (error) return { error: error.message };
   return { data: data as CreateActivosSimilaresResult };
@@ -495,6 +616,42 @@ export async function getEjemplaresSimilaresResumen(
   };
 }
 
+function buildActivosSimilaresPatch(
+  input: UpdateActivosSimilaresInput,
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) {
+      patch[key] = value;
+    }
+  }
+  return patch;
+}
+
+export async function updateActivosSimilares(
+  activoId: string,
+  input: UpdateActivosSimilaresInput,
+): Promise<{ data?: UpdateActivosSimilaresResult; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+
+  const patch = buildActivosSimilaresPatch(input);
+  if (Object.keys(patch).length === 0) {
+    return { error: "No hay cambios para aplicar." };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("update_activos_similares", {
+    p_activo_id: activoId,
+    p_patch: patch,
+  });
+
+  if (error) return { error: error.message };
+  const result = data as { actualizados?: number };
+  return { data: { actualizados: result.actualizados ?? 0 } };
+}
+
 export async function listActivosSimilaresParaEtiquetas(
   activoId: string,
 ): Promise<ActivoConUbicacion[]> {
@@ -510,7 +667,7 @@ export async function listActivosSimilaresParaEtiquetas(
 
   const { data, error } = await supabase
     .from("activos")
-    .select("*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre)")
+    .select(ACTIVO_SELECT_GLOBAL)
     .in("id", activoIds)
     .order("correlativo", { ascending: true });
 

@@ -56,10 +56,28 @@ export async function listAmbientes(sedeId: string): Promise<Ambiente[]> {
     .select("*")
     .eq("sede_id", sedeId)
     .eq("activo", true)
+    .eq("es_preregistro", false)
     .order("nombre");
 
   if (error) throw new Error(error.message);
   return (data ?? []) as Ambiente[];
+}
+
+export async function getAmbientePreregistro(entidadId: string): Promise<Ambiente | null> {
+  const supabase = getSupabaseClient();
+  const { data: ambienteId, error } = await supabase.rpc("ensure_ambiente_preregistro", {
+    p_entidad_id: entidadId,
+  });
+
+  if (error || !ambienteId) return null;
+
+  const { data } = await supabase
+    .from("ambientes")
+    .select("*")
+    .eq("id", ambienteId as string)
+    .maybeSingle();
+
+  return (data as Ambiente) ?? null;
 }
 
 export async function listAmbientesPorEntidad(entidadId: string): Promise<AmbienteConSede[]> {
@@ -92,6 +110,7 @@ export async function listAmbientesPorEntidad(entidadId: string): Promise<Ambien
   }));
 
   return withCounts.sort((a, b) => {
+    if (a.es_preregistro !== b.es_preregistro) return a.es_preregistro ? -1 : 1;
     if (a.sede_es_principal !== b.sede_es_principal) return a.sede_es_principal ? -1 : 1;
     if (a.sede_nombre !== b.sede_nombre) return a.sede_nombre.localeCompare(b.sede_nombre);
     return a.nombre.localeCompare(b.nombre);
@@ -128,6 +147,16 @@ export async function updateAmbiente(
   if (!trimmed) return { error: "Nombre de ambiente obligatorio." };
 
   const supabase = getSupabaseClient();
+  const { data: existing } = await supabase
+    .from("ambientes")
+    .select("es_preregistro")
+    .eq("id", ambienteId)
+    .maybeSingle();
+
+  if (existing?.es_preregistro) {
+    return { error: "El ambiente de preregistros no se puede editar." };
+  }
+
   const { error } = await supabase
     .from("ambientes")
     .update({
@@ -145,6 +174,16 @@ export async function deleteAmbiente(
   ambienteId: string,
 ): Promise<{ success?: true; error?: string }> {
   const supabase = getSupabaseClient();
+
+  const { data: existing } = await supabase
+    .from("ambientes")
+    .select("es_preregistro")
+    .eq("id", ambienteId)
+    .maybeSingle();
+
+  if (existing?.es_preregistro) {
+    return { error: "El ambiente de preregistros no se puede eliminar." };
+  }
 
   const { count } = await supabase
     .from("activos")

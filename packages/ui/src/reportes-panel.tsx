@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Button, Input, Select } from "./components";
 import { PanelBanner, PanelCountLabel, StatusBadge, panelCardClass } from "./panel";
 import { PanelTableTd, PanelTableTh } from "./panel-table-layout";
+import { panelStickyToolbarClass } from "./responsive-layout";
 
 export interface ReporteDefinicionUI {
   id: string;
@@ -136,7 +137,7 @@ export function ReportesPanelContent({
   const previewTruncado = previewTotal > previewRows.length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4 lg:space-y-5">
       {offlineBanner}
 
       <section className={`${panelCardClass} space-y-3 p-4 sm:p-5`}>
@@ -176,9 +177,7 @@ export function ReportesPanelContent({
         </div>
       </section>
 
-      <section
-        className={`sticky top-0 z-10 ${panelCardClass} space-y-4 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/95 sm:p-5`}
-      >
+      <section className={`${panelStickyToolbarClass} space-y-3 sm:space-y-4`}>
         <div>
           <h2 className="text-sm font-semibold text-foreground">2. Filtros y exportación</h2>
           <p className="text-xs text-muted-foreground">Configure alcance, fecha de corte y descargue el archivo</p>
@@ -187,7 +186,7 @@ export function ReportesPanelContent({
         {hideEntidadSelector && entidadNombreFija ? (
           <PanelBanner label="Entidad" title={entidadNombreFija} />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:gap-4">
             <div className="space-y-1">
               <label htmlFor="reporte_entidad" className="text-xs font-medium text-muted-foreground">
                 Entidad
@@ -363,7 +362,7 @@ export function ReportesPanelContent({
             <PanelCountLabel count={previewTotal} singular="registro" plural="registros" />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 2xl:gap-4">
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
               <p className="text-xs font-medium text-muted-foreground">Total en reporte</p>
               <p className="mt-1 text-2xl font-semibold tabular-nums text-primary">{resumen.total}</p>
@@ -441,7 +440,10 @@ export function ReportesPanelContent({
           <li>Membrete con razón social, RUC y fecha de corte</li>
           <li>Usuario generador y numeración de páginas en PDF</li>
           {esAdmin ? (
-            <li>Solo reportes físicos sin columnas monetarias (valores reservados al contador)</li>
+            <li>
+              Fichas e inventarios sin valores monetarios, y reporte de bajas (acta y valorizados
+              reservados al contador)
+            </li>
           ) : (
             <>
               <li>Resumen por clasificación contable en reportes valorizados</li>

@@ -2,10 +2,11 @@ import type { Activo, RolUsuario } from "@inventario/types";
 
 export type ReporteId =
   | "inventario_ambiente_sin_valores"
+  | "inventario_ambiente_activos_fijos"
   | "inventario_entidad_sin_valores"
+  | "inventario_entidad_activos_fijos"
   | "inventario_ambiente_valorizado"
   | "inventario_entidad_valorizado"
-  | "acta_inventario"
   | "reporte_bajas";
 
 export type ReporteFormato = "pdf" | "excel";
@@ -25,24 +26,41 @@ export interface ReporteDefinicion {
 export const REPORTES: ReporteDefinicion[] = [
   {
     id: "inventario_ambiente_sin_valores",
-    label: "Inventario por ambiente (sin valores)",
-    descripcion: "Listado físico del ambiente sin columnas monetarias.",
+    label: "Ficha de asignación por ambiente",
+    descripcion: "Ficha de asignación de bienes al usuario responsable, sin valores.",
+    scope: "ambiente",
+    valorizado: false,
+    formatos: ["pdf", "excel"],
+  },
+  {
+    id: "inventario_ambiente_activos_fijos",
+    label: "Inventario de activos fijos por ambiente",
+    descripcion: "Listado físico del ambiente sin valores ni firmas.",
     scope: "ambiente",
     valorizado: false,
     formatos: ["pdf", "excel"],
   },
   {
     id: "inventario_entidad_sin_valores",
-    label: "Inventario general por entidad (sin valores)",
-    descripcion: "Todos los activos registrados de la entidad, sin valores.",
+    label: "Acta de inventario de activos fijos general",
+    descripcion: "Acta con todos los activos de la entidad sin valores y firmas de conformidad.",
+    scope: "entidad",
+    valorizado: false,
+    formatos: ["pdf", "excel"],
+    soloContador: true,
+  },
+  {
+    id: "inventario_entidad_activos_fijos",
+    label: "Inventario de activos fijos general",
+    descripcion: "Listado completo de la entidad sin valores ni firmas.",
     scope: "entidad",
     valorizado: false,
     formatos: ["pdf", "excel"],
   },
   {
     id: "inventario_ambiente_valorizado",
-    label: "Inventario valorizado por ambiente",
-    descripcion: "Incluye precio, depreciación acumulada y valor neto.",
+    label: "Inventario de activos valorizados por ambiente",
+    descripcion: "Listado del ambiente con precio, depreciación y valor neto, sin firmas.",
     scope: "ambiente",
     valorizado: true,
     formatos: ["pdf", "excel"],
@@ -50,30 +68,20 @@ export const REPORTES: ReporteDefinicion[] = [
   },
   {
     id: "inventario_entidad_valorizado",
-    label: "Inventario valorizado por entidad",
-    descripcion: "Inventario completo de la entidad con valores.",
+    label: "Inventario de activos valorizados general",
+    descripcion: "Inventario completo de la entidad con valores, sin firmas.",
     scope: "entidad",
     valorizado: true,
     formatos: ["pdf", "excel"],
     soloContador: true,
   },
   {
-    id: "acta_inventario",
-    label: "Acta de inventario",
-    descripcion: "Documento PDF con espacios para firmas.",
-    scope: "entidad",
-    valorizado: false,
-    formatos: ["pdf"],
-    soloContador: true,
-  },
-  {
     id: "reporte_bajas",
     label: "Reporte de bajas",
-    descripcion: "Activos dados de baja con motivo y fecha.",
+    descripcion: "Activos dados de baja con motivo y fecha, sin firmas.",
     scope: "entidad",
     valorizado: false,
     formatos: ["pdf", "excel"],
-    soloContador: true,
   },
 ];
 
@@ -82,6 +90,10 @@ export function reportesDisponiblesParaRol(rol: RolUsuario): ReporteDefinicion[]
     return REPORTES.filter((r) => !r.soloContador && !r.valorizado);
   }
   return REPORTES;
+}
+
+export function reportesAmbienteParaRol(rol: RolUsuario): ReporteDefinicion[] {
+  return reportesDisponiblesParaRol(rol).filter((r) => r.scope === "ambiente");
 }
 
 export function reportePermitidoParaRol(reporteId: ReporteId, rol: RolUsuario): boolean {
@@ -102,6 +114,9 @@ export interface ReporteContexto {
   ambienteNombre?: string | null;
   sedeNombre?: string | null;
   responsable?: string | null;
+  responsableDni?: string | null;
+  adminNombre?: string | null;
+  adminDni?: string | null;
   usuarioNombre: string;
   usuarioEmail: string;
   fechaGeneracion: Date;
