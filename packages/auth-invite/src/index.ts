@@ -150,6 +150,36 @@ async function upsertProfileForRole(
   return upsertContadorProfile(admin, userId, input.email, input.nombre);
 }
 
+async function deliverResendEmailForConfirmedUser(
+  admin: SupabaseClient,
+  email: string,
+  redirectTo: string,
+): Promise<{ error?: string }> {
+  const emailNorm = normalizeEmail(email);
+
+  const { error: otpError } = await admin.auth.signInWithOtp({
+    email: emailNorm,
+    options: {
+      shouldCreateUser: false,
+      emailRedirectTo: redirectTo,
+    },
+  });
+
+  if (!otpError) {
+    return {};
+  }
+
+  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(emailNorm, {
+    redirectTo,
+  });
+
+  if (!inviteError) {
+    return {};
+  }
+
+  return { error: inviteError.message || otpError.message };
+}
+
 async function deliverInvitationEmail(
   admin: SupabaseClient,
   input: SendUserInvitationInput,
@@ -158,10 +188,6 @@ async function deliverInvitationEmail(
   const emailNorm = normalizeEmail(input.email);
   const metadata = inviteMetadata(input);
   const redirectTo = input.redirectTo;
-
-  if (existingUser && isUserConfirmed(existingUser)) {
-    return { userId: existingUser.id };
-  }
 
   const { data, error } = await admin.auth.admin.inviteUserByEmail(emailNorm, {
     data: metadata,
@@ -216,6 +242,26 @@ export async function sendUserInvitation(
 
   const existingUser = await findAuthUserByEmail(admin, emailNorm);
   const confirmed = existingUser ? isUserConfirmed(existingUser) : false;
+
+  if (confirmed && mode === "resend") {
+    const userId = existingUser!.id;
+    const profileResult = await upsertProfileForRole(admin, userId, input);
+    if (profileResult.error) return { error: profileResult.error };
+
+    const resend = await deliverResendEmailForConfirmedUser(
+      admin,
+      emailNorm,
+      input.redirectTo,
+    );
+    if (resend.error) return { error: resend.error };
+
+    return {
+      success: true,
+      invited: true,
+      resent: true,
+      message: `Correo de acceso reenviado a ${emailNorm}. Podrá ingresar con Google o el enlace del correo.`,
+    };
+  }
 
   if (confirmed) {
     const userId = existingUser!.id;
