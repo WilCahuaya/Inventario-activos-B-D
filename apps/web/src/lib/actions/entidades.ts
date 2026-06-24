@@ -137,6 +137,18 @@ export async function updateEntidad(entidadId: string, input: CreateEntidadInput
   const dniError = validarAdminEntidadDni(adminDni);
   if (dniError) return { error: dniError };
 
+  const { data: entidadAnterior } = await supabase
+    .from("entidades")
+    .select("admin_email")
+    .eq("id", entidadId)
+    .eq("activo", true)
+    .maybeSingle();
+
+  const adminEmailAnterior = entidadAnterior?.admin_email?.trim().toLowerCase() ?? null;
+  const adminEmailNorm = adminEmail.toLowerCase();
+  const inviteMode =
+    adminEmailAnterior && adminEmailAnterior === adminEmailNorm ? "resend" : "invite";
+
   const { data, error } = await supabase
     .from("entidades")
     .update({
@@ -165,7 +177,9 @@ export async function updateEntidad(entidadId: string, input: CreateEntidadInput
     adminDni,
   );
 
-  const invite = await inviteEntidadAdmin(entidadId, adminEmail, adminNombre, nombre);
+  const invite = await inviteEntidadAdmin(entidadId, adminEmail, adminNombre, nombre, {
+    mode: inviteMode,
+  });
   if (invite.error) return { error: invite.error };
 
   revalidatePath("/contador/entidades");

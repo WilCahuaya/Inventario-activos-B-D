@@ -280,7 +280,12 @@ export function EntidadesView({
           .sort((a, b) => a.nombre.localeCompare(b.nombre)),
       );
       setEditEntidad(null);
-      inviteEntidadAdminInBackground(editEntidad.id, input, setSuccess);
+      inviteEntidadAdminInBackground(
+        editEntidad.id,
+        input,
+        setSuccess,
+        result.inviteMode ?? "resend",
+      );
     } finally {
       setPending(false);
     }

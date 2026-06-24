@@ -5,6 +5,7 @@ import {
   deleteUsuario,
   inviteContador,
   listUsuarios,
+  resendInvitacionUsuario,
   setUsuarioActivo,
   type ProfileConEntidad,
 } from "../lib/usuarios";
@@ -57,6 +58,7 @@ export function UsuariosView() {
         pageTitle="Usuarios"
         pageSubtitle="Gestione contadores del estudio e invíte administradores al crear una entidad."
         onInviteContador={inviteContador}
+        onResendInvitacion={resendInvitacionUsuario}
         onSetUsuarioActivo={setUsuarioActivo}
         onDeleteUsuario={deleteUsuario}
         onRefresh={reloadUsuarios}

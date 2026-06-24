@@ -20,6 +20,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@inventario/auth-invite':
+        specifier: workspace:*
+        version: link:../../packages/auth-invite
       '@inventario/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
@@ -105,6 +108,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@inventario/auth-invite':
+        specifier: workspace:*
+        version: link:../../packages/auth-invite
       '@inventario/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
@@ -166,6 +172,19 @@ importers:
       tailwindcss:
         specifier: ^3.4.17
         version: 3.4.19
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/auth-invite:
+    dependencies:
+      '@inventario/types':
+        specifier: workspace:*
+        version: link:../types
+      '@supabase/supabase-js':
+        specifier: ^2.108.2
+        version: 2.108.2
+    devDependencies:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

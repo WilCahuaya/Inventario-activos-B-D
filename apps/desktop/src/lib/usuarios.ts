@@ -1,4 +1,5 @@
 import type { Profile } from "@inventario/types";
+import type { AccesoInvitacionEstado } from "@inventario/auth-invite";
 import {
   validarDesactivarUsuario,
   validarEliminarUsuario,
@@ -52,6 +53,24 @@ async function loadUsuariosGestion(): Promise<UsuarioGestionResumen[]> {
 
 export interface ProfileConEntidad extends Profile {
   entidad_nombre?: string | null;
+  acceso_estado?: AccesoInvitacionEstado;
+}
+
+async function enrichAccesoEstado(
+  usuarios: ProfileConEntidad[],
+): Promise<ProfileConEntidad[]> {
+  if (!window.electronAPI?.getUsuariosAccesoEstado) {
+    return usuarios;
+  }
+
+  const estados = await window.electronAPI.getUsuariosAccesoEstado(
+    usuarios.map((u) => u.email),
+  );
+
+  return usuarios.map((usuario) => ({
+    ...usuario,
+    acceso_estado: estados[usuario.email.toLowerCase()] ?? "desconocido",
+  }));
 }
 
 export async function listUsuarios(): Promise<{ data?: ProfileConEntidad[]; error?: string }> {
@@ -77,7 +96,7 @@ export async function listUsuarios(): Promise<{ data?: ProfileConEntidad[]; erro
     };
   });
 
-  return { data: usuarios };
+  return { data: await enrichAccesoEstado(usuarios) };
 }
 
 export async function inviteContador(input: {
@@ -100,13 +119,52 @@ export async function inviteContador(input: {
     };
   }
 
-  void window.electronAPI
-    .inviteContador({ email, nombre })
-    .catch((err) => console.error("inviteContador", err));
+  const result = await window.electronAPI.inviteContador({ email, nombre, mode: "invite" });
+  if (result.error) return { error: result.error };
+  return { message: result.message ?? result.warning ?? "Invitación enviada." };
+}
 
-  return {
-    message: `Invitación en proceso para ${email}. El contador podrá ingresar con Google cuando confirme el correo.`,
+export async function resendInvitacionUsuario(
+  userId: string,
+): Promise<{ message?: string; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+
+  const supabase = getSupabaseClient();
+  const { data: row, error } = await supabase
+    .from("profiles")
+    .select("*, entidades(nombre)")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error || !row) return { error: "Usuario no encontrado." };
+
+  const { entidades, ...target } = row as Profile & {
+    entidades: { nombre: string } | null;
   };
+
+  if (target.rol !== "CONTADOR" && target.rol !== "ADMIN_ENTIDAD") {
+    return { error: "Rol de usuario no admitido para invitación." };
+  }
+
+  if (!window.electronAPI?.resendInvitacionUsuario) {
+    return {
+      error:
+        "Reenvío no disponible. Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local.",
+    };
+  }
+
+  const result = await window.electronAPI.resendInvitacionUsuario({
+    email: target.email,
+    nombre: target.nombre,
+    rol: target.rol,
+    entidadId: target.entidad_id,
+    entidadNombre: entidades?.nombre ?? null,
+  });
+
+  if (result.error) return { error: result.error };
+  return { message: result.message ?? result.warning ?? "Invitación reenviada." };
 }
 
 export async function setUsuarioActivo(

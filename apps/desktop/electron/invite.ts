@@ -1,5 +1,5 @@
+import { sendUserInvitation, type InviteMode } from "@inventario/auth-invite";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { RolUsuario } from "@inventario/types";
 import { getServiceRoleKey, getSiteOrigin, getSupabaseUrl } from "./env";
 
 export interface InviteEntidadAdminInput {
@@ -7,18 +7,39 @@ export interface InviteEntidadAdminInput {
   email: string;
   nombre: string;
   entidadNombre?: string;
+  mode?: InviteMode;
 }
 
 export interface InviteEntidadAdminResult {
   success?: boolean;
   invited?: boolean;
+  resent?: boolean;
   message?: string;
   warning?: string;
   error?: string;
 }
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
+export interface InviteContadorInput {
+  email: string;
+  nombre: string;
+  mode?: InviteMode;
+}
+
+export interface InviteContadorResult {
+  success?: boolean;
+  invited?: boolean;
+  resent?: boolean;
+  message?: string;
+  warning?: string;
+  error?: string;
+}
+
+export interface ResendInvitacionInput {
+  email: string;
+  nombre: string;
+  rol: "CONTADOR" | "ADMIN_ENTIDAD";
+  entidadId?: string | null;
+  entidadNombre?: string | null;
 }
 
 function createAdminClient(): SupabaseClient | null {
@@ -28,222 +49,77 @@ function createAdminClient(): SupabaseClient | null {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-async function findAuthUserByEmail(admin: SupabaseClient, email: string) {
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id")
-    .ilike("email", email)
-    .maybeSingle();
-
-  if (profile?.id) {
-    return { id: profile.id };
+function missingServiceRoleWarning(context: "entidad" | "contador" | "resend") {
+  if (context === "entidad") {
+    return "Entidad guardada. Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local para enviar la invitación por correo; el admin podrá ingresar con Google usando ese correo.";
   }
-
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-  if (error) return null;
-  return data.users.find((u) => u.email?.toLowerCase() === email) ?? null;
-}
-
-async function upsertAdminProfile(
-  admin: SupabaseClient,
-  userId: string,
-  email: string,
-  nombre: string,
-  entidadId: string,
-): Promise<{ error?: string }> {
-  await admin
-    .from("profiles")
-    .update({ activo: false })
-    .eq("entidad_id", entidadId)
-    .eq("rol", "ADMIN_ENTIDAD" as RolUsuario)
-    .neq("id", userId);
-
-  const payload = {
-    id: userId,
-    email: normalizeEmail(email),
-    nombre: nombre.trim(),
-    rol: "ADMIN_ENTIDAD" as RolUsuario,
-    entidad_id: entidadId,
-    activo: true,
-  };
-
-  const { data: existing } = await admin.from("profiles").select("id").eq("id", userId).maybeSingle();
-
-  if (existing) {
-    const { error } = await admin.from("profiles").update(payload).eq("id", userId);
-    if (error) return { error: error.message };
-  } else {
-    const { error } = await admin.from("profiles").insert(payload);
-    if (error) return { error: error.message };
+  if (context === "contador") {
+    return "Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local para enviar la invitación por correo; el contador podrá ingresar con Google usando ese correo.";
   }
-
-  return {};
+  return "Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local para enviar la invitación por correo.";
 }
 
 export async function inviteEntidadAdmin(
   input: InviteEntidadAdminInput,
 ): Promise<InviteEntidadAdminResult> {
-  const emailNorm = normalizeEmail(input.email);
-  const nombreTrim = input.nombre.trim();
-
-  if (!emailNorm) return { error: "El correo del administrador es obligatorio." };
-  if (!nombreTrim) return { error: "El nombre del administrador es obligatorio." };
-
   const admin = createAdminClient();
   if (!admin) {
     return {
       success: true,
       invited: false,
-      warning:
-        "Entidad guardada. Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local para enviar la invitación por correo; el admin podrá ingresar con Google usando ese correo.",
+      warning: missingServiceRoleWarning("entidad"),
     };
   }
 
-  const existingUser = await findAuthUserByEmail(admin, emailNorm);
-
-  if (existingUser) {
-    const result = await upsertAdminProfile(
-      admin,
-      existingUser.id,
-      emailNorm,
-      nombreTrim,
-      input.entidadId,
-    );
-    if (result.error) return { error: result.error };
-    return { success: true, invited: false, message: "Perfil de administrador actualizado." };
-  }
-
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(emailNorm, {
-    data: {
-      nombre: nombreTrim,
-      entidad_id: input.entidadId,
-      entidad_nombre: input.entidadNombre?.trim() || null,
-      rol: "ADMIN_ENTIDAD",
-    },
+  return sendUserInvitation(admin, {
+    email: input.email,
+    nombre: input.nombre,
+    rol: "ADMIN_ENTIDAD",
+    entidadId: input.entidadId,
+    entidadNombre: input.entidadNombre,
+    mode: input.mode ?? "invite",
     redirectTo: `${getSiteOrigin()}/auth/callback`,
   });
-
-  if (error) return { error: error.message };
-
-  if (data.user) {
-    const result = await upsertAdminProfile(
-      admin,
-      data.user.id,
-      emailNorm,
-      nombreTrim,
-      input.entidadId,
-    );
-    if (result.error) return { error: result.error };
-  }
-
-  return {
-    success: true,
-    invited: true,
-    message: `Invitación enviada a ${emailNorm}. El administrador podrá ingresar con Google usando ese correo.`,
-  };
-}
-
-export interface InviteContadorInput {
-  email: string;
-  nombre: string;
-}
-
-export interface InviteContadorResult {
-  success?: boolean;
-  invited?: boolean;
-  message?: string;
-  warning?: string;
-  error?: string;
-}
-
-async function upsertContadorProfile(
-  admin: SupabaseClient,
-  userId: string,
-  email: string,
-  nombre: string,
-): Promise<{ error?: string }> {
-  const { data: existing } = await admin
-    .from("profiles")
-    .select("id, rol, activo")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (existing?.activo && existing.rol === ("ADMIN_ENTIDAD" as RolUsuario)) {
-    return { error: "Este usuario ya es administrador de una entidad." };
-  }
-
-  const payload = {
-    id: userId,
-    email: normalizeEmail(email),
-    nombre: nombre.trim(),
-    rol: "CONTADOR" as RolUsuario,
-    entidad_id: null,
-    activo: true,
-  };
-
-  if (existing) {
-    const { error } = await admin.from("profiles").update(payload).eq("id", userId);
-    if (error) return { error: error.message };
-  } else {
-    const { error } = await admin.from("profiles").insert(payload);
-    if (error) return { error: error.message };
-  }
-
-  return {};
 }
 
 export async function inviteContador(input: InviteContadorInput): Promise<InviteContadorResult> {
-  const emailNorm = normalizeEmail(input.email);
-  const nombreTrim = input.nombre.trim();
-
-  if (!emailNorm) return { error: "El correo es obligatorio." };
-  if (!nombreTrim) return { error: "El nombre es obligatorio." };
-
   const admin = createAdminClient();
   if (!admin) {
     return {
       success: true,
       invited: false,
-      warning:
-        "Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local para enviar la invitación por correo; el contador podrá ingresar con Google usando ese correo.",
+      warning: missingServiceRoleWarning("contador"),
     };
   }
 
-  const existingUser = await findAuthUserByEmail(admin, emailNorm);
+  return sendUserInvitation(admin, {
+    email: input.email,
+    nombre: input.nombre,
+    rol: "CONTADOR",
+    mode: input.mode ?? "invite",
+    redirectTo: `${getSiteOrigin()}/auth/callback`,
+  });
+}
 
-  if (existingUser) {
-    const result = await upsertContadorProfile(
-      admin,
-      existingUser.id,
-      emailNorm,
-      nombreTrim,
-    );
-    if (result.error) return { error: result.error };
+export async function resendInvitacionUsuario(
+  input: ResendInvitacionInput,
+): Promise<InviteContadorResult> {
+  const admin = createAdminClient();
+  if (!admin) {
     return {
       success: true,
       invited: false,
-      message: "Perfil de contador actualizado. Ya puede ingresar al sistema.",
+      warning: missingServiceRoleWarning("resend"),
     };
   }
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(emailNorm, {
-    data: {
-      nombre: nombreTrim,
-      rol: "CONTADOR",
-    },
+  return sendUserInvitation(admin, {
+    email: input.email,
+    nombre: input.nombre,
+    rol: input.rol,
+    entidadId: input.entidadId,
+    entidadNombre: input.entidadNombre,
+    mode: "resend",
     redirectTo: `${getSiteOrigin()}/auth/callback`,
   });
-
-  if (error) return { error: error.message };
-
-  if (data.user) {
-    const result = await upsertContadorProfile(admin, data.user.id, emailNorm, nombreTrim);
-    if (result.error) return { error: result.error };
-  }
-
-  return {
-    success: true,
-    invited: true,
-    message: `Invitación enviada a ${emailNorm}. El contador podrá ingresar con Google usando ese correo.`,
-  };
 }

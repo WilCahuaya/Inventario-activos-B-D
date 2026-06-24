@@ -11,7 +11,8 @@ import {
 } from "./auth/protocol";
 import { openSystemBrowser } from "./auth/open-browser";
 import { loadDesktopEnvFiles } from "./env";
-import { inviteContador, inviteEntidadAdmin } from "./invite";
+import { inviteContador, inviteEntidadAdmin, resendInvitacionUsuario } from "./invite";
+import { getUsuariosAccesoEstado } from "./users-auth-status";
 import { deleteAuthUser } from "./users-admin";
 import {
   getAtributoVocabMeta,
@@ -273,6 +274,10 @@ ipcMain.handle("print:listPrinters", (event) => {
 
 ipcMain.handle("invite:entidadAdmin", (_event, input) => inviteEntidadAdmin(input));
 ipcMain.handle("invite:contador", (_event, input) => inviteContador(input));
+ipcMain.handle("users:resendInvitation", (_event, input) => resendInvitacionUsuario(input));
+ipcMain.handle("users:accesoEstado", (_event, emails: string[]) =>
+  getUsuariosAccesoEstado(emails),
+);
 ipcMain.handle("users:deleteAuth", (_event, userId: string) => deleteAuthUser(userId));
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();

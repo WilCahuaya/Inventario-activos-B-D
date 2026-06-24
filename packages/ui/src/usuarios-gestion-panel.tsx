@@ -45,6 +45,7 @@ const USUARIOS_TABLE_COLS = [
 
 export interface ProfileConEntidad extends Profile {
   entidad_nombre?: string | null;
+  acceso_estado?: "confirmado" | "pendiente" | "sin_cuenta" | "desconocido";
 }
 
 export interface UsuariosGestionPanelProps {
@@ -57,6 +58,7 @@ export interface UsuariosGestionPanelProps {
     email: string;
     nombre: string;
   }) => Promise<{ error?: string; message?: string | null }>;
+  onResendInvitacion: (userId: string) => Promise<{ error?: string; message?: string | null }>;
   onSetUsuarioActivo: (
     userId: string,
     activo: boolean,
@@ -76,6 +78,14 @@ function rolLabel(rol: RolUsuario | string) {
   return rol;
 }
 
+function accesoLabel(estado?: ProfileConEntidad["acceso_estado"]) {
+  if (estado === "confirmado") return "Ingresó";
+  if (estado === "pendiente") return "Pendiente";
+  if (estado === "sin_cuenta") return "Sin cuenta";
+  if (estado === "desconocido") return "—";
+  return null;
+}
+
 export function UsuariosGestionPanel({
   usuarios,
   currentUserId,
@@ -83,6 +93,7 @@ export function UsuariosGestionPanel({
   pageTitle,
   pageSubtitle,
   onInviteContador,
+  onResendInvitacion,
   onSetUsuarioActivo,
   onDeleteUsuario,
   onRefresh,
@@ -96,8 +107,13 @@ export function UsuariosGestionPanel({
   const [error, setError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [resendUserId, setResendUserId] = useState<string | null>(null);
 
   const contadoresActivos = useMemo(() => countContadoresActivos(usuarios), [usuarios]);
+  const mostrarAcceso = useMemo(
+    () => usuarios.some((u) => u.acceso_estado !== undefined),
+    [usuarios],
+  );
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -145,6 +161,26 @@ export function UsuariosGestionPanel({
       void onRefresh?.();
     } finally {
       setPending(false);
+    }
+  }
+
+  async function handleResend(userId: string) {
+    setPending(true);
+    setResendUserId(userId);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const result = await onResendInvitacion(userId);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage(result.message ?? "Invitación reenviada.");
+      void onRefresh?.();
+    } finally {
+      setPending(false);
+      setResendUserId(null);
     }
   }
 
@@ -267,6 +303,9 @@ export function UsuariosGestionPanel({
               <PanelTableTh>Correo</PanelTableTh>
               <PanelTableTh className={panelTableNowrapCellClass}>Rol</PanelTableTh>
               <PanelTableTh>Entidad</PanelTableTh>
+              {mostrarAcceso && (
+                <PanelTableTh className={panelTableNowrapCellClass}>Acceso</PanelTableTh>
+              )}
               <PanelTableTh className={panelTableNowrapCellClass}>Estado</PanelTableTh>
               <PanelTableTh align="right" className={panelTableNowrapCellClass}>
                 Acciones
@@ -294,6 +333,25 @@ export function UsuariosGestionPanel({
                   <PanelTableTd className={panelTableMutedClass}>
                     {usuario.entidad_nombre ?? "—"}
                   </PanelTableTd>
+                  {mostrarAcceso && (
+                    <PanelTableTd className={panelTableNowrapCellClass}>
+                      {accesoLabel(usuario.acceso_estado) ? (
+                        <StatusBadge
+                          variant={
+                            usuario.acceso_estado === "confirmado"
+                              ? "active"
+                              : usuario.acceso_estado === "pendiente"
+                                ? "pending"
+                                : "default"
+                          }
+                        >
+                          {accesoLabel(usuario.acceso_estado)}
+                        </StatusBadge>
+                      ) : (
+                        "—"
+                      )}
+                    </PanelTableTd>
+                  )}
                   <PanelTableTd className={panelTableNowrapCellClass}>
                     <StatusBadge variant={usuario.activo ? "active" : "default"}>
                       {usuario.activo ? "Activo" : "Inactivo"}
@@ -301,6 +359,20 @@ export function UsuariosGestionPanel({
                   </PanelTableTd>
                   <PanelTableTd align="right" className={panelTableNowrapCellClass}>
                     <div className="flex flex-nowrap items-center justify-end gap-1">
+                      {!esYo && usuario.activo && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          title="Reenviar correo de invitación"
+                          onClick={() => void handleResend(usuario.id)}
+                        >
+                          {resendUserId === usuario.id && pending
+                            ? "Enviando…"
+                            : "Reenviar invitación"}
+                        </Button>
+                      )}
                       {usuario.activo ? (
                         <Button
                           type="button"

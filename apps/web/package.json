@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@inventario/auth-invite": "workspace:*",
     "@inventario/realtime": "workspace:*",
     "@inventario/types": "workspace:*",
     "@inventario/ui": "workspace:*",

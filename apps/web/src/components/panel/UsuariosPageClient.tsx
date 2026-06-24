@@ -5,6 +5,7 @@ import { UsuariosGestionPanel, type ProfileConEntidad } from "@inventario/ui";
 import {
   deleteUsuario,
   inviteContador,
+  resendInvitacionUsuario,
   setUsuarioActivo,
 } from "@/lib/actions/usuarios";
 
@@ -21,6 +22,7 @@ export function UsuariosPageClient({ usuarios, currentUserId }: UsuariosPageClie
       usuarios={usuarios}
       currentUserId={currentUserId}
       onInviteContador={inviteContador}
+      onResendInvitacion={resendInvitacionUsuario}
       onSetUsuarioActivo={setUsuarioActivo}
       onDeleteUsuario={deleteUsuario}
       onRefresh={() => router.refresh()}

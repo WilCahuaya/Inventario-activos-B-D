@@ -120,20 +120,44 @@ interface Window {
       email: string;
       nombre: string;
       entidadNombre?: string;
+      mode?: "invite" | "resend";
     }) => Promise<{
       success?: boolean;
       invited?: boolean;
+      resent?: boolean;
       message?: string;
       warning?: string;
       error?: string;
     }>;
-    inviteContador: (input: { email: string; nombre: string }) => Promise<{
+    inviteContador: (input: {
+      email: string;
+      nombre: string;
+      mode?: "invite" | "resend";
+    }) => Promise<{
       success?: boolean;
       invited?: boolean;
+      resent?: boolean;
       message?: string;
       warning?: string;
       error?: string;
     }>;
+    resendInvitacionUsuario: (input: {
+      email: string;
+      nombre: string;
+      rol: "CONTADOR" | "ADMIN_ENTIDAD";
+      entidadId?: string | null;
+      entidadNombre?: string | null;
+    }) => Promise<{
+      success?: boolean;
+      invited?: boolean;
+      resent?: boolean;
+      message?: string;
+      warning?: string;
+      error?: string;
+    }>;
+    getUsuariosAccesoEstado: (emails: string[]) => Promise<
+      Record<string, "confirmado" | "pendiente" | "sin_cuenta" | "desconocido">
+    >;
     deleteAuthUser: (userId: string) => Promise<{ error?: string }>;
   };
 }

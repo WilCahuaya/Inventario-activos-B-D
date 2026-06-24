@@ -19,6 +19,7 @@ async function inviteAdminAfterSave(
   adminEmail: string,
   adminNombre: string,
   entidadNombre: string,
+  mode: "invite" | "resend" = "invite",
 ): Promise<string | null> {
   if (!window.electronAPI?.inviteEntidadAdmin) {
     return "Entidad guardada. Configure SUPABASE_SERVICE_ROLE_KEY para enviar la invitación por correo.";
@@ -29,6 +30,7 @@ async function inviteAdminAfterSave(
     email: adminEmail,
     nombre: adminNombre,
     entidadNombre,
+    mode,
   });
 
   if (result.error) return `Entidad guardada, pero la invitación falló: ${result.error}`;
@@ -40,15 +42,18 @@ export function inviteEntidadAdminInBackground(
   entidadId: string,
   input: Pick<CreateEntidadInput, "admin_email" | "admin_nombre" | "nombre">,
   onMessage?: (message: string) => void,
+  mode: "invite" | "resend" = "invite",
 ): void {
   const adminEmail = input.admin_email?.trim();
   const adminNombre = input.admin_nombre?.trim();
   const entidadNombre = input.nombre.trim();
   if (!adminEmail || !adminNombre) return;
 
-  void inviteAdminAfterSave(entidadId, adminEmail, adminNombre, entidadNombre).then((message) => {
-    if (message) onMessage?.(message);
-  });
+  void inviteAdminAfterSave(entidadId, adminEmail, adminNombre, entidadNombre, mode).then(
+    (message) => {
+      if (message) onMessage?.(message);
+    },
+  );
 }
 
 export async function listEntidades(): Promise<EntidadConConteo[]> {
@@ -134,7 +139,12 @@ export async function createEntidad(
 export async function updateEntidad(
   entidadId: string,
   input: CreateEntidadInput,
-): Promise<{ data?: Entidad; error?: string; inviteMessage?: string | null }> {
+): Promise<{
+  data?: Entidad;
+  error?: string;
+  inviteMessage?: string | null;
+  inviteMode?: "invite" | "resend";
+}> {
   const nombre = input.nombre.trim();
   const adminEmail = input.admin_email?.trim() || null;
   const adminNombre = input.admin_nombre?.trim() || null;
@@ -147,6 +157,18 @@ export async function updateEntidad(
   if (dniError) return { error: dniError };
 
   const supabase = getSupabaseClient();
+  const { data: entidadAnterior } = await supabase
+    .from("entidades")
+    .select("admin_email")
+    .eq("id", entidadId)
+    .eq("activo", true)
+    .maybeSingle();
+
+  const adminEmailAnterior = entidadAnterior?.admin_email?.trim().toLowerCase() ?? null;
+  const adminEmailNorm = adminEmail.toLowerCase();
+  const inviteMode =
+    adminEmailAnterior && adminEmailAnterior === adminEmailNorm ? "resend" : "invite";
+
   const { data, error } = await supabase
     .from("entidades")
     .update({
@@ -178,6 +200,7 @@ export async function updateEntidad(
   return {
     data: data as Entidad,
     inviteMessage: "Entidad actualizada correctamente.",
+    inviteMode,
   };
 }
 

@@ -75,22 +75,44 @@ contextBridge.exposeInMainWorld("electronAPI", {
     email: string;
     nombre: string;
     entidadNombre?: string;
+    mode?: "invite" | "resend";
   }) =>
     ipcRenderer.invoke("invite:entidadAdmin", input) as Promise<{
       success?: boolean;
       invited?: boolean;
+      resent?: boolean;
       message?: string;
       warning?: string;
       error?: string;
     }>,
-  inviteContador: (input: { email: string; nombre: string }) =>
+  inviteContador: (input: { email: string; nombre: string; mode?: "invite" | "resend" }) =>
     ipcRenderer.invoke("invite:contador", input) as Promise<{
       success?: boolean;
       invited?: boolean;
+      resent?: boolean;
       message?: string;
       warning?: string;
       error?: string;
     }>,
+  resendInvitacionUsuario: (input: {
+    email: string;
+    nombre: string;
+    rol: "CONTADOR" | "ADMIN_ENTIDAD";
+    entidadId?: string | null;
+    entidadNombre?: string | null;
+  }) =>
+    ipcRenderer.invoke("users:resendInvitation", input) as Promise<{
+      success?: boolean;
+      invited?: boolean;
+      resent?: boolean;
+      message?: string;
+      warning?: string;
+      error?: string;
+    }>,
+  getUsuariosAccesoEstado: (emails: string[]) =>
+    ipcRenderer.invoke("users:accesoEstado", emails) as Promise<
+      Record<string, "confirmado" | "pendiente" | "sin_cuenta" | "desconocido">
+    >,
   deleteAuthUser: (userId: string) =>
     ipcRenderer.invoke("users:deleteAuth", userId) as Promise<{ error?: string }>,
 });

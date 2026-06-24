@@ -1,72 +1,13 @@
 import type { User } from "@supabase/supabase-js";
-import type { RolUsuario } from "@inventario/types";
+import { sendUserInvitation, syncContadorProfile, type InviteMode } from "@inventario/auth-invite";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { siteOrigin } from "@/lib/auth/site-origin";
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function siteOrigin() {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  return "http://localhost:3000";
-}
-
-async function findAuthUserByEmail(email: string) {
-  const admin = createAdminClient();
-  if (!admin) return null;
-
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (error) return null;
-
-  return data.users.find((u) => u.email?.toLowerCase() === email) ?? null;
-}
-
-async function upsertContadorProfile(userId: string, email: string, nombre: string) {
-  const admin = createAdminClient();
-  if (!admin) return { error: "Sin cliente admin." };
-
-  const { data: existing } = await admin
-    .from("profiles")
-    .select("id, rol, activo")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (existing?.activo && existing.rol === ("ADMIN_ENTIDAD" as RolUsuario)) {
-    return { error: "Este usuario ya es administrador de una entidad." };
-  }
-
-  const payload = {
-    id: userId,
-    email: normalizeEmail(email),
-    nombre: nombre.trim(),
-    rol: "CONTADOR" as RolUsuario,
-    entidad_id: null,
-    activo: true,
-  };
-
-  if (existing) {
-    const { error } = await admin.from("profiles").update(payload).eq("id", userId);
-    if (error) return { error: error.message };
-  } else {
-    const { error } = await admin.from("profiles").insert(payload);
-    if (error) return { error: error.message };
-  }
-
-  return { success: true as const };
-}
-
-export async function inviteContador(email: string, nombre: string) {
-  const emailNorm = normalizeEmail(email);
-  const nombreTrim = nombre.trim();
-
-  if (!emailNorm) return { error: "El correo es obligatorio." };
-  if (!nombreTrim) return { error: "El nombre es obligatorio." };
-
+export async function inviteContador(
+  email: string,
+  nombre: string,
+  options?: { mode?: InviteMode },
+) {
   const admin = createAdminClient();
   if (!admin) {
     return {
@@ -77,45 +18,48 @@ export async function inviteContador(email: string, nombre: string) {
     };
   }
 
-  const existingUser = await findAuthUserByEmail(emailNorm);
+  return sendUserInvitation(admin, {
+    email,
+    nombre,
+    rol: "CONTADOR",
+    mode: options?.mode ?? "invite",
+    redirectTo: `${siteOrigin()}/auth/callback`,
+  });
+}
 
-  if (existingUser) {
-    const result = await upsertContadorProfile(existingUser.id, emailNorm, nombreTrim);
-    if (result.error) return { error: result.error };
+export async function resendInvitacionUsuario(input: {
+  email: string;
+  nombre: string;
+  rol: "CONTADOR" | "ADMIN_ENTIDAD";
+  entidadId?: string | null;
+  entidadNombre?: string | null;
+}) {
+  const admin = createAdminClient();
+  if (!admin) {
     return {
       success: true,
       invited: false,
-      message: "Perfil de contador actualizado. Ya puede ingresar al sistema.",
+      warning:
+        "Configure SUPABASE_SERVICE_ROLE_KEY para enviar la invitación por correo.",
     };
   }
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(emailNorm, {
-    data: {
-      nombre: nombreTrim,
-      rol: "CONTADOR",
-    },
+  return sendUserInvitation(admin, {
+    email: input.email,
+    nombre: input.nombre,
+    rol: input.rol,
+    entidadId: input.entidadId,
+    entidadNombre: input.entidadNombre,
+    mode: "resend",
     redirectTo: `${siteOrigin()}/auth/callback`,
   });
-
-  if (error) return { error: error.message };
-
-  if (data.user) {
-    const result = await upsertContadorProfile(data.user.id, emailNorm, nombreTrim);
-    if (result.error) return { error: result.error };
-  }
-
-  return {
-    success: true,
-    invited: true,
-    message: `Invitación enviada a ${emailNorm}. El contador podrá ingresar con Google usando ese correo.`,
-  };
 }
 
 export async function provisionProfileFromContador(user: User) {
   const rol = user.user_metadata?.rol;
   if (rol !== "CONTADOR") return null;
 
-  const email = user.email ? normalizeEmail(user.email) : null;
+  const email = user.email ? user.email.trim().toLowerCase() : null;
   if (!email) return null;
 
   const nombre =
@@ -123,11 +67,11 @@ export async function provisionProfileFromContador(user: User) {
     (typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null) ||
     email;
 
-  const result = await upsertContadorProfile(user.id, email, nombre);
-  if (result.error) return null;
-
   const admin = createAdminClient();
   if (!admin) return null;
+
+  const result = await syncContadorProfile(admin, user.id, { email, nombre });
+  if (result.error) return null;
 
   return admin
     .from("profiles")
