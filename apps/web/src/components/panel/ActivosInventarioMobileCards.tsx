@@ -2,13 +2,17 @@
 
 import type { Activo } from "@inventario/types";
 import {
-  buildDescripcionBien,
   formatCorrelativoDisplay,
   formatFechaISOToCortoES,
   formatMonedaPE,
   categoriaBienLetra,
 } from "@inventario/types";
-import { EstadoBienBadge, inventarioDepreciacionFila } from "@inventario/ui/panel";
+import {
+  EstadoBienBadge,
+  formatInventarioListaTexto,
+  inventarioDepreciacionFila,
+  inventarioDescripcion,
+} from "@inventario/ui/panel";
 import { ActivoAccionesBar } from "./ActivoAccionesBar";
 import { ComprobanteInline } from "./ComprobanteInline";
 import { panelCardClass } from "./panel-ui";
@@ -66,13 +70,7 @@ export function ActivosInventarioMobileCards({
   return (
     <div className="space-y-3 p-3 sm:p-4">
       {activos.map((activo, index) => {
-        const descripcion = buildDescripcionBien(
-          activo.marca,
-          activo.modelo,
-          activo.serie,
-          activo.color,
-          activo.medidas,
-        );
+        const descripcion = inventarioDescripcion(activo);
         const inactivo = activo.estado_registro === "DADO_DE_BAJA";
         const { valorNeto } = inventarioDepreciacionFila(activo, inactivo);
         const preregistrado = activo.estado_registro === "PREREGISTRADO";
@@ -138,7 +136,7 @@ export function ActivosInventarioMobileCards({
             {activo.observacion?.trim() && (
               <p className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">Obs: </span>
-                {activo.observacion}
+                {formatInventarioListaTexto(activo.observacion)}
               </p>
             )}
 

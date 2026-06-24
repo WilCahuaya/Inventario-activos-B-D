@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { Ambiente, Sede } from "@inventario/types";
 import { MAX_ACTIVOS_SIMILARES_CANTIDAD } from "@inventario/types";
 import { ConfirmDialog, Input, Label, Select } from "@inventario/ui";
@@ -12,6 +12,11 @@ import {
 import { listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 
 type DestinoUbicacion = "actual" | "otro";
+
+export type AgregarSimilaresSuccessInfo = {
+  creados: number;
+  ambienteDestinoId?: string;
+};
 
 interface AgregarBienesSimilaresDialogProps {
   open: boolean;
@@ -25,7 +30,7 @@ interface AgregarBienesSimilaresDialogProps {
   codigoCatalogo: string;
   nombre: string;
   esRegistrado: boolean;
-  onSuccess?: (creados: number) => void;
+  onSuccess?: (info: AgregarSimilaresSuccessInfo) => void;
 }
 
 function ubicacionActualLabel(sedeNombre?: string, ambienteNombre?: string): string {
@@ -49,6 +54,7 @@ export function AgregarBienesSimilaresDialog({
   onSuccess,
 }: AgregarBienesSimilaresDialogProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [cantidad, setCantidad] = useState("10");
   const [destinoUbicacion, setDestinoUbicacion] = useState<DestinoUbicacion>("actual");
   const [sedes, setSedes] = useState<Sede[]>([]);
@@ -149,9 +155,23 @@ export function AgregarBienesSimilaresDialog({
       return;
     }
 
+    const creados = result.data?.creados ?? qty;
+    const ambienteDestinoId =
+      destinoUbicacion === "otro" && otroAmbienteId ? otroAmbienteId : undefined;
+
     onClose();
-    router.refresh();
-    onSuccess?.(result.data?.creados ?? qty);
+
+    if (ambienteDestinoId) {
+      const isAdmin = pathname.startsWith("/admin");
+      const href = isAdmin
+        ? `/admin/ambientes/${ambienteDestinoId}`
+        : `/contador/entidades/${entidadId}/ambientes/${ambienteDestinoId}`;
+      router.push(href);
+    } else {
+      router.refresh();
+    }
+
+    onSuccess?.({ creados, ambienteDestinoId });
   }
 
   return (

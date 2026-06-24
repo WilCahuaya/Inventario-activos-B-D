@@ -131,19 +131,21 @@ export function UsuariosGestionPanel({
     setMessage(null);
     setError(null);
 
-    const result = await onInviteContador({ nombre, email });
-    setPending(false);
+    try {
+      const result = await onInviteContador({ nombre, email });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      setMessage(result.message ?? "Contador agregado correctamente.");
+      setNombre("");
+      setEmail("");
+      setInviteOpen(false);
+      void onRefresh?.();
+    } finally {
+      setPending(false);
     }
-
-    setMessage(result.message ?? "Contador agregado correctamente.");
-    setNombre("");
-    setEmail("");
-    setInviteOpen(false);
-    await onRefresh?.();
   }
 
   async function handleConfirmAction() {
@@ -151,35 +153,37 @@ export function UsuariosGestionPanel({
     setPending(true);
     setConfirmError(null);
 
-    const { usuario } = confirmAction;
-    let result: { error?: string };
+    try {
+      const { usuario } = confirmAction;
+      let result: { error?: string };
 
-    if (confirmAction.type === "delete") {
-      result = await onDeleteUsuario(usuario.id);
-    } else {
-      result = await onSetUsuarioActivo(
-        usuario.id,
-        confirmAction.type === "reactivate",
-      );
+      if (confirmAction.type === "delete") {
+        result = await onDeleteUsuario(usuario.id);
+      } else {
+        result = await onSetUsuarioActivo(
+          usuario.id,
+          confirmAction.type === "reactivate",
+        );
+      }
+
+      if (result.error) {
+        setConfirmError(result.error);
+        return;
+      }
+
+      const accionLabel =
+        confirmAction.type === "delete"
+          ? "eliminado"
+          : confirmAction.type === "reactivate"
+            ? "reactivado"
+            : "desactivado";
+
+      setMessage(`Usuario ${usuario.nombre} ${accionLabel}.`);
+      setConfirmAction(null);
+      void onRefresh?.();
+    } finally {
+      setPending(false);
     }
-
-    setPending(false);
-
-    if (result.error) {
-      setConfirmError(result.error);
-      return;
-    }
-
-    const accionLabel =
-      confirmAction.type === "delete"
-        ? "eliminado"
-        : confirmAction.type === "reactivate"
-          ? "reactivado"
-          : "desactivado";
-
-    setMessage(`Usuario ${usuario.nombre} ${accionLabel}.`);
-    setConfirmAction(null);
-    await onRefresh?.();
   }
 
   const confirmCopy = (() => {

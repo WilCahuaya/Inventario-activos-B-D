@@ -12,11 +12,13 @@ import {
   TablePagination,
   inventarioDepreciacionFila,
   inventarioDescripcion,
+  formatInventarioListaTexto,
   panelCardClass,
   panelDataCardsWrapClass,
   useTablePagination,
 } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
+import type { AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
 import { ActivosCampoAcciones } from "./ActivosCampoAcciones";
 import { ComprobanteCell } from "./ComprobanteCell";
 import { ComprobanteInline } from "./ComprobanteInline";
@@ -53,6 +55,7 @@ function ActivosInventarioMobileCards({
   onPrintBatch,
   onEditActivo,
   onIrAmbiente,
+  onAbrirAmbienteDestino,
   onActivoUpdated,
   withSelection,
   selectedIds,
@@ -66,6 +69,7 @@ function ActivosInventarioMobileCards({
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onEditActivo?: (activo: ActivoConUbicacion) => void;
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
   withSelection?: boolean;
   selectedIds?: Set<string>;
@@ -158,7 +162,7 @@ function ActivosInventarioMobileCards({
             {activo.observacion?.trim() && (
               <p className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">Obs: </span>
-                {activo.observacion}
+                {formatInventarioListaTexto(activo.observacion)}
               </p>
             )}
 
@@ -172,6 +176,7 @@ function ActivosInventarioMobileCards({
                 onPrintBatch={onPrintBatch}
                 onEdit={onEditActivo}
                 onIrAmbiente={onIrAmbiente}
+                onAbrirAmbienteDestino={onAbrirAmbienteDestino}
                 onValidated={onActivoUpdated}
               />
             </div>
@@ -193,6 +198,7 @@ interface ActivosInventarioExcelViewProps {
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onEditActivo?: (activo: ActivoConUbicacion) => void;
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onSelectionChange?: (selected: ActivoConUbicacion[]) => void;
 }
 
@@ -207,6 +213,7 @@ export function ActivosInventarioExcelView({
   onPrintBatch,
   onEditActivo,
   onIrAmbiente,
+  onAbrirAmbienteDestino,
   onSelectionChange,
 }: ActivosInventarioExcelViewProps) {
   const withSelection = Boolean(onPrintBatch && !mostrarPosibleAmbiente);
@@ -271,6 +278,7 @@ export function ActivosInventarioExcelView({
           onPrintBatch={onPrintBatch}
           onEditActivo={onEditActivo}
           onIrAmbiente={onIrAmbiente}
+          onAbrirAmbienteDestino={onAbrirAmbienteDestino}
           onActivoUpdated={onActivoUpdated}
           withSelection={withSelection}
           selectedIds={withSelection ? selectedIds : undefined}
@@ -307,6 +315,7 @@ export function ActivosInventarioExcelView({
             onPrintBatch={onPrintBatch}
             onEdit={onEditActivo}
             onIrAmbiente={onIrAmbiente}
+            onAbrirAmbienteDestino={onAbrirAmbienteDestino}
             onValidated={onActivoUpdated}
             compact
             variant="icons"

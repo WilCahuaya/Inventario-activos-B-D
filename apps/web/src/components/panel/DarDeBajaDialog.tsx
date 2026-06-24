@@ -2,12 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Label } from "@inventario/ui";
+import { Label, Textarea } from "@inventario/ui";
 import { darDeBajaActivo } from "@/lib/actions/activos";
 import { ConfirmDialog } from "@inventario/ui";
-
-const textareaClass =
-  "flex min-h-[88px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 interface DarDeBajaDialogProps {
   open: boolean;
@@ -74,9 +71,9 @@ export function DarDeBajaDialog({
     >
       <div className="space-y-2">
         <Label htmlFor="motivo_baja">Motivo de baja</Label>
-        <textarea
+        <Textarea
           id="motivo_baja"
-          className={textareaClass}
+          className="min-h-[88px]"
           value={motivo}
           onChange={(e) => {
             setMotivo(e.target.value);

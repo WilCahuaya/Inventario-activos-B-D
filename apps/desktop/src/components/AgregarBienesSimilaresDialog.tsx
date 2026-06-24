@@ -10,6 +10,19 @@ import { listAmbientes, listSedes } from "../lib/ubicacion";
 
 type DestinoUbicacion = "actual" | "otro";
 
+export type AmbienteDestinoNavigation = {
+  entidadId: string;
+  sedeId: string;
+  ambienteId: string;
+  sedeNombre?: string | null;
+  ambienteNombre: string;
+};
+
+export type AgregarSimilaresSuccessInfo = {
+  creados: number;
+  ambienteDestinoId?: string;
+};
+
 interface AgregarBienesSimilaresDialogProps {
   open: boolean;
   onClose: () => void;
@@ -22,7 +35,8 @@ interface AgregarBienesSimilaresDialogProps {
   codigoCatalogo: string;
   nombre: string;
   esRegistrado: boolean;
-  onSuccess?: (creados: number) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
+  onSuccess?: (info: AgregarSimilaresSuccessInfo) => void;
 }
 
 function ubicacionActualLabel(sedeNombre?: string, ambienteNombre?: string): string {
@@ -43,6 +57,7 @@ export function AgregarBienesSimilaresDialog({
   codigoCatalogo,
   nombre,
   esRegistrado,
+  onAbrirAmbienteDestino,
   onSuccess,
 }: AgregarBienesSimilaresDialogProps) {
   const [cantidad, setCantidad] = useState("10");
@@ -133,20 +148,39 @@ export function AgregarBienesSimilaresDialog({
 
     setPending(true);
     setError(null);
-    const ubicacion =
-      destinoUbicacion === "otro"
-        ? { sedeId: otraSedeId, ambienteId: otroAmbienteId }
-        : undefined;
-    const result = await createActivosSimilares(activoId, qty, ubicacion);
-    setPending(false);
+    try {
+      const ubicacion =
+        destinoUbicacion === "otro"
+          ? { sedeId: otraSedeId, ambienteId: otroAmbienteId }
+          : undefined;
+      const result = await createActivosSimilares(activoId, qty, ubicacion);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      const creados = result.data?.creados ?? qty;
+      const ambienteDestinoId =
+        destinoUbicacion === "otro" && otroAmbienteId ? otroAmbienteId : undefined;
+
+      onClose();
+
+      if (ambienteDestinoId && onAbrirAmbienteDestino) {
+        const sede = sedes.find((s) => s.id === otraSedeId);
+        const ambiente = ambientes.find((a) => a.id === otroAmbienteId);
+        onAbrirAmbienteDestino({
+          entidadId,
+          sedeId: otraSedeId,
+          ambienteId: otroAmbienteId,
+          sedeNombre: sede?.nombre,
+          ambienteNombre: ambiente?.nombre ?? "Ambiente",
+        });
+      }
+
+      onSuccess?.({ creados, ambienteDestinoId });
+    } finally {
+      setPending(false);
     }
-
-    onClose();
-    onSuccess?.(result.data?.creados ?? qty);
   }
 
   return (

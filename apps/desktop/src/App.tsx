@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@inventario/ui";
 import { ThemeToggle } from "@inventario/ui/theme-toggle";
+import { withSedeBreadcrumb } from "@inventario/ui/panel";
 import { ActivoFormDesktop } from "./components/ActivoFormDesktop";
 import { ActivoEditWithScopeDesktop } from "./components/ActivoEditWithScopeDesktop";
 import { ActivosAmbienteView } from "./components/ActivosAmbienteView";
@@ -287,6 +288,24 @@ function MainApp({ userId }: { userId: string; email: string }) {
     });
   }
 
+  function goAmbienteDestino(destino: {
+    entidadId: string;
+    sedeId: string;
+    ambienteId: string;
+    sedeNombre?: string | null;
+    ambienteNombre: string;
+  }) {
+    setMainNav("entidades");
+    goActivosAmbiente({
+      entidadId: destino.entidadId,
+      ambienteId: destino.ambienteId,
+      sedeId: destino.sedeId,
+      sedeNombre: destino.sedeNombre,
+      ambienteNombre: destino.ambienteNombre,
+    });
+    void refreshActivos();
+  }
+
   async function handleActivoUpdated(_activo: ActivoConUbicacion) {
     if (entidadesFlow.type === "edit") {
       setEntidadesFlow({ type: "activos", context: entidadesFlow.context });
@@ -319,48 +338,60 @@ function MainApp({ userId }: { userId: string; email: string }) {
       };
     } else if (entidadesFlow.type === "activos") {
       subheader = {
-        breadcrumbs: [
-          {
-            label: drillEntidad?.nombre ?? "Entidad",
-            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
-          },
-          { label: entidadesFlow.context.ambienteNombre },
-        ],
+        breadcrumbs: withSedeBreadcrumb(
+          [
+            {
+              label: drillEntidad?.nombre ?? "Entidad",
+              onClick: () => goAmbientes(entidadesFlow.context.entidadId),
+            },
+            { label: entidadesFlow.context.ambienteNombre },
+          ],
+          entidadesFlow.context.sedeNombre,
+          1,
+        ),
         subtitle: entidadesFlow.context.ambienteResponsable
           ? `Responsable: ${entidadesFlow.context.ambienteResponsable}`
           : undefined,
       };
     } else if (entidadesFlow.type === "register") {
       subheader = {
-        breadcrumbs: [
-          {
-            label: drillEntidad?.nombre ?? "Entidad",
-            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
-          },
-          {
-            label: entidadesFlow.context.ambienteNombre,
-            onClick: () => goActivosListFromContext(entidadesFlow.context),
-          },
-          { label: "Crear activo" },
-        ],
+        breadcrumbs: withSedeBreadcrumb(
+          [
+            {
+              label: drillEntidad?.nombre ?? "Entidad",
+              onClick: () => goAmbientes(entidadesFlow.context.entidadId),
+            },
+            {
+              label: entidadesFlow.context.ambienteNombre,
+              onClick: () => goActivosListFromContext(entidadesFlow.context),
+            },
+            { label: "Crear activo" },
+          ],
+          entidadesFlow.context.sedeNombre,
+          1,
+        ),
       };
     } else if (entidadesFlow.type === "edit") {
       subheader = {
-        breadcrumbs: [
-          {
-            label: drillEntidad?.nombre ?? "Entidad",
-            onClick: () => goAmbientes(entidadesFlow.context.entidadId),
-          },
-          {
-            label: entidadesFlow.context.ambienteNombre,
-            onClick: () => goActivosListFromContext(entidadesFlow.context),
-          },
-          {
-            label: entidadesFlow.activo.nombre,
-            onClick: () => goActivosListFromContext(entidadesFlow.context),
-          },
-          { label: "Editar activo" },
-        ],
+        breadcrumbs: withSedeBreadcrumb(
+          [
+            {
+              label: drillEntidad?.nombre ?? "Entidad",
+              onClick: () => goAmbientes(entidadesFlow.context.entidadId),
+            },
+            {
+              label: entidadesFlow.context.ambienteNombre,
+              onClick: () => goActivosListFromContext(entidadesFlow.context),
+            },
+            {
+              label: entidadesFlow.activo.nombre,
+              onClick: () => goActivosListFromContext(entidadesFlow.context),
+            },
+            { label: "Editar activo" },
+          ],
+          entidadesFlow.context.sedeNombre,
+          1,
+        ),
       };
     }
   } else if (mainNav === "inventario") {
@@ -458,6 +489,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
               })
             }
             onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
+            onAbrirAmbienteDestino={goAmbienteDestino}
           />
         )}
 
@@ -514,6 +546,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
           onPrintBatch={setBatchPrintTargets}
           onEditActivo={(activo) => setInventarioFlow({ type: "edit", activo })}
           onIrAmbiente={goAmbienteFromActivo}
+          onAbrirAmbienteDestino={goAmbienteDestino}
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
           onActivosImported={() => void refreshActivos()}
         />

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { Entidad, EntidadConConteo } from "@inventario/types";
+import { normalizeResponsableDni, validarAdminEntidadDni } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { inviteEntidadAdmin } from "@/lib/auth/entidad-admin";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
@@ -14,6 +15,7 @@ export interface CreateEntidadInput {
   direccion?: string;
   admin_nombre?: string;
   admin_email?: string;
+  admin_dni?: string;
   admin_telefono?: string;
 }
 
@@ -29,6 +31,9 @@ export async function createEntidad(input: CreateEntidadInput) {
   if (!nombre) return { error: "La razón social es obligatoria." };
   if (!adminEmail) return { error: "El correo del administrador es obligatorio." };
   if (!adminNombre) return { error: "El nombre del administrador es obligatorio." };
+  const adminDni = normalizeResponsableDni(input.admin_dni ?? "");
+  const dniError = validarAdminEntidadDni(adminDni);
+  if (dniError) return { error: dniError };
 
   const { data, error } = await supabase
     .from("entidades")
@@ -39,6 +44,7 @@ export async function createEntidad(input: CreateEntidadInput) {
       direccion: input.direccion?.trim() || null,
       admin_nombre: adminNombre,
       admin_email: adminEmail,
+      admin_dni: adminDni,
       admin_telefono: input.admin_telefono?.trim() || null,
     })
     .select()
@@ -52,6 +58,7 @@ export async function createEntidad(input: CreateEntidadInput) {
     adminNombre,
     adminEmail,
     input.admin_telefono,
+    adminDni,
   );
 
   const invite = await inviteEntidadAdmin(data.id, adminEmail, adminNombre, nombre);
@@ -126,6 +133,9 @@ export async function updateEntidad(entidadId: string, input: CreateEntidadInput
   if (!nombre) return { error: "La razón social es obligatoria." };
   if (!adminEmail) return { error: "El correo del administrador es obligatorio." };
   if (!adminNombre) return { error: "El nombre del administrador es obligatorio." };
+  const adminDni = normalizeResponsableDni(input.admin_dni ?? "");
+  const dniError = validarAdminEntidadDni(adminDni);
+  if (dniError) return { error: dniError };
 
   const { data, error } = await supabase
     .from("entidades")
@@ -136,6 +146,7 @@ export async function updateEntidad(entidadId: string, input: CreateEntidadInput
       direccion: input.direccion?.trim() || null,
       admin_nombre: adminNombre,
       admin_email: adminEmail,
+      admin_dni: adminDni,
       admin_telefono: input.admin_telefono?.trim() || null,
     })
     .eq("id", entidadId)
@@ -151,6 +162,7 @@ export async function updateEntidad(entidadId: string, input: CreateEntidadInput
     adminNombre,
     adminEmail,
     input.admin_telefono,
+    adminDni,
   );
 
   const invite = await inviteEntidadAdmin(entidadId, adminEmail, adminNombre, nombre);

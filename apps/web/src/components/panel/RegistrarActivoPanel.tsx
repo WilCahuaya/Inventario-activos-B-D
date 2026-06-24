@@ -3,12 +3,14 @@
 import { useRouter } from "next/navigation";
 import { ActivoForm } from "./ActivoForm";
 import { PanelPageHeader } from "./panel-ui";
+import { withSedeBreadcrumb } from "@inventario/ui/panel";
 
 interface RegistrarActivoPanelProps {
   entidadId: string;
   entidadNombre: string;
   ambienteId: string;
   ambienteNombre: string;
+  sedeNombre?: string | null;
   sedeId: string;
   listHref: string;
   entidadHref: string;
@@ -23,6 +25,7 @@ export function RegistrarActivoPanel({
   entidadNombre,
   ambienteId,
   ambienteNombre,
+  sedeNombre,
   sedeId,
   listHref,
   entidadHref,
@@ -39,23 +42,27 @@ export function RegistrarActivoPanel({
     router.refresh();
   }
 
-  const breadcrumbs = isAdmin
-    ? [
-        { label: "Ambientes", href: entidadHref },
-        { label: ambienteNombre, href: listHref },
-        { label: "Preregistrar activo" },
-      ]
-    : esPreregistro
+  const breadcrumbs = withSedeBreadcrumb(
+    isAdmin
       ? [
-          { label: entidadNombre, href: entidadHref },
+          { label: "Ambientes", href: entidadHref },
           { label: ambienteNombre, href: listHref },
           { label: "Preregistrar activo" },
         ]
-      : [
-          { label: entidadNombre, href: entidadHref },
-          { label: ambienteNombre, href: listHref },
-          { label: "Crear activo" },
-        ];
+      : esPreregistro
+        ? [
+            { label: entidadNombre, href: entidadHref },
+            { label: ambienteNombre, href: listHref },
+            { label: "Preregistrar activo" },
+          ]
+        : [
+            { label: entidadNombre, href: entidadHref },
+            { label: ambienteNombre, href: listHref },
+            { label: "Crear activo" },
+          ],
+    sedeNombre,
+    1,
+  );
 
   return (
     <div className="space-y-5">

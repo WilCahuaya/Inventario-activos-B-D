@@ -33,3 +33,16 @@ export async function updateActivoPaths(
   if (error) return { error: error.message };
   return {};
 }
+
+export async function removeActivoStoragePaths(
+  fotoPaths: string[],
+  comprobantePaths: string[],
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  if (fotoPaths.length > 0) {
+    await supabase.storage.from("fotos-activos").remove(fotoPaths);
+  }
+  if (comprobantePaths.length > 0) {
+    await supabase.storage.from("comprobantes-activos").remove(comprobantePaths);
+  }
+}

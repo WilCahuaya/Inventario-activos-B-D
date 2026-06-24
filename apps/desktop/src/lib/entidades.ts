@@ -1,4 +1,5 @@
 import type { Entidad, EntidadConConteo } from "@inventario/types";
+import { normalizeResponsableDni, validarAdminEntidadDni } from "@inventario/types";
 import { getSupabaseClient } from "./supabase";
 import { syncAdminResponsableForEntidad } from "./responsables-admin-sync";
 
@@ -9,6 +10,7 @@ export interface CreateEntidadInput {
   direccion?: string;
   admin_nombre?: string;
   admin_email?: string;
+  admin_dni?: string;
   admin_telefono?: string;
 }
 
@@ -33,6 +35,22 @@ async function inviteAdminAfterSave(
   return result.message ?? result.warning ?? null;
 }
 
+/** Invitación al admin en segundo plano (no bloquea el guardado de la entidad). */
+export function inviteEntidadAdminInBackground(
+  entidadId: string,
+  input: Pick<CreateEntidadInput, "admin_email" | "admin_nombre" | "nombre">,
+  onMessage?: (message: string) => void,
+): void {
+  const adminEmail = input.admin_email?.trim();
+  const adminNombre = input.admin_nombre?.trim();
+  const entidadNombre = input.nombre.trim();
+  if (!adminEmail || !adminNombre) return;
+
+  void inviteAdminAfterSave(entidadId, adminEmail, adminNombre, entidadNombre).then((message) => {
+    if (message) onMessage?.(message);
+  });
+}
+
 export async function listEntidades(): Promise<EntidadConConteo[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -50,7 +68,13 @@ export async function listEntidades(): Promise<EntidadConConteo[]> {
 
   const ambienteCountByEntidad = new Map<string, number>();
   for (const row of ambientesRows ?? []) {
-    const entidadId = (row.sedes as { entidad_id: string }).entidad_id;
+    const sedes = row.sedes;
+    const sede = Array.isArray(sedes) ? sedes[0] : sedes;
+    const entidadId =
+      sede && typeof sede === "object" && "entidad_id" in sede
+        ? String((sede as { entidad_id: string }).entidad_id)
+        : null;
+    if (!entidadId) continue;
     ambienteCountByEntidad.set(entidadId, (ambienteCountByEntidad.get(entidadId) ?? 0) + 1);
   }
 
@@ -70,6 +94,9 @@ export async function createEntidad(
   if (!nombre) return { error: "La razón social es obligatoria." };
   if (!adminEmail) return { error: "El correo del administrador es obligatorio." };
   if (!adminNombre) return { error: "El nombre del administrador es obligatorio." };
+  const adminDni = normalizeResponsableDni(input.admin_dni ?? "");
+  const dniError = validarAdminEntidadDni(adminDni);
+  if (dniError) return { error: dniError };
 
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -81,6 +108,7 @@ export async function createEntidad(
       direccion: input.direccion?.trim() || null,
       admin_nombre: adminNombre,
       admin_email: adminEmail,
+      admin_dni: adminDni,
       admin_telefono: input.admin_telefono?.trim() || null,
     })
     .select()
@@ -94,16 +122,13 @@ export async function createEntidad(
     adminNombre,
     adminEmail,
     input.admin_telefono,
+    adminDni,
   );
 
-  const inviteMessage = await inviteAdminAfterSave(
-    (data as Entidad).id,
-    adminEmail,
-    adminNombre,
-    nombre,
-  );
-
-  return { data: data as Entidad, inviteMessage };
+  return {
+    data: data as Entidad,
+    inviteMessage: "Entidad creada correctamente.",
+  };
 }
 
 export async function updateEntidad(
@@ -117,6 +142,9 @@ export async function updateEntidad(
   if (!nombre) return { error: "La razón social es obligatoria." };
   if (!adminEmail) return { error: "El correo del administrador es obligatorio." };
   if (!adminNombre) return { error: "El nombre del administrador es obligatorio." };
+  const adminDni = normalizeResponsableDni(input.admin_dni ?? "");
+  const dniError = validarAdminEntidadDni(adminDni);
+  if (dniError) return { error: dniError };
 
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -128,6 +156,7 @@ export async function updateEntidad(
       direccion: input.direccion?.trim() || null,
       admin_nombre: adminNombre,
       admin_email: adminEmail,
+      admin_dni: adminDni,
       admin_telefono: input.admin_telefono?.trim() || null,
     })
     .eq("id", entidadId)
@@ -143,16 +172,13 @@ export async function updateEntidad(
     adminNombre,
     adminEmail,
     input.admin_telefono,
+    adminDni,
   );
 
-  const inviteMessage = await inviteAdminAfterSave(
-    entidadId,
-    adminEmail,
-    adminNombre,
-    nombre,
-  );
-
-  return { data: data as Entidad, inviteMessage };
+  return {
+    data: data as Entidad,
+    inviteMessage: "Entidad actualizada correctamente.",
+  };
 }
 
 export async function deleteEntidad(

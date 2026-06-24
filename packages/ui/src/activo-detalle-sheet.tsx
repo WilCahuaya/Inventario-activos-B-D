@@ -231,7 +231,8 @@ export function ActivoDetalleSheet({
           <DetalleField label="Modelo" value={activo.modelo} />
           <DetalleField label="Serie" value={activo.serie} mono />
           <DetalleField label="Color" value={activo.color} />
-          <DetalleField label="Medidas" value={activo.medidas} className="col-span-2" />
+          <DetalleField label="Medidas" value={activo.medidas} />
+          <DetalleField label="Detalle" value={activo.caracteristicas} className="col-span-2" />
         </DetalleSection>
 
         <DetalleSection title="Valorización">

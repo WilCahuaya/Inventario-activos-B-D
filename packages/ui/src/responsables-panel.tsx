@@ -190,15 +190,18 @@ export function ResponsablesPanel({
     setPending(true);
     setError(null);
     setMessage(null);
-    const result = await onCreate(responsableFromForm(new FormData(e.currentTarget)));
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await onCreate(responsableFromForm(new FormData(e.currentTarget)));
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage(`Responsable «${result.data?.nombre}» registrado.`);
+      setCreateOpen(false);
+      void onReload?.();
+    } finally {
+      setPending(false);
     }
-    setMessage(`Responsable «${result.data?.nombre}» registrado.`);
-    setCreateOpen(false);
-    await onReload?.();
   }
 
   async function handleEdit(e: React.FormEvent<HTMLFormElement>) {
@@ -207,29 +210,35 @@ export function ResponsablesPanel({
     setPending(true);
     setError(null);
     setMessage(null);
-    const result = await onUpdate(editTarget.id, responsableFromForm(new FormData(e.currentTarget)));
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await onUpdate(editTarget.id, responsableFromForm(new FormData(e.currentTarget)));
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage("Responsable actualizado.");
+      setEditTarget(null);
+      void onReload?.();
+    } finally {
+      setPending(false);
     }
-    setMessage("Responsable actualizado.");
-    setEditTarget(null);
-    await onReload?.();
   }
 
   async function handleActivate(item: ResponsableConConteo) {
     setPending(true);
     setError(null);
     setMessage(null);
-    const result = await onSetActivo(item.id, true);
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await onSetActivo(item.id, true);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage(`Responsable «${item.nombre}» reactivado.`);
+      void onReload?.();
+    } finally {
+      setPending(false);
     }
-    setMessage(`Responsable «${item.nombre}» reactivado.`);
-    await onReload?.();
   }
 
   async function handleConfirmAction() {
@@ -240,34 +249,35 @@ export function ResponsablesPanel({
     setError(null);
     setMessage(null);
 
-    if (confirmAction.type === "deactivate") {
-      const result = await onSetActivo(confirmAction.item.id, false);
-      setPending(false);
+    try {
+      if (confirmAction.type === "deactivate") {
+        const result = await onSetActivo(confirmAction.item.id, false);
+        if (result.error) {
+          setConfirmError(result.error);
+          return;
+        }
+        setMessage("Responsable desactivado.");
+        setConfirmAction(null);
+        void onReload?.();
+        return;
+      }
+
+      if (!onDelete) {
+        setConfirmAction(null);
+        return;
+      }
+
+      const result = await onDelete(confirmAction.item.id);
       if (result.error) {
         setConfirmError(result.error);
         return;
       }
-      setMessage("Responsable desactivado.");
+      setMessage("Responsable eliminado.");
       setConfirmAction(null);
-      await onReload?.();
-      return;
-    }
-
-    if (!onDelete) {
+      void onReload?.();
+    } finally {
       setPending(false);
-      setConfirmAction(null);
-      return;
     }
-
-    const result = await onDelete(confirmAction.item.id);
-    setPending(false);
-    if (result.error) {
-      setConfirmError(result.error);
-      return;
-    }
-    setMessage("Responsable eliminado.");
-    setConfirmAction(null);
-    await onReload?.();
   }
 
   const confirmTitle =

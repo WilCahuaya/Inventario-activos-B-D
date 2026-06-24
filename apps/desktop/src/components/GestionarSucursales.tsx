@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { SedeConConteo } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
 import {
+  AmbientesIcon,
   DeleteIcon,
   EditIcon,
   PanelCountLabel,
@@ -18,6 +19,8 @@ import {
   panelTableBodyRowClass,
   panelTableHeadRowClass,
   panelTableMutedClass,
+  panelTableNowrapCellClass,
+  panelTableShrinkCellClass,
   panelTableStickyHeadClass,
 } from "@inventario/ui/panel";
 import { createSede, deleteSede, updateSede } from "../lib/ubicacion";
@@ -26,12 +29,14 @@ interface GestionarSucursalesProps {
   entidadId: string;
   sedes: SedeConConteo[];
   onSedesChange?: (sedes: SedeConConteo[]) => void;
+  onViewAmbientes?: (sedeId: string) => void;
 }
 
 export function GestionarSucursales({
   entidadId,
   sedes: initial,
   onSedesChange,
+  onViewAmbientes,
 }: GestionarSucursalesProps) {
   const [sedes, setSedes] = useState(initial);
   const [createOpen, setCreateOpen] = useState(false);
@@ -53,16 +58,19 @@ export function GestionarSucursales({
     const form = event.currentTarget;
     setPending(true);
     setMessage(null);
-    const nombre = String(new FormData(form).get("nombre"));
-    const result = await createSede(entidadId, nombre);
-    setPending(false);
-    if (result.error) {
-      setMessage(result.error);
-      return;
+    try {
+      const nombre = String(new FormData(form).get("nombre"));
+      const result = await createSede(entidadId, nombre);
+      if (result.error) {
+        setMessage(result.error);
+        return;
+      }
+      updateSedes([...sedes, { ...result.data!, ambiente_count: 0 }]);
+      setCreateOpen(false);
+      form.reset();
+    } finally {
+      setPending(false);
     }
-    updateSedes([...sedes, { ...result.data!, ambiente_count: 0 }]);
-    setCreateOpen(false);
-    form.reset();
   }
 
   async function handleEdit(event: React.FormEvent<HTMLFormElement>) {
@@ -70,15 +78,18 @@ export function GestionarSucursales({
     if (!editSede) return;
     setPending(true);
     setMessage(null);
-    const nombre = String(new FormData(event.currentTarget).get("nombre"));
-    const result = await updateSede(editSede.id, nombre);
-    setPending(false);
-    if (result.error) {
-      setMessage(result.error);
-      return;
+    try {
+      const nombre = String(new FormData(event.currentTarget).get("nombre"));
+      const result = await updateSede(editSede.id, nombre);
+      if (result.error) {
+        setMessage(result.error);
+        return;
+      }
+      updateSedes(sedes.map((s) => (s.id === editSede.id ? { ...s, nombre: nombre.trim() } : s)));
+      setEditSede(null);
+    } finally {
+      setPending(false);
     }
-    updateSedes(sedes.map((s) => (s.id === editSede.id ? { ...s, nombre: nombre.trim() } : s)));
-    setEditSede(null);
   }
 
   async function handleDelete(sede: SedeConConteo) {
@@ -125,42 +136,78 @@ export function GestionarSucursales({
           <thead className={panelTableStickyHeadClass}>
             <tr className={panelTableHeadRowClass}>
               <PanelTableTh>Sucursal</PanelTableTh>
-              <PanelTableTh align="center">Ambientes</PanelTableTh>
-              <PanelTableTh>Tipo</PanelTableTh>
-              <PanelTableTh align="right">Acciones</PanelTableTh>
+              <PanelTableTh align="center" className={panelTableShrinkCellClass}>
+                Ambientes
+              </PanelTableTh>
+              <PanelTableTh className={panelTableNowrapCellClass}>Tipo</PanelTableTh>
+              <PanelTableTh align="right" className={panelTableNowrapCellClass}>
+                Acciones
+              </PanelTableTh>
             </tr>
           </thead>
           <tbody>
             {sedes.map((sede) => (
               <tr key={sede.id} className={panelTableBodyRowClass}>
                 <PanelTableTd className="font-medium" title={sede.nombre}>
-                  {sede.nombre}
+                  {onViewAmbientes ? (
+                    <button
+                      type="button"
+                      className="font-medium text-primary hover:underline"
+                      title="Ver ambientes de esta sucursal"
+                      onClick={() => onViewAmbientes(sede.id)}
+                    >
+                      {sede.nombre}
+                    </button>
+                  ) : (
+                    sede.nombre
+                  )}
                 </PanelTableTd>
-                <PanelTableTd align="center">{sede.ambiente_count}</PanelTableTd>
-                <PanelTableTd>
+                <PanelTableTd align="center" className={panelTableShrinkCellClass}>
+                  {onViewAmbientes ? (
+                    <button
+                      type="button"
+                      className="font-medium text-primary hover:underline"
+                      title="Ver ambientes de esta sucursal"
+                      onClick={() => onViewAmbientes(sede.id)}
+                    >
+                      {sede.ambiente_count}
+                    </button>
+                  ) : (
+                    sede.ambiente_count
+                  )}
+                </PanelTableTd>
+                <PanelTableTd className={panelTableNowrapCellClass}>
                   {sede.es_principal ? (
                     <StatusBadge variant="active">Principal</StatusBadge>
                   ) : (
                     <span className={panelTableMutedClass}>Secundaria</span>
                   )}
                 </PanelTableTd>
-                <PanelTableTd align="right" className="overflow-visible">
-                  {!sede.es_principal ? (
-                    <div className="flex items-center justify-end gap-1">
-                      <PanelIconAction label="Editar" onClick={() => setEditSede(sede)}>
-                        <EditIcon />
-                      </PanelIconAction>
+                <PanelTableTd align="right" className={`overflow-visible ${panelTableNowrapCellClass}`}>
+                  <div className="flex flex-nowrap items-center justify-end gap-1">
+                    {onViewAmbientes && (
                       <PanelIconAction
-                        label="Eliminar"
-                        variant="danger"
-                        onClick={() => void handleDelete(sede)}
+                        label="Ambientes"
+                        onClick={() => onViewAmbientes(sede.id)}
                       >
-                        <DeleteIcon />
+                        <AmbientesIcon />
                       </PanelIconAction>
-                    </div>
-                  ) : (
-                    <span className={`text-xs ${panelTableMutedClass}`}>—</span>
-                  )}
+                    )}
+                    {!sede.es_principal && (
+                      <>
+                        <PanelIconAction label="Editar" onClick={() => setEditSede(sede)}>
+                          <EditIcon />
+                        </PanelIconAction>
+                        <PanelIconAction
+                          label="Eliminar"
+                          variant="danger"
+                          onClick={() => void handleDelete(sede)}
+                        >
+                          <DeleteIcon />
+                        </PanelIconAction>
+                      </>
+                    )}
+                  </div>
                 </PanelTableTd>
               </tr>
             ))}

@@ -5,10 +5,14 @@ import type { Ambiente, Sede, SedeConConteo } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
 
-function revalidateEntidad(entidadId: string) {
+function revalidateEntidad(entidadId: string, sedeId?: string) {
   revalidatePath("/contador/entidades");
   revalidatePath(`/contador/entidades/${entidadId}`);
   revalidatePath(`/contador/entidades/${entidadId}/responsables`);
+  if (sedeId) {
+    revalidatePath(`/contador/entidades/${entidadId}/sedes/${sedeId}`);
+    revalidatePath(`/admin/sedes/${sedeId}`);
+  }
   revalidatePath("/admin/activos");
   revalidatePath("/admin/responsables");
   revalidatePath("/admin");
@@ -25,6 +29,22 @@ export async function getSedePrincipal(entidadId: string): Promise<Sede | null> 
     .maybeSingle();
 
   return (data as Sede) ?? null;
+}
+
+export async function getSede(sedeId: string): Promise<Sede | null> {
+  const profile = await getProfile();
+  if (!profile) return null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sedes")
+    .select("*")
+    .eq("id", sedeId)
+    .eq("activo", true)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as Sede;
 }
 
 /** Asegura el ambiente sistema de preregistros (nombre con año actual) y lo devuelve. */

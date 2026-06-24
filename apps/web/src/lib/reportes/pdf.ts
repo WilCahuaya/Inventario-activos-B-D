@@ -1,4 +1,4 @@
-import { formatFechaISOToDDMMYYYY, formatMonedaPE } from "@inventario/types";
+import { formatMonedaPE } from "@inventario/types";
 import { buildInstitutionalHeader } from "./header-meta";
 import {
   addAmbienteDisenoHeaderPdf,

@@ -88,6 +88,11 @@ export async function inviteContador(input: {
   if (!profile) return { error: "Sesión no válida." };
   if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
 
+  const email = input.email.trim();
+  const nombre = input.nombre.trim();
+  if (!email) return { error: "El correo es obligatorio." };
+  if (!nombre) return { error: "El nombre es obligatorio." };
+
   if (!window.electronAPI?.inviteContador) {
     return {
       error:
@@ -95,9 +100,13 @@ export async function inviteContador(input: {
     };
   }
 
-  const result = await window.electronAPI.inviteContador(input);
-  if (result.error) return { error: result.error };
-  return { message: result.message ?? result.warning ?? "Contador agregado correctamente." };
+  void window.electronAPI
+    .inviteContador({ email, nombre })
+    .catch((err) => console.error("inviteContador", err));
+
+  return {
+    message: `Invitación en proceso para ${email}. El contador podrá ingresar con Google cuando confirme el correo.`,
+  };
 }
 
 export async function setUsuarioActivo(

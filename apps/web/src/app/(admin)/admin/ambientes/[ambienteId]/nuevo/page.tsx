@@ -33,6 +33,7 @@ export default async function AdminNuevoActivoPage({
       entidadNombre={entidad.nombre}
       ambienteId={ambienteId}
       ambienteNombre={ambienteData.ambiente.nombre}
+      sedeNombre={ambienteData.sede_nombre}
       sedeId={ambienteData.ambiente.sede_id}
       esAmbientePreregistro={ambienteData.ambiente.es_preregistro}
       posibleAmbientePreset={

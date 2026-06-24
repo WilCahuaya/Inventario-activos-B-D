@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Activo, EstadoRegistro } from "@inventario/types";
-import { ActivoEditScopeNav, type ActivoEditScope } from "@inventario/ui/panel";
+import { ActivoEditScopeNav, type ActivoEditScope, withSedeBreadcrumb } from "@inventario/ui/panel";
 import { ActivoForm } from "./ActivoForm";
 import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
 import { AmbienteReportesExport } from "./AmbienteReportesExport";
@@ -25,6 +25,7 @@ interface ActivosAmbientePanelProps {
   ambienteId: string;
   ambienteNombre: string;
   ambienteResponsable?: string | null;
+  sedeNombre?: string | null;
   sedeId: string;
   fichaExportMeta?: FichaAsignacionExportMeta;
   activos: Activo[];
@@ -47,6 +48,7 @@ export function ActivosAmbientePanel({
   ambienteId,
   ambienteNombre,
   ambienteResponsable,
+  sedeNombre,
   sedeId,
   fichaExportMeta,
   activos,
@@ -77,15 +79,19 @@ export function ActivosAmbientePanel({
   const nuevoLabel = isAdmin || esAmbientePreregistro ? "+ Preregistrar activo" : "+ Nuevo activo";
   const editarLabel = isAdmin ? undefined : "Editar activo";
 
-  const listBreadcrumbs: PanelBreadcrumbItem[] = isAdmin
-    ? [
-        { label: "Ambientes", href: "/admin/activos" },
-        { label: ambienteNombre },
-      ]
-    : [
-        { label: entidadNombre, href: `/contador/entidades/${entidadId}` },
-        { label: ambienteNombre },
-      ];
+  const listBreadcrumbs: PanelBreadcrumbItem[] = withSedeBreadcrumb(
+    isAdmin
+      ? [
+          { label: "Ambientes", href: "/admin/activos" },
+          { label: ambienteNombre },
+        ]
+      : [
+          { label: entidadNombre, href: `/contador/entidades/${entidadId}` },
+          { label: ambienteNombre },
+        ],
+    sedeNombre,
+    1,
+  );
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -121,14 +127,18 @@ export function ActivosAmbientePanel({
           ? "Editar preregistro"
           : "Editar activo";
 
-    const editBreadcrumbs: PanelBreadcrumbItem[] = [
-      ...(isAdmin
-        ? [{ label: "Ambientes", href: "/admin/activos" }]
-        : [{ label: entidadNombre, href: `/contador/entidades/${entidadId}` }]),
-      { label: ambienteNombre, onClick: () => setEditActivo(null) },
-      { label: editActivo.nombre },
-      { label: editTitle },
-    ];
+    const editBreadcrumbs: PanelBreadcrumbItem[] = withSedeBreadcrumb(
+      [
+        ...(isAdmin
+          ? [{ label: "Ambientes", href: "/admin/activos" }]
+          : [{ label: entidadNombre, href: `/contador/entidades/${entidadId}` }]),
+        { label: ambienteNombre, onClick: () => setEditActivo(null) },
+        { label: editActivo.nombre },
+        { label: editTitle },
+      ],
+      sedeNombre,
+      1,
+    );
 
     return (
       <div className="space-y-5">

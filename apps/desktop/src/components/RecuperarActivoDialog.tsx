@@ -32,16 +32,17 @@ export function RecuperarActivoDialog({
   async function handleConfirm() {
     setPending(true);
     setError(null);
-    const result = await recuperarActivo(activoId);
-    setPending(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await recuperarActivo(activoId);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onClose();
+      onSuccess?.();
+    } finally {
+      setPending(false);
     }
-
-    onClose();
-    onSuccess?.();
   }
 
   return (

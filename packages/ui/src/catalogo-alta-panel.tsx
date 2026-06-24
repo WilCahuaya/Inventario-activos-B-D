@@ -91,21 +91,23 @@ export function CatalogoAltaPanel({
     setSuccess(null);
     setCreated(null);
 
-    const result = await onSubmit(input);
-    setPending(false);
+    try {
+      const result = await onSubmit(input);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      setCreated(result.data ?? null);
+      setSuccess(
+        `Ítem ${result.data?.codigo} agregado. Ya puede usarlo al registrar activos de cuenta de orden.${successSuffix ? ` ${successSuffix}` : ""}`,
+      );
+      setFormKey((k) => k + 1);
+      void refreshMeta();
+      void onItemCreated?.();
+    } finally {
+      setPending(false);
     }
-
-    setCreated(result.data ?? null);
-    setSuccess(
-      `Ítem ${result.data?.codigo} agregado. Ya puede usarlo al registrar activos de cuenta de orden.${successSuffix ? ` ${successSuffix}` : ""}`,
-    );
-    setFormKey((k) => k + 1);
-    await refreshMeta();
-    await onItemCreated?.();
   }
 
   return (

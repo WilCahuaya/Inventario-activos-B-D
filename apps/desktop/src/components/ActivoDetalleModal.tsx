@@ -12,7 +12,7 @@ import { CambiarAmbienteDialog } from "./CambiarAmbienteDialog";
 import { DarDeBajaDialog } from "./DarDeBajaDialog";
 import { RecuperarActivoDialog } from "./RecuperarActivoDialog";
 import { ValidarPreregistroDialog } from "./ValidarPreregistroDialog";
-import { AgregarBienesSimilaresDialog } from "./AgregarBienesSimilaresDialog";
+import { AgregarBienesSimilaresDialog, type AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
 import {
   ActivoIconButton,
   IconAmbiente,
@@ -32,6 +32,7 @@ interface ActivoDetalleModalProps {
   online: boolean;
   onEdit?: (activo: ActivoConUbicacion) => void;
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onActivoUpdated?: (activo: ActivoConUbicacion) => void;
   onPrintLabel?: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
@@ -45,6 +46,7 @@ export function ActivoDetalleModal({
   online,
   onEdit,
   onIrAmbiente,
+  onAbrirAmbienteDestino,
   onActivoUpdated,
   onPrintLabel,
   onPrintBatch,
@@ -268,7 +270,9 @@ export function ActivoDetalleModal({
           codigoCatalogo={activo.codigo_catalogo}
           posibleAmbienteId={activo.posible_ambiente_id}
           posibleAmbienteNombre={activo.posible_ambiente_nombre}
-          onSuccess={onActivoUpdated}
+          onSuccess={() => {
+            void refreshActivo();
+          }}
         />
       )}
 
@@ -308,7 +312,13 @@ export function ActivoDetalleModal({
         codigoCatalogo={activo.codigo_catalogo}
         nombre={activo.nombre}
         esRegistrado={!esPreregistrado}
-        onSuccess={() => void refreshActivo()}
+        onAbrirAmbienteDestino={(destino) => {
+          onClose();
+          onAbrirAmbienteDestino?.(destino);
+        }}
+        onSuccess={(info) => {
+          if (!info.ambienteDestinoId) void refreshActivo();
+        }}
       />
 
     </>

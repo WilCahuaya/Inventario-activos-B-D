@@ -50,16 +50,17 @@ export function CambiarAmbienteDialog({
 
     setPending(true);
     setError(null);
-    const result = await cambiarUbicacionActivo(activo.id, sedeId, ambienteId);
-    setPending(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await cambiarUbicacionActivo(activo.id, sedeId, ambienteId);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onClose();
+      onSuccess?.();
+    } finally {
+      setPending(false);
     }
-
-    onClose();
-    onSuccess?.();
   }
 
   return (

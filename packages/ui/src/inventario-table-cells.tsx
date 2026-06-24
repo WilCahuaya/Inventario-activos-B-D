@@ -171,6 +171,11 @@ export function ValorNetoCell({
   );
 }
 
+export function formatInventarioListaTexto(value?: string | null): string {
+  const text = value?.trim() ?? "";
+  return text ? text.toLocaleUpperCase("es") : "";
+}
+
 export function ObservacionCell({
   observacion,
   lineClamp2,
@@ -178,7 +183,7 @@ export function ObservacionCell({
   observacion?: string | null;
   lineClamp2?: boolean;
 }) {
-  const texto = observacion?.trim() ?? "";
+  const texto = formatInventarioListaTexto(observacion);
 
   if (!texto) {
     return (
@@ -243,12 +248,14 @@ export function InventarioTextCell({
 }
 
 export function inventarioDescripcion(activo: Activo): string {
-  return buildDescripcionBien(
-    activo.marca,
-    activo.modelo,
-    activo.serie,
-    activo.color,
-    activo.medidas,
+  return formatInventarioListaTexto(
+    buildDescripcionBien(
+      activo.marca,
+      activo.modelo,
+      activo.serie,
+      activo.color,
+      activo.medidas,
+    ),
   );
 }
 

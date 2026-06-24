@@ -61,7 +61,7 @@ export async function listResponsables(
 
   const { data: entidad } = await supabase
     .from("entidades")
-    .select("admin_nombre, admin_email, admin_telefono")
+    .select("admin_nombre, admin_email, admin_dni, admin_telefono")
     .eq("id", entidadId)
     .maybeSingle();
 
@@ -72,6 +72,7 @@ export async function listResponsables(
       entidad.admin_nombre,
       entidad.admin_email,
       entidad.admin_telefono,
+      entidad.admin_dni,
     );
   }
 

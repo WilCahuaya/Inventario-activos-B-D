@@ -4,6 +4,11 @@ import { getProfile } from "@/lib/auth/profile";
 import { getEntidad } from "@/lib/actions/entidades";
 import { listResponsables } from "@/lib/actions/responsables";
 import { listAmbientesPorEntidad, listSedesConConteo } from "@/lib/actions/ubicacion";
+import {
+  attachVisitaEstadoToAmbientes,
+  getVisitasCampoActivas,
+  listVisitasCampoHistorial,
+} from "@/lib/actions/visitas-campo";
 
 export default async function AdminAmbientesPage({
   searchParams,
@@ -17,12 +22,16 @@ export default async function AdminAmbientesPage({
 
   const entidadId = profile.entidad_id;
   const { tab } = await searchParams;
-  const [entidad, ambientes, sedes, responsables] = await Promise.all([
-    getEntidad(entidadId),
-    listAmbientesPorEntidad(entidadId),
-    listSedesConConteo(entidadId),
-    listResponsables(entidadId),
-  ]);
+  const [entidad, ambientesRaw, sedes, responsables, visitasActivas, visitasHistorial] =
+    await Promise.all([
+      getEntidad(entidadId),
+      listAmbientesPorEntidad(entidadId),
+      listSedesConConteo(entidadId),
+      listResponsables(entidadId),
+      getVisitasCampoActivas(entidadId),
+      listVisitasCampoHistorial(entidadId),
+    ]);
+  const ambientes = await attachVisitaEstadoToAmbientes(ambientesRaw, entidadId);
 
   if (!entidad) redirect("/login");
 
@@ -32,7 +41,11 @@ export default async function AdminAmbientesPage({
       ambientes={ambientes}
       sedes={sedes}
       responsables={responsables}
-      initialTab={tab === "responsables" ? "responsables" : undefined}
+      visitasActivas={visitasActivas}
+      visitasHistorial={visitasHistorial}
+      initialTab={
+        tab === "responsables" ? "responsables" : tab === "visitas" ? "visitas" : undefined
+      }
     />
   );
 }

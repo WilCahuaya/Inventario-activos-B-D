@@ -6,7 +6,17 @@ import {
 } from "@inventario/ui/panel";
 import { FotoPreviewDialog, PdfPreviewDialog } from "./ActivoMediaDialogs";
 import { ActivoDetalleModal } from "./ActivoDetalleModal";
-import { ActivoIconButton, IconAmbiente, IconEtiqueta, IconFoto, IconValidar, IconVer } from "./activo-icons";
+import { AgregarBienesSimilaresDialog, type AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
+import {
+  ActivoIconButton,
+  IconAmbiente,
+  IconEditar,
+  IconEtiqueta,
+  IconFoto,
+  IconSimilares,
+  IconValidar,
+  IconVer,
+} from "./activo-icons";
 
 interface ActivosCampoAccionesProps {
   entidadId: string;
@@ -14,6 +24,7 @@ interface ActivosCampoAccionesProps {
   online: boolean;
   onEdit?: (activo: ActivoConUbicacion) => void;
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onValidated?: (activo: ActivoConUbicacion) => void;
@@ -27,6 +38,7 @@ export function ActivosCampoAcciones({
   online,
   onEdit,
   onIrAmbiente,
+  onAbrirAmbienteDestino,
   onPrintLabel,
   onPrintBatch,
   onValidated,
@@ -36,13 +48,32 @@ export function ActivosCampoAcciones({
   const [fotoOpen, setFotoOpen] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [detalleOpen, setDetalleOpen] = useState(false);
+  const [similaresOpen, setSimilaresOpen] = useState(false);
   const esPreregistrado = activo.estado_registro === "PREREGISTRADO";
   const inactivo = activo.estado_registro === "DADO_DE_BAJA";
+  const esPendiente = activo.id.startsWith("pending-");
   const iconSize = compact ? "h-7 w-7" : "h-8 w-8";
   const overflowVariant = compact ? (variant === "auto" ? "icons" : variant) : variant;
 
   const items = useMemo<TableActionItem[]>(() => {
     const list: TableActionItem[] = [];
+    if (!inactivo && onEdit) {
+      list.push({
+        id: "editar",
+        label: esPreregistrado ? "Editar preregistro" : "Editar activo",
+        icon: <IconEditar />,
+        onClick: () => onEdit(activo),
+      });
+    }
+    if (!inactivo) {
+      list.push({
+        id: "similares",
+        label: "Agregar similares",
+        icon: <IconSimilares />,
+        disabled: !online || esPendiente,
+        onClick: () => setSimilaresOpen(true),
+      });
+    }
     if (activo.foto_path) {
       list.push({
         id: "foto",
@@ -82,7 +113,7 @@ export function ActivosCampoAcciones({
       });
     }
     return list;
-  }, [activo, esPreregistrado, inactivo, online, onIrAmbiente, onPrintLabel]);
+  }, [activo, esPendiente, esPreregistrado, inactivo, online, onEdit, onIrAmbiente, onPrintLabel]);
 
   return (
     <>
@@ -90,6 +121,26 @@ export function ActivosCampoAcciones({
         <TableActionsOverflow items={items} iconClassName={iconSize} variant={overflowVariant} />
       ) : (
         <div className="flex flex-row flex-wrap items-center justify-center gap-1">
+          {!inactivo && onEdit && (
+            <ActivoIconButton
+              label={esPreregistrado ? "Editar preregistro" : "Editar activo"}
+              variant={esPreregistrado ? "default" : "primary"}
+              className={iconSize}
+              onClick={() => onEdit(activo)}
+            >
+              <IconEditar />
+            </ActivoIconButton>
+          )}
+          {!inactivo && (
+            <ActivoIconButton
+              label="Agregar similares"
+              className={iconSize}
+              disabled={!online || esPendiente}
+              onClick={() => setSimilaresOpen(true)}
+            >
+              <IconSimilares />
+            </ActivoIconButton>
+          )}
           {activo.foto_path && (
             <ActivoIconButton
               label="Ver foto"
@@ -136,6 +187,7 @@ export function ActivosCampoAcciones({
         online={online}
         onEdit={onEdit}
         onIrAmbiente={onIrAmbiente}
+        onAbrirAmbienteDestino={onAbrirAmbienteDestino}
         onActivoUpdated={onValidated}
         onPrintLabel={onPrintLabel}
         onPrintBatch={onPrintBatch}
@@ -158,6 +210,24 @@ export function ActivosCampoAcciones({
           titulo={activo.comprobante_serie ? `Comprobante ${activo.comprobante_serie}` : undefined}
         />
       )}
+
+      <AgregarBienesSimilaresDialog
+        open={similaresOpen}
+        onClose={() => setSimilaresOpen(false)}
+        activoId={activo.id}
+        entidadId={entidadId}
+        sedeId={activo.sede_id ?? ""}
+        ambienteId={activo.ambiente_id ?? ""}
+        sedeNombre={activo.sede_nombre}
+        ambienteNombre={activo.ambiente_nombre}
+        codigoCatalogo={activo.codigo_catalogo}
+        nombre={activo.nombre}
+        esRegistrado={!esPreregistrado}
+        onAbrirAmbienteDestino={onAbrirAmbienteDestino}
+        onSuccess={(info) => {
+          if (!info.ambienteDestinoId) onValidated?.(activo);
+        }}
+      />
     </>
   );
 }

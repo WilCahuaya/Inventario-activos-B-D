@@ -10,12 +10,18 @@ import type { Ambiente, Sede } from "@inventario/types";
 import { ActivoForm } from "./ActivoForm";
 import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
 import { InventarioImportDialog } from "./InventarioImportDialog";
+import {
+  deleteActivosPorCodigos,
+  previewDeleteActivosPorCodigos,
+} from "@/lib/actions/activos";
+import { EliminarActivosPorCodigosDialog } from "@inventario/ui";
 import { useEjemplaresResumen } from "@/hooks/useEjemplaresResumen";
 import {
   PanelCountLabel,
   PanelPageHeader,
   PanelSearchInput,
   panelFilterRowClass,
+  panelModalClass,
   panelStickyToolbarClass,
   panelToolbarActionsClass,
   type PanelBreadcrumbItem,
@@ -70,6 +76,7 @@ export function InventarioGlobalPanel({
     setEditScope("single");
   }, [editActivo?.id]);
   const [importOpen, setImportOpen] = useState(false);
+  const [eliminarOpen, setEliminarOpen] = useState(false);
 
   const activeEntidadId = isAdmin ? (fixedEntidadId ?? "") : entidadId;
 
@@ -240,6 +247,17 @@ export function InventarioGlobalPanel({
                   Importar activos
                 </Button>
               )}
+              {!isAdmin && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 px-2 text-xs text-destructive hover:text-destructive"
+                  onClick={() => setEliminarOpen(true)}
+                >
+                  Eliminar por códigos
+                </Button>
+              )}
             </div>
           </div>
 
@@ -339,6 +357,17 @@ export function InventarioGlobalPanel({
           open={importOpen}
           onClose={() => setImportOpen(false)}
           entidades={entidades}
+        />
+      )}
+      {!isAdmin && (
+        <EliminarActivosPorCodigosDialog
+          open={eliminarOpen}
+          onClose={() => setEliminarOpen(false)}
+          entidades={entidades}
+          modalClassName={panelModalClass}
+          onPreview={previewDeleteActivosPorCodigos}
+          onDelete={deleteActivosPorCodigos}
+          onDeleted={() => router.refresh()}
         />
       )}
     </>

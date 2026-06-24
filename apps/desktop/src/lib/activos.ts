@@ -6,10 +6,15 @@ import {
   type EjemplaresSimilaresResumen,
   type UpdateActivosSimilaresInput,
   type UpdateActivosSimilaresResult,
+  type PreviewDeleteActivosPorCodigosResult,
+  type DeleteActivosPorCodigosResult,
+  MAX_ELIMINAR_ACTIVOS_POR_CODIGOS,
+  parseCodigosBarrasInput,
 } from "@inventario/types";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
+import { removeActivoStoragePaths } from "./storage";
 
 export type ActivoConUbicacion = Activo & {
   entidad_nombre?: string;
@@ -30,6 +35,7 @@ export interface CreateActivoInput {
   nombre: string;
   nombre_etiqueta?: string | null;
   descripcion?: string;
+  caracteristicas?: string;
   categoria?: CategoriaBien;
   estado_bien?: EstadoBien;
   marca?: string;
@@ -206,6 +212,7 @@ export async function createActivo(
     nombre: input.nombre.trim(),
     nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
     descripcion: input.descripcion?.trim() || null,
+    caracteristicas: input.caracteristicas?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
     estado_bien: input.estado_bien ?? "BUENO",
     marca: input.marca?.trim() || null,
@@ -276,6 +283,7 @@ export async function updateActivo(
     nombre: input.nombre.trim(),
     nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
     descripcion: input.descripcion?.trim() || null,
+    caracteristicas: input.caracteristicas?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
     estado_bien: input.estado_bien ?? "BUENO",
     marca: input.marca?.trim() || null,
@@ -673,4 +681,93 @@ export async function listActivosSimilaresParaEtiquetas(
 
   if (error) throw new Error(error.message);
   return mapActivoRows(data as Record<string, unknown>[]);
+}
+
+function mapPreviewDeleteActivos(data: unknown): PreviewDeleteActivosPorCodigosResult {
+  const row = data as {
+    solicitados?: number;
+    encontrados?: PreviewDeleteActivosPorCodigosResult["encontrados"];
+    no_encontrados?: string[];
+    no_elegibles?: PreviewDeleteActivosPorCodigosResult["no_elegibles"];
+  };
+  return {
+    solicitados: row.solicitados ?? 0,
+    encontrados: row.encontrados ?? [],
+    no_encontrados: row.no_encontrados ?? [],
+    no_elegibles: row.no_elegibles ?? [],
+  };
+}
+
+export async function previewDeleteActivosPorCodigos(
+  entidadId: string,
+  codigosText: string,
+): Promise<{ data?: PreviewDeleteActivosPorCodigosResult; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
+  if (!entidadId) return { error: "Seleccione la entidad." };
+
+  const codigos = parseCodigosBarrasInput(codigosText);
+  if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
+  if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
+    return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("preview_delete_activos_por_codigos", {
+    p_entidad_id: entidadId,
+    p_codigos: codigos,
+  });
+
+  if (error) return { error: error.message };
+  return { data: mapPreviewDeleteActivos(data) };
+}
+
+export async function deleteActivosPorCodigos(
+  entidadId: string,
+  codigosText: string,
+): Promise<{ data?: DeleteActivosPorCodigosResult; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
+  if (!entidadId) return { error: "Seleccione la entidad." };
+
+  const codigos = parseCodigosBarrasInput(codigosText);
+  if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
+  if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
+    return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("delete_activos_por_codigos", {
+    p_entidad_id: entidadId,
+    p_codigos: codigos,
+  });
+
+  if (error) return { error: error.message };
+
+  const result = data as {
+    eliminados?: number;
+    codigos?: string[];
+    foto_paths?: string[];
+    comprobante_paths?: string[];
+  };
+
+  try {
+    await removeActivoStoragePaths(
+      (result.foto_paths as string[] | undefined) ?? [],
+      (result.comprobante_paths as string[] | undefined) ?? [],
+    );
+  } catch {
+    // La eliminación en BD ya se aplicó.
+  }
+
+  return {
+    data: {
+      eliminados: result.eliminados ?? 0,
+      codigos: result.codigos ?? [],
+      foto_paths: result.foto_paths ?? [],
+      comprobante_paths: result.comprobante_paths ?? [],
+    },
+  };
 }

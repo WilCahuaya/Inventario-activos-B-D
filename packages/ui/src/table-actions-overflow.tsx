@@ -152,6 +152,7 @@ export function TableActionsOverflow({
           type="button"
           aria-label={item.label}
           className={btnClass}
+          disabled={item.disabled}
           onClick={item.onClick}
         >
           {item.icon}

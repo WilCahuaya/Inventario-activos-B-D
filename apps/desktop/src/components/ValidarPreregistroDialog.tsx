@@ -82,16 +82,17 @@ export function ValidarPreregistroDialog({
 
     setPending(true);
     setError(null);
-    const result = await registrarActivo(activoId, { sedeId, ambienteId });
-    setPending(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await registrarActivo(activoId, { sedeId, ambienteId });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onClose();
+      onSuccess?.();
+    } finally {
+      setPending(false);
     }
-
-    onClose();
-    onSuccess?.();
   }
 
   const descripcion = codigoCatalogo

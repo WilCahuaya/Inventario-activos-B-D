@@ -29,7 +29,17 @@ function createAdminClient(): SupabaseClient | null {
 }
 
 async function findAuthUserByEmail(admin: SupabaseClient, email: string) {
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id")
+    .ilike("email", email)
+    .maybeSingle();
+
+  if (profile?.id) {
+    return { id: profile.id };
+  }
+
+  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
   if (error) return null;
   return data.users.find((u) => u.email?.toLowerCase() === email) ?? null;
 }

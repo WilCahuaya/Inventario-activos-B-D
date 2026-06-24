@@ -306,7 +306,13 @@ export function ActivoDetalleModal({
         codigoCatalogo={activo.codigo_catalogo}
         nombre={activo.nombre}
         esRegistrado={!esPreregistrado}
-        onSuccess={handleRefresh}
+        onSuccess={(info) => {
+          if (info.ambienteDestinoId) {
+            onClose();
+          } else {
+            handleRefresh();
+          }
+        }}
       />
 
       {puedeValidarPreregistro && esPreregistrado && (

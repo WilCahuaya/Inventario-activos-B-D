@@ -1,10 +1,7 @@
 "use client";
 
 import type { Ambiente, Responsable, SedeConConteo } from "@inventario/types";
-import { Input, Label, Select } from "./components";
-
-const textareaClass =
-  "flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+import { Input, Label, Select, Textarea } from "./components";
 
 export type AmbienteFormAmbiente = Pick<
   Ambiente,
@@ -39,7 +36,7 @@ export function AmbienteFormFields({
 
   return (
     <>
-      {showSedeSelect && (
+      {showSedeSelect ? (
         <div className="space-y-2">
           <Label htmlFor="amb_sede">Sucursal</Label>
           <Select
@@ -50,7 +47,9 @@ export function AmbienteFormFields({
             options={sedes.map((sede) => ({ value: sede.id, label: sede.nombre }))}
           />
         </div>
-      )}
+      ) : defaultSedeId ? (
+        <input type="hidden" name="sede_id" value={defaultSedeId} />
+      ) : null}
       <div className="space-y-2">
         <Label htmlFor="amb_nombre">Nombre del ambiente</Label>
         <Input
@@ -63,10 +62,9 @@ export function AmbienteFormFields({
       </div>
       <div className="space-y-2">
         <Label htmlFor="amb_descripcion">Descripción</Label>
-        <textarea
+        <Textarea
           id="amb_descripcion"
           name="descripcion"
-          className={textareaClass}
           placeholder="Opcional"
           defaultValue={ambiente?.descripcion ?? ""}
         />

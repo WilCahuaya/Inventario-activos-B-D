@@ -16,3 +16,4 @@ export * from "./responsables-panel";
 export * from "./ambiente-form-fields";
 export * from "./label-print-text-preview";
 export * from "./usuarios-gestion-panel";
+export * from "./eliminar-activos-por-codigos-dialog";

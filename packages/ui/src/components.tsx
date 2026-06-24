@@ -1,6 +1,6 @@
 "use client";
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 
@@ -37,7 +37,33 @@ export function Button({
   );
 }
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+function shouldDisableSpellCheck({
+  readOnly,
+  type,
+  inputMode,
+}: Pick<InputHTMLAttributes<HTMLInputElement>, "readOnly" | "type" | "inputMode">) {
+  return (
+    readOnly ||
+    type === "number" ||
+    type === "email" ||
+    type === "tel" ||
+    type === "url" ||
+    type === "search" ||
+    inputMode === "numeric" ||
+    inputMode === "decimal"
+  );
+}
+
+export function Input({
+  className,
+  spellCheck,
+  readOnly,
+  type,
+  inputMode,
+  lang,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement>) {
+  const resolvedSpellCheck = spellCheck ?? !shouldDisableSpellCheck({ readOnly, type, inputMode });
   return (
     <input
       className={cn(
@@ -47,6 +73,33 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
         "disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
+      spellCheck={resolvedSpellCheck}
+      lang={lang ?? (resolvedSpellCheck ? "es" : undefined)}
+      readOnly={readOnly}
+      type={type}
+      inputMode={inputMode}
+      {...props}
+    />
+  );
+}
+
+export function Textarea({
+  className,
+  spellCheck = true,
+  lang = "es",
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      className={cn(
+        "flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+        "ring-offset-background placeholder:text-muted-foreground",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        className,
+      )}
+      spellCheck={spellCheck}
+      lang={lang}
       {...props}
     />
   );

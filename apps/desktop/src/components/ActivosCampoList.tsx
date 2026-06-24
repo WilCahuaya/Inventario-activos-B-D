@@ -5,6 +5,7 @@ import { listAmbientes, listAmbientesPorEntidad, listSedes } from "../lib/ubicac
 import { PanelSearchInput, panelFilterRowClass, panelStickyToolbarClass, panelToolbarActionsClass } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
 import type { InventarioExportMeta } from "../lib/inventario-export";
+import type { AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
 import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
 import { InventarioExportButtons } from "./InventarioExportButtons";
 
@@ -44,6 +45,7 @@ interface ActivosCampoListProps {
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onEditActivo?: (activo: ActivoConUbicacion) => void;
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
   exportMeta?: InventarioExportMeta;
   reportesExport?: ReactNode;
@@ -70,6 +72,7 @@ export function ActivosCampoList({
   onPrintBatch,
   onEditActivo,
   onIrAmbiente,
+  onAbrirAmbienteDestino,
   onActivoUpdated,
   exportMeta,
   reportesExport,
@@ -371,10 +374,10 @@ export function ActivosCampoList({
         </>
       ) : isAmbiente ? (
         <>
-          <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto pb-0.5">
+          <div className="flex flex-nowrap items-center justify-between gap-2 pb-0.5">
             {!esAmbientePreregistro && (
               <div
-                className="inline-flex shrink-0 gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                className="inline-flex min-w-0 shrink overflow-x-auto gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
                 role="tablist"
                 aria-label="Estado del activo"
               >
@@ -532,6 +535,7 @@ export function ActivosCampoList({
         onPrintBatch={onPrintBatch}
         onEditActivo={onEditActivo}
         onIrAmbiente={isGlobal ? onIrAmbiente : undefined}
+        onAbrirAmbienteDestino={onAbrirAmbienteDestino}
         onSelectionChange={setSelectedActivos}
       />
     </div>

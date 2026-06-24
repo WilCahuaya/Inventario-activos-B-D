@@ -1,4 +1,4 @@
-import { normalizeResponsableNombre, RESPONSABLE_CARGO_ADMIN } from "@inventario/types";
+import { normalizeResponsableDni, normalizeResponsableNombre, RESPONSABLE_CARGO_ADMIN } from "@inventario/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function syncAdminResponsableForEntidad(
@@ -7,6 +7,7 @@ export async function syncAdminResponsableForEntidad(
   adminNombre: string,
   adminEmail: string,
   adminTelefono?: string | null,
+  adminDni?: string | null,
 ): Promise<void> {
   const emailNorm = adminEmail.trim().toLowerCase();
   const nombre = normalizeResponsableNombre(adminNombre);
@@ -15,6 +16,7 @@ export async function syncAdminResponsableForEntidad(
   const payload = {
     nombre,
     email: emailNorm,
+    dni: normalizeResponsableDni(adminDni ?? "") || null,
     telefono: adminTelefono?.trim() || null,
     cargo: RESPONSABLE_CARGO_ADMIN,
     activo: true,

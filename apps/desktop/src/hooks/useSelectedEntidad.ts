@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Entidad } from "@inventario/types";
+import type { EntidadConConteo } from "@inventario/types";
 import { listEntidades } from "../lib/entidades";
 
 const STORAGE_KEY = "inventario.desktop.entidadId";
 
 export function useSelectedEntidad(enabled: boolean) {
-  const [entidades, setEntidades] = useState<Entidad[]>([]);
+  const [entidades, setEntidades] = useState<EntidadConConteo[]>([]);
   const [entidadId, setEntidadIdState] = useState<string>("");
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export function useSelectedEntidad(enabled: boolean) {
     else localStorage.removeItem(STORAGE_KEY);
   }
 
-  function setEntidadesList(items: Entidad[]) {
+  function setEntidadesList(items: EntidadConConteo[]) {
     setEntidades(items);
     setEntidadIdState((current) => {
       if (current && items.some((e) => e.id === current)) return current;

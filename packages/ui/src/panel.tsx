@@ -3,7 +3,7 @@ import { Input } from "./components";
 import { PanelBreadcrumbs, type PanelBreadcrumbItem } from "./panel-breadcrumbs";
 
 export type { PanelBreadcrumbItem };
-export { PanelBreadcrumbs };
+export { PanelBreadcrumbs, withSedeBreadcrumb } from "./panel-breadcrumbs";
 
 export const panelCardClass =
   "overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm";
@@ -187,6 +187,7 @@ export function PanelSearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder ?? "Buscar…"}
         className="pl-9"
+        spellCheck={false}
       />
     </div>
   );
@@ -279,6 +280,7 @@ export {
   ValorBienCell,
   inventarioDepreciacionFila,
   inventarioDescripcion,
+  formatInventarioListaTexto,
 } from "./inventario-table-cells";
 export {
   ActivoDetalleSheet,
@@ -297,3 +299,6 @@ export * from "./reportes-panel";
 export * from "./ambiente-reportes-export-menu";
 export * from "./activo-edit-scope-nav";
 export * from "./responsive-layout";
+export * from "./sede-nav-cards";
+export * from "./sede-ambiente-filter";
+export * from "./visitas-campo";

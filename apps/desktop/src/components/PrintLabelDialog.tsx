@@ -79,10 +79,13 @@ export function PrintLabelDialog({ open, onClose, label }: PrintLabelDialogProps
     setPending(true);
     setMessage(null);
     setSavedPrinterName(printerName);
-    const result = await window.electronAPI?.printSend?.(zpl, printerName);
-    setPending(false);
-    setMessage(result?.message ?? "No se pudo imprimir");
-    if (result?.ok) onClose();
+    try {
+      const result = await window.electronAPI?.printSend?.(zpl, printerName);
+      setMessage(result?.message ?? "No se pudo imprimir");
+      if (result?.ok) onClose();
+    } finally {
+      setPending(false);
+    }
   }
 
   async function handleSave() {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Entidad, ResponsableConConteo, SedeConConteo } from "@inventario/types";
+import type { Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
 import { panelFieldsetClass } from "@inventario/ui/panel";
 import { Button, Dialog, ResponsablesPanel, Select } from "@inventario/ui";
 import {
@@ -22,13 +22,22 @@ import {
   PanelToolbar,
   PanelViewToggle,
   StatusBadge,
-  AMBIENTES_TABLE_COL_WIDTHS_PCT,
+  AMBIENTES_TABLE_COLS,
+  AMBIENTES_TABLE_COLS_SIN_SUCURSAL,
+  AMBIENTES_TABLE_COLS_VISITA,
+  AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA,
   panelCardClass,
   panelTableBodyRowClass,
   panelTableHeadRowClass,
   panelTableShrinkCellClass,
   panelTableStickyHeadClass,
+  panelTableNowrapCellClass,
   useStoredViewMode,
+  SedeAmbienteFilterSelect,
+  VisitasCampoBanner,
+  VisitaCampoEstadoBadge,
+  VisitasCampoHistorialPanel,
+  IniciarVisitaCampoDialog,
 } from "@inventario/ui/panel";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
 import { ConfirmDialog } from "@inventario/ui";
@@ -41,6 +50,16 @@ import {
   updateAmbiente,
   type AmbienteConSede,
 } from "../lib/ubicacion";
+import type { AmbienteConVisita } from "../lib/visitas-campo";
+import {
+  abrirVisitaCampo,
+  attachVisitaEstadoToAmbientes,
+  cerrarVisitaCampo,
+  culminarAmbienteVisita,
+  getVisitasCampoActivas,
+  getVisitaCampoDetalle,
+  listVisitasCampoHistorial,
+} from "../lib/visitas-campo";
 import {
   createResponsable,
   deleteResponsable,
@@ -49,12 +68,13 @@ import {
   updateResponsable,
 } from "../lib/responsables";
 
-type EntityTab = "ambientes" | "responsables" | "sucursales";
+type EntityTab = "ambientes" | "responsables" | "sucursales" | "visitas";
 
 const ENTITY_TABS: { id: EntityTab; label: string }[] = [
   { id: "ambientes", label: "Ambientes" },
   { id: "responsables", label: "Responsables" },
   { id: "sucursales", label: "Sucursales" },
+  { id: "visitas", label: "Visitas de campo" },
 ];
 
 interface AmbientesViewProps {
@@ -133,31 +153,66 @@ export function AmbientesView({
   onViewActivos,
   initialTab = "ambientes",
 }: AmbientesViewProps) {
-  const [ambientes, setAmbientes] = useState<AmbienteConSede[]>([]);
+  const [ambientes, setAmbientes] = useState<AmbienteConVisita[]>([]);
   const [sedes, setSedes] = useState<SedeConConteo[]>([]);
   const [responsables, setResponsables] = useState<ResponsableConConteo[]>([]);
+  const [visitasActivas, setVisitasActivas] = useState<VisitaCampoActiva[]>([]);
+  const [visitasHistorial, setVisitasHistorial] = useState<VisitaCampoHistorial[]>([]);
+  const [visitaPending, setVisitaPending] = useState(false);
+  const [cerrarPendingId, setCerrarPendingId] = useState<string | null>(null);
+  const [visitaError, setVisitaError] = useState<string | null>(null);
+  const [culminarPendingId, setCulminarPendingId] = useState<string | null>(null);
+  const [detalleVisita, setDetalleVisita] = useState<VisitaCampoHistorial | null>(null);
+  const [detalleAmbientes, setDetalleAmbientes] = useState<Awaited<ReturnType<typeof getVisitaCampoDetalle>> | null>(null);
+  const [detalleLoading, setDetalleLoading] = useState(false);
+  const [abrirVisitaOpen, setAbrirVisitaOpen] = useState(false);
+  const [abrirVisitaError, setAbrirVisitaError] = useState<string | null>(null);
   const [tab, setTab] = useState<EntityTab>(initialTab);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState("");
+  const [sedeFilterId, setSedeFilterId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [editAmbiente, setEditAmbiente] = useState<AmbienteConSede | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<AmbienteConSede | null>(null);
+  const [editAmbiente, setEditAmbiente] = useState<AmbienteConVisita | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AmbienteConVisita | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes", "list");
+
+  const soloUnaSede = Boolean(sedeFilterId);
+  const visitaAbierta = visitasActivas.length > 0;
+  const sedesEnVisita = visitasActivas
+    .map((v) => v.sede_id)
+    .filter((id): id is string => Boolean(id));
+  const todasEnVisita = visitasActivas.some((v) => !v.sede_id);
+
+  function verAmbientesDeSede(sedeId: string) {
+    setSedeFilterId(sedeId);
+    setTab("ambientes");
+    setBusqueda("");
+  }
+
+  useEffect(() => {
+    setSedeFilterId("");
+    setBusqueda("");
+  }, [entidadId]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [ambList, sedeList, respList] = await Promise.all([
+      const [ambList, sedeList, respList, visitas, historial] = await Promise.all([
         listAmbientesPorEntidad(entidad.id),
         listSedesConConteo(entidad.id),
         listResponsables(entidad.id),
+        getVisitasCampoActivas(entidad.id),
+        listVisitasCampoHistorial(entidad.id),
       ]);
-      setAmbientes(ambList);
+      const enriched = await attachVisitaEstadoToAmbientes(ambList, entidad.id);
+      setAmbientes(enriched);
       setSedes(sedeList);
       setResponsables(respList.data ?? []);
+      setVisitasActivas(visitas);
+      setVisitasHistorial(historial);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "No se pudieron cargar los ambientes";
       setError(msg);
@@ -177,16 +232,83 @@ export function AmbientesView({
       setAmbientes([]);
       setSedes([]);
       setResponsables([]);
+      setVisitasActivas([]);
+      setVisitasHistorial([]);
     }
   }, [online, loadData]);
 
-  async function syncAmbientesYResponsables() {
-    const [ambResult, respResult] = await Promise.all([
-      listAmbientesPorEntidad(entidad.id),
+  async function syncVisitaYAmbientes() {
+    const [visitas, respResult, historial] = await Promise.all([
+      getVisitasCampoActivas(entidad.id),
       listResponsables(entidad.id),
+      listVisitasCampoHistorial(entidad.id),
     ]);
-    setAmbientes(ambResult);
+    const ambList = await listAmbientesPorEntidad(entidad.id);
+    const enriched = await attachVisitaEstadoToAmbientes(ambList, entidad.id);
+    setAmbientes(enriched);
     if (!respResult.error) setResponsables(respResult.data ?? []);
+    setVisitasActivas(visitas);
+    setVisitasHistorial(historial);
+  }
+
+  async function syncAmbientesYResponsables() {
+    await syncVisitaYAmbientes();
+  }
+
+  function handleAbrirVisita() {
+    setAbrirVisitaError(null);
+    setAbrirVisitaOpen(true);
+  }
+
+  async function confirmarAbrirVisita(sedeId: string | null) {
+    setVisitaPending(true);
+    setAbrirVisitaError(null);
+    const result = await abrirVisitaCampo(entidad.id, sedeId);
+    setVisitaPending(false);
+    if (result.error) {
+      setAbrirVisitaError(result.error);
+      return;
+    }
+    setAbrirVisitaOpen(false);
+    setVisitaError(null);
+    await syncVisitaYAmbientes();
+  }
+
+  async function handleCerrarVisita(visitaId: string) {
+    if (!confirm("¿Cerrar esta visita de campo? Quedará registrada en el historial.")) return;
+    setCerrarPendingId(visitaId);
+    setVisitaError(null);
+    const result = await cerrarVisitaCampo(visitaId);
+    setCerrarPendingId(null);
+    if (result.error) {
+      setVisitaError(result.error);
+      return;
+    }
+    await syncVisitaYAmbientes();
+  }
+
+  async function handleCulminarAmbiente(ambienteId: string) {
+    setCulminarPendingId(ambienteId);
+    setVisitaError(null);
+    const result = await culminarAmbienteVisita(ambienteId);
+    setCulminarPendingId(null);
+    if (result.error) {
+      setVisitaError(result.error);
+      return;
+    }
+    await syncVisitaYAmbientes();
+  }
+
+  async function handleVerDetalleVisita(visita: VisitaCampoHistorial) {
+    setDetalleVisita(visita);
+    setDetalleLoading(true);
+    setDetalleAmbientes(null);
+    try {
+      const detalle = await getVisitaCampoDetalle(visita.id);
+      setDetalleAmbientes(detalle);
+    } finally {
+      setDetalleLoading(false);
+    }
   }
 
   function responsableNombreById(id: string | null) {
@@ -194,20 +316,25 @@ export function AmbientesView({
     return responsables.find((r) => r.id === id)?.nombre ?? null;
   }
 
+  const ambientesBase = useMemo(() => {
+    if (!sedeFilterId) return ambientes;
+    return ambientes.filter((a) => a.sede_id === sedeFilterId);
+  }, [ambientes, sedeFilterId]);
+
   const ambientesFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return ambientes;
-    return ambientes.filter(
+    if (!q) return ambientesBase;
+    return ambientesBase.filter(
       (a) =>
         a.nombre.toLowerCase().includes(q) ||
         (a.descripcion?.toLowerCase().includes(q) ?? false) ||
         (a.responsable?.toLowerCase().includes(q) ?? false) ||
-        a.sede_nombre.toLowerCase().includes(q),
+        (!soloUnaSede && a.sede_nombre.toLowerCase().includes(q)),
     );
-  }, [ambientes, busqueda]);
+  }, [ambientesBase, busqueda, soloUnaSede]);
 
   const gruposPorSede = useMemo(() => {
-    const porSede = new Map<string, AmbienteConSede[]>();
+    const porSede = new Map<string, AmbienteConVisita[]>();
     for (const amb of ambientesFiltrados) {
       const lista = porSede.get(amb.sede_id) ?? [];
       lista.push(amb);
@@ -222,7 +349,7 @@ export function AmbientesView({
       }));
   }, [ambientesFiltrados, sedes]);
 
-  function sortAmbientes(rows: AmbienteConSede[]) {
+  function sortAmbientes(rows: AmbienteConVisita[]) {
     return [...rows].sort((a, b) => {
       if (a.sede_es_principal !== b.sede_es_principal) return a.sede_es_principal ? -1 : 1;
       if (a.sede_nombre !== b.sede_nombre) return a.sede_nombre.localeCompare(b.sede_nombre);
@@ -236,40 +363,44 @@ export function AmbientesView({
     setPending(true);
     setError(null);
 
-    const input = ambienteFromForm(new FormData(form));
-    const sede = sedes.find((s) => s.id === input.sedeId);
-    const result = await createAmbiente({
-      sedeId: input.sedeId,
-      nombre: input.nombre,
-      descripcion: input.descripcion,
-      responsableId: input.responsableId,
-    });
+    try {
+      const input = ambienteFromForm(new FormData(form));
+      const sede = sedes.find((s) => s.id === input.sedeId);
+      const result = await createAmbiente({
+        sedeId: input.sedeId,
+        nombre: input.nombre,
+        descripcion: input.descripcion,
+        responsableId: input.responsableId,
+      });
 
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      const nuevo: AmbienteConVisita = {
+        ...result.data!,
+        sede_nombre: sede?.nombre ?? "",
+        sede_es_principal: sede?.es_principal ?? false,
+        activo_count: 0,
+        visita_estado: visitaAbierta ? "EN_PROCESO" : null,
+        responsable:
+          result.data?.responsable ??
+          responsableNombreById(input.responsableId) ??
+          null,
+      };
+      setAmbientes((prev) => sortAmbientes([...prev, nuevo]));
+      setSedes((prev) =>
+        prev.map((s) =>
+          s.id === input.sedeId ? { ...s, ambiente_count: s.ambiente_count + 1 } : s,
+        ),
+      );
+      setCreateOpen(false);
+      form.reset();
+      void syncAmbientesYResponsables();
+    } finally {
+      setPending(false);
     }
-
-    const nuevo: AmbienteConSede = {
-      ...result.data!,
-      sede_nombre: sede?.nombre ?? "",
-      sede_es_principal: sede?.es_principal ?? false,
-      activo_count: 0,
-      responsable:
-        result.data?.responsable ??
-        responsableNombreById(input.responsableId) ??
-        null,
-    };
-    setAmbientes((prev) => sortAmbientes([...prev, nuevo]));
-    setSedes((prev) =>
-      prev.map((s) =>
-        s.id === input.sedeId ? { ...s, ambiente_count: s.ambiente_count + 1 } : s,
-      ),
-    );
-    setCreateOpen(false);
-    form.reset();
-    await syncAmbientesYResponsables();
   }
 
   async function handleEditAmbiente(event: React.FormEvent<HTMLFormElement>) {
@@ -278,30 +409,33 @@ export function AmbientesView({
     setPending(true);
     setError(null);
 
-    const input = ambienteFromForm(new FormData(event.currentTarget));
-    const result = await updateAmbiente(editAmbiente.id, input);
+    try {
+      const input = ambienteFromForm(new FormData(event.currentTarget));
+      const result = await updateAmbiente(editAmbiente.id, input);
 
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      setAmbientes((prev) =>
+        prev.map((a) =>
+          a.id === editAmbiente.id
+            ? {
+                ...a,
+                nombre: input.nombre.trim(),
+                descripcion: input.descripcion.trim() || null,
+                responsable_id: input.responsableId,
+                responsable: responsableNombreById(input.responsableId),
+              }
+            : a,
+        ),
+      );
+      setEditAmbiente(null);
+      void syncAmbientesYResponsables();
+    } finally {
+      setPending(false);
     }
-
-    setAmbientes((prev) =>
-      prev.map((a) =>
-        a.id === editAmbiente.id
-          ? {
-              ...a,
-              nombre: input.nombre.trim(),
-              descripcion: input.descripcion.trim() || null,
-              responsable_id: input.responsableId,
-              responsable: responsableNombreById(input.responsableId),
-            }
-          : a,
-      ),
-    );
-    setEditAmbiente(null);
-    await syncAmbientesYResponsables();
   }
 
   async function confirmDeleteAmbiente() {
@@ -309,28 +443,31 @@ export function AmbientesView({
     setPending(true);
     setError(null);
 
-    const result = await deleteAmbiente(deleteTarget.id);
-    setPending(false);
+    try {
+      const result = await deleteAmbiente(deleteTarget.id);
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      setAmbientes((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+      setSedes((prev) =>
+        prev.map((s) =>
+          s.id === deleteTarget.sede_id
+            ? { ...s, ambiente_count: Math.max(0, s.ambiente_count - 1) }
+            : s,
+        ),
+      );
+      setDeleteTarget(null);
+      void syncAmbientesYResponsables();
+    } finally {
+      setPending(false);
     }
-
-    setAmbientes((prev) => prev.filter((a) => a.id !== deleteTarget.id));
-    setSedes((prev) =>
-      prev.map((s) =>
-        s.id === deleteTarget.sede_id
-          ? { ...s, ambiente_count: Math.max(0, s.ambiente_count - 1) }
-          : s,
-      ),
-    );
-    setDeleteTarget(null);
-    await syncAmbientesYResponsables();
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 w-full space-y-4">
       {!drillDown && (
         <PanelPageHeader
           title="Gestión de ambientes"
@@ -378,7 +515,19 @@ export function AmbientesView({
         <>
           <PanelTabs tabs={ENTITY_TABS} value={tab} onChange={setTab} />
 
-          {tab === "responsables" ? (
+          {tab === "visitas" ? (
+            <VisitasCampoHistorialPanel
+              historial={visitasHistorial}
+              loadingDetalle={detalleLoading}
+              detalle={detalleAmbientes}
+              detalleVisita={detalleVisita}
+              onVerDetalle={handleVerDetalleVisita}
+              onCerrarDetalle={() => {
+                setDetalleVisita(null);
+                setDetalleAmbientes(null);
+              }}
+            />
+          ) : tab === "responsables" ? (
             <ResponsablesPanel
               responsables={responsables}
               onCreate={async (input) => {
@@ -402,6 +551,7 @@ export function AmbientesView({
             <GestionarSucursales
               entidadId={entidad.id}
               sedes={sedes}
+              onViewAmbientes={verAmbientesDeSede}
               onSedesChange={(next) => {
                 setSedes(next);
                 setAmbientes((prev) =>
@@ -420,13 +570,37 @@ export function AmbientesView({
             />
           ) : (
             <>
+              <VisitasCampoBanner
+                visitas={visitasActivas}
+                sedes={sedes.map((s) => ({
+                  id: s.id,
+                  nombre: s.nombre,
+                  es_principal: s.es_principal,
+                }))}
+                puedeGestionar
+                abrirPending={visitaPending}
+                cerrarPendingId={cerrarPendingId}
+                onAbrir={handleAbrirVisita}
+                onCerrar={(id) => void handleCerrarVisita(id)}
+                error={visitaError}
+              />
+
               <PanelToolbar
                 left={
-                  <PanelCountLabel
-                    count={ambientesFiltrados.length}
-                    singular="ambiente"
-                    plural="ambientes"
-                  />
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <PanelCountLabel
+                      count={ambientesFiltrados.length}
+                      singular="ambiente"
+                      plural="ambientes"
+                    />
+                    {sedes.length > 0 && (
+                      <SedeAmbienteFilterSelect
+                        sedes={sedes}
+                        value={sedeFilterId}
+                        onChange={setSedeFilterId}
+                      />
+                    )}
+                  </div>
                 }
                 right={
                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
@@ -434,7 +608,11 @@ export function AmbientesView({
                       <PanelSearchInput
                         value={busqueda}
                         onChange={setBusqueda}
-                        placeholder="Buscar ambiente, responsable o sucursal…"
+                        placeholder={
+                          soloUnaSede
+                            ? "Buscar ambiente o responsable…"
+                            : "Buscar ambiente, responsable o sucursal…"
+                        }
                       />
                     </div>
                     <PanelViewToggle value={viewMode} onChange={setViewMode} />
@@ -484,19 +662,34 @@ export function AmbientesView({
                   }
                 />
               ) : viewMode === "list" ? (
-                <PanelDataTable>
-                  <PanelTableColgroup widths={AMBIENTES_TABLE_COL_WIDTHS_PCT} />
+                <PanelDataTable layout="auto">
+                  <PanelTableColgroup
+                    cols={
+                      soloUnaSede
+                        ? visitaAbierta
+                          ? AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA
+                          : AMBIENTES_TABLE_COLS_SIN_SUCURSAL
+                        : visitaAbierta
+                          ? AMBIENTES_TABLE_COLS_VISITA
+                          : AMBIENTES_TABLE_COLS
+                    }
+                  />
                   <thead className={panelTableStickyHeadClass}>
                     <tr className={panelTableHeadRowClass}>
                       <PanelTableTh>Ambiente</PanelTableTh>
                       <PanelTableTh>Responsable</PanelTableTh>
                       <PanelTableTh>Descripción</PanelTableTh>
-                      <PanelTableTh>Sucursal</PanelTableTh>
+                      {!soloUnaSede && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
                       <PanelTableTh align="center" className={panelTableShrinkCellClass}>
                         Activos
                       </PanelTableTh>
-                      <PanelTableTh>Estado</PanelTableTh>
-                      <PanelTableTh align="right">Acciones</PanelTableTh>
+                      {visitaAbierta && (
+                        <PanelTableTh className={panelTableNowrapCellClass}>Visita</PanelTableTh>
+                      )}
+                      <PanelTableTh className={panelTableNowrapCellClass}>Estado</PanelTableTh>
+                      <PanelTableTh align="right" className={panelTableNowrapCellClass}>
+                        Acciones
+                      </PanelTableTh>
                     </tr>
                   </thead>
                   <tbody>
@@ -511,14 +704,47 @@ export function AmbientesView({
                         <PanelTableTd className="text-muted-foreground" title={amb.descripcion ?? undefined}>
                           {amb.descripcion ?? "—"}
                         </PanelTableTd>
-                        <PanelTableTd title={amb.sede_nombre}>{amb.sede_nombre}</PanelTableTd>
+                        {!soloUnaSede && (
+                          <PanelTableTd className={panelTableShrinkCellClass} title={amb.sede_nombre}>
+                            <button
+                              type="button"
+                              className="truncate font-medium text-primary hover:underline"
+                              title="Ver ambientes de esta sucursal"
+                              onClick={() => setSedeFilterId(amb.sede_id)}
+                            >
+                              {amb.sede_nombre}
+                            </button>
+                          </PanelTableTd>
+                        )}
                         <PanelTableTd align="center" className={panelTableShrinkCellClass}>
                           {amb.activo_count}
                         </PanelTableTd>
-                        <PanelTableTd>
+                        {visitaAbierta && (
+                          <PanelTableTd className={panelTableNowrapCellClass}>
+                            <div className="flex flex-col items-start gap-1">
+                              <VisitaCampoEstadoBadge estado={amb.visita_estado} />
+                              {!amb.es_preregistro && amb.visita_estado === "EN_PROCESO" && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs"
+                                  disabled={culminarPendingId === amb.id}
+                                  onClick={() => void handleCulminarAmbiente(amb.id)}
+                                >
+                                  {culminarPendingId === amb.id ? "…" : "Culminar"}
+                                </Button>
+                              )}
+                            </div>
+                          </PanelTableTd>
+                        )}
+                        <PanelTableTd className={panelTableNowrapCellClass}>
                           <StatusBadge variant="active">Activo</StatusBadge>
                         </PanelTableTd>
-                        <PanelTableTd align="right" className="overflow-visible">
+                        <PanelTableTd
+                          align="right"
+                          className={`overflow-visible ${panelTableNowrapCellClass}`}
+                        >
                           <PanelTableActions
                             onEdit={() => {
                               setError(null);
@@ -539,14 +765,38 @@ export function AmbientesView({
                     ))}
                   </tbody>
                 </PanelDataTable>
-          ) : (
+              ) : soloUnaSede ? (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {ambientesFiltrados.map((amb) => (
+                    <AmbienteCard
+                      key={amb.id}
+                      ambiente={amb}
+                      entidadNombre={entidad.nombre}
+                      onEdit={() => {
+                        setError(null);
+                        setEditAmbiente(amb);
+                      }}
+                      onDelete={() => {
+                        setError(null);
+                        setDeleteTarget(amb);
+                      }}
+                      onViewActivos={() => onViewActivos(amb)}
+                    />
+                  ))}
+                </div>
+              ) : (
             <div className="space-y-8">
               {gruposPorSede.map(({ sede, ambientes: lista }) => (
                 <section key={sede.id}>
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-bold uppercase tracking-wide text-primary">
+                    <button
+                      type="button"
+                      className="text-left text-lg font-bold uppercase tracking-wide text-primary hover:underline"
+                      title="Ver ambientes de esta sucursal"
+                      onClick={() => setSedeFilterId(sede.id)}
+                    >
                       {sede.nombre}
-                    </h2>
+                    </button>
                     <span className="text-sm text-muted-foreground">
                       {lista.length} {lista.length === 1 ? "ambiente" : "ambientes"}
                     </span>
@@ -585,10 +835,19 @@ export function AmbientesView({
           setError(null);
         }}
         title="Nuevo ambiente"
-        description="Registre un ambiente en la sucursal que corresponda."
+        description={
+          soloUnaSede
+            ? `Registre un ambiente en ${sedes.find((s) => s.id === sedeFilterId)?.nombre ?? "esta sucursal"}.`
+            : "Registre un ambiente en la sucursal que corresponda."
+        }
       >
         <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">
-          <AmbienteFormFields sedes={sedes} responsables={responsables} showSedeSelect />
+          <AmbienteFormFields
+            sedes={sedes}
+            responsables={responsables}
+            defaultSedeId={sedeFilterId || undefined}
+            showSedeSelect={!soloUnaSede}
+          />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
@@ -643,6 +902,24 @@ export function AmbientesView({
         pending={pending}
         error={deleteTarget ? error : null}
         onConfirm={() => void confirmDeleteAmbiente()}
+      />
+
+      <IniciarVisitaCampoDialog
+        open={abrirVisitaOpen}
+        onClose={() => {
+          setAbrirVisitaOpen(false);
+          setAbrirVisitaError(null);
+        }}
+        sedes={sedes.map((s) => ({
+          id: s.id,
+          nombre: s.nombre,
+          es_principal: s.es_principal,
+        }))}
+        sedesEnVisita={sedesEnVisita}
+        todasEnVisita={todasEnVisita}
+        pending={visitaPending}
+        error={abrirVisitaError}
+        onConfirm={(sedeId) => void confirmarAbrirVisita(sedeId)}
       />
     </div>
   );

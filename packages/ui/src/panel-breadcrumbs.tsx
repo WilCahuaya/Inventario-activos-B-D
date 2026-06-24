@@ -6,6 +6,19 @@ export interface PanelBreadcrumbItem {
   onClick?: () => void;
 }
 
+/** Inserta la sede en la ruta justo antes del segmento en `beforeIndex`. */
+export function withSedeBreadcrumb(
+  items: PanelBreadcrumbItem[],
+  sedeNombre: string | null | undefined,
+  beforeIndex: number,
+): PanelBreadcrumbItem[] {
+  const sede = sedeNombre?.trim();
+  if (!sede || beforeIndex < 0 || beforeIndex > items.length) return items;
+  const out = [...items];
+  out.splice(beforeIndex, 0, { label: sede });
+  return out;
+}
+
 type BreadcrumbLinkProps = {
   href: string;
   className?: string;

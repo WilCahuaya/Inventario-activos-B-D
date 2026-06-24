@@ -53,7 +53,7 @@ export function ActivoEditScopeNav({
       </div>
       <p className="text-xs text-muted-foreground">
         {scope === "bulk"
-          ? "Los cambios se aplican a todas las unidades iguales en este ambiente."
+          ? "Los cambios se aplican a todas las unidades del mismo lote de compra."
           : "Solo se modifica el activo seleccionado."}
       </p>
     </nav>

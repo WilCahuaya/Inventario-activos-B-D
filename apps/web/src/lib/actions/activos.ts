@@ -9,6 +9,10 @@ import {
   type EjemplaresSimilaresResumen,
   type UpdateActivosSimilaresInput,
   type UpdateActivosSimilaresResult,
+  type PreviewDeleteActivosPorCodigosResult,
+  type DeleteActivosPorCodigosResult,
+  MAX_ELIMINAR_ACTIVOS_POR_CODIGOS,
+  parseCodigosBarrasInput,
 } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
@@ -877,4 +881,118 @@ export async function updateActivoPaths(
     revalidatePath("/admin/activos");
   }
   return { success: true };
+}
+
+function mapPreviewDeleteActivos(data: unknown): PreviewDeleteActivosPorCodigosResult {
+  const row = data as {
+    solicitados?: number;
+    encontrados?: PreviewDeleteActivosPorCodigosResult["encontrados"];
+    no_encontrados?: string[];
+    no_elegibles?: PreviewDeleteActivosPorCodigosResult["no_elegibles"];
+  };
+  return {
+    solicitados: row.solicitados ?? 0,
+    encontrados: row.encontrados ?? [],
+    no_encontrados: row.no_encontrados ?? [],
+    no_elegibles: row.no_elegibles ?? [],
+  };
+}
+
+async function removeActivoStoragePaths(fotoPaths: string[], comprobantePaths: string[]) {
+  const supabase = await createClient();
+  if (fotoPaths.length > 0) {
+    await supabase.storage.from("fotos-activos").remove(fotoPaths);
+  }
+  if (comprobantePaths.length > 0) {
+    await supabase.storage.from("comprobantes-activos").remove(comprobantePaths);
+  }
+}
+
+export async function previewDeleteActivosPorCodigos(entidadId: string, codigosText: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
+  if (!entidadId) return { error: "Seleccione la entidad." };
+
+  const codigos = parseCodigosBarrasInput(codigosText);
+  if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
+  if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
+    return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("preview_delete_activos_por_codigos", {
+    p_entidad_id: entidadId,
+    p_codigos: codigos,
+  });
+
+  if (error) return { error: error.message };
+  return { data: mapPreviewDeleteActivos(data) };
+}
+
+export async function deleteActivosPorCodigos(entidadId: string, codigosText: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
+  if (!entidadId) return { error: "Seleccione la entidad." };
+
+  const codigos = parseCodigosBarrasInput(codigosText);
+  if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
+  if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
+    return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };
+  }
+
+  const supabase = await createClient();
+
+  const { data: ambienteRows } = await supabase
+    .from("activos")
+    .select("ambiente_id")
+    .eq("entidad_id", entidadId)
+    .in("codigo_barras", codigos);
+
+  const { data, error } = await supabase.rpc("delete_activos_por_codigos", {
+    p_entidad_id: entidadId,
+    p_codigos: codigos,
+  });
+
+  if (error) return { error: error.message };
+
+  const result = data as {
+    eliminados?: number;
+    codigos?: string[];
+    foto_paths?: string[];
+    comprobante_paths?: string[];
+  };
+
+  try {
+    await removeActivoStoragePaths(
+      (result.foto_paths as string[] | undefined) ?? [],
+      (result.comprobante_paths as string[] | undefined) ?? [],
+    );
+  } catch {
+    // La eliminación en BD ya se aplicó; archivos huérfanos son secundarios.
+  }
+
+  revalidatePath("/contador/inventario");
+  revalidatePath("/contador/entidades");
+  const ambienteIds = new Set(
+    (ambienteRows ?? [])
+      .map((r) => r.ambiente_id as string | null)
+      .filter((id): id is string => Boolean(id)),
+  );
+  for (const ambienteId of ambienteIds) {
+    revalidateActivoPaths(entidadId, ambienteId);
+  }
+  if (ambienteIds.size === 0) {
+    revalidateActivoPaths(entidadId, null);
+  }
+
+  return {
+    data: {
+      eliminados: result.eliminados ?? 0,
+      codigos: result.codigos ?? [],
+      foto_paths: result.foto_paths ?? [],
+      comprobante_paths: result.comprobante_paths ?? [],
+    } satisfies DeleteActivosPorCodigosResult,
+  };
 }

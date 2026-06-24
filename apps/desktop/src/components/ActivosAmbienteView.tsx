@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Entidad } from "@inventario/types";
 import { Button } from "@inventario/ui";
 import type { ActivoConUbicacion } from "../lib/activos";
+import type { AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
 import {
   resolveFichaAsignacionExportMeta,
   type FichaAsignacionExportMeta,
@@ -28,6 +29,7 @@ interface ActivosAmbienteViewProps {
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onEditActivo?: (activo: ActivoConUbicacion) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
 }
 
 export function ActivosAmbienteView({
@@ -49,6 +51,7 @@ export function ActivosAmbienteView({
   onPrintBatch,
   onEditActivo,
   onActivoUpdated,
+  onAbrirAmbienteDestino,
 }: ActivosAmbienteViewProps) {
   const activosAmbiente = useMemo(
     () => activos.filter((a) => a.ambiente_id === ambienteId),
@@ -142,6 +145,7 @@ export function ActivosAmbienteView({
       onPrintBatch={onPrintBatch}
       onEditActivo={onEditActivo}
       onActivoUpdated={onActivoUpdated}
+      onAbrirAmbienteDestino={onAbrirAmbienteDestino}
     />
   );
 }

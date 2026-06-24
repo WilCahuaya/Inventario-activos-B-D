@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Activo } from "@inventario/types";
 import {
   TableActionsOverflow,
@@ -9,7 +10,15 @@ import {
 } from "@inventario/ui/panel";
 import { FotoPreviewDialog } from "./ActivoMediaDialogs";
 import { ActivoDetalleModal } from "./ActivoDetalleModal";
-import { ActivoIconButton, IconAmbiente, IconFoto, IconVer } from "./activo-icons";
+import { AgregarBienesSimilaresDialog } from "./AgregarBienesSimilaresDialog";
+import {
+  ActivoIconButton,
+  IconAmbiente,
+  IconEditar,
+  IconFoto,
+  IconSimilares,
+  IconVer,
+} from "./activo-icons";
 
 interface ActivoAccionesBarProps {
   activo: ActivoDetalle;
@@ -36,13 +45,33 @@ export function ActivoAccionesBar({
   editarLabel = "Editar activo",
   modoAdmin = false,
 }: ActivoAccionesBarProps) {
+  const router = useRouter();
   const [fotoOpen, setFotoOpen] = useState(false);
   const [detalleOpen, setDetalleOpen] = useState(false);
+  const [similaresOpen, setSimilaresOpen] = useState(false);
+  const inactivo = activo.estado_registro === "DADO_DE_BAJA";
+  const esPreregistrado = activo.estado_registro === "PREREGISTRADO";
   const iconSize = compact ? "h-7 w-7" : "h-9 w-9";
   const overflowVariant = compact ? (variant === "auto" ? "icons" : variant) : variant;
 
   const items = useMemo<TableActionItem[]>(() => {
     const list: TableActionItem[] = [];
+    if (!inactivo && onEdit) {
+      list.push({
+        id: "editar",
+        label: editarLabel,
+        icon: <IconEditar />,
+        onClick: () => onEdit(activo),
+      });
+    }
+    if (!inactivo) {
+      list.push({
+        id: "similares",
+        label: "Agregar similares",
+        icon: <IconSimilares />,
+        onClick: () => setSimilaresOpen(true),
+      });
+    }
     if (activo.foto_path) {
       list.push({
         id: "foto",
@@ -66,7 +95,7 @@ export function ActivoAccionesBar({
       onClick: () => setDetalleOpen(true),
     });
     return list;
-  }, [activo, activo.ambiente_id, activo.foto_path, onIrAmbiente]);
+  }, [activo, activo.ambiente_id, activo.foto_path, editarLabel, inactivo, onEdit, onIrAmbiente]);
 
   return (
     <>
@@ -78,6 +107,25 @@ export function ActivoAccionesBar({
         />
       ) : (
         <div className={`flex flex-wrap items-center gap-1 ${className ?? ""}`}>
+          {!inactivo && onEdit && (
+            <ActivoIconButton
+              label={editarLabel}
+              variant={esPreregistrado ? "default" : "primary"}
+              onClick={() => onEdit(activo)}
+              className={iconSize}
+            >
+              <IconEditar />
+            </ActivoIconButton>
+          )}
+          {!inactivo && (
+            <ActivoIconButton
+              label="Agregar similares"
+              onClick={() => setSimilaresOpen(true)}
+              className={iconSize}
+            >
+              <IconSimilares />
+            </ActivoIconButton>
+          )}
           {activo.foto_path && (
             <ActivoIconButton
               label="Ver foto"
@@ -118,6 +166,23 @@ export function ActivoAccionesBar({
           titulo={activo.nombre}
         />
       )}
+
+      <AgregarBienesSimilaresDialog
+        open={similaresOpen}
+        onClose={() => setSimilaresOpen(false)}
+        activoId={activo.id}
+        entidadId={activo.entidad_id}
+        sedeId={activo.sede_id ?? ""}
+        ambienteId={activo.ambiente_id ?? ""}
+        sedeNombre={activo.sede_nombre}
+        ambienteNombre={activo.ambiente_nombre}
+        codigoCatalogo={activo.codigo_catalogo}
+        nombre={activo.nombre}
+        esRegistrado={!esPreregistrado}
+        onSuccess={(info) => {
+          if (!info.ambienteDestinoId) router.refresh();
+        }}
+      />
     </>
   );
 }

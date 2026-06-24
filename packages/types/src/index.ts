@@ -20,6 +20,53 @@ export type ActivoAtributoCampo = "marca" | "modelo" | "serie" | "color" | "medi
 
 export const ACTIVO_ATRIBUTO_CAMPOS = ["marca", "modelo", "serie", "color"] as const;
 
+/** Estado de una ronda de visita de campo en la entidad */
+export type EstadoVisitaCampo = "ABIERTO" | "CERRADO";
+
+/** Progreso de un ambiente dentro de una visita de campo */
+export type EstadoVisitaAmbiente = "EN_PROCESO" | "CULMINADO";
+
+/** Visita de campo abierta (resumen para UI) */
+export interface VisitaCampoActiva {
+  id: string;
+  entidad_id: string;
+  numero: number;
+  estado: EstadoVisitaCampo;
+  abierto_at: string;
+  abierto_por_nombre: string | null;
+  /** null = visita en todas las sucursales */
+  sede_id: string | null;
+  sede_nombre: string | null;
+  ambientes_total: number;
+  ambientes_culminados: number;
+}
+
+/** Fila del historial de visitas de campo por entidad */
+export interface VisitaCampoHistorial {
+  id: string;
+  numero: number;
+  estado: EstadoVisitaCampo;
+  abierto_at: string;
+  cerrado_at: string | null;
+  abierto_por_nombre: string | null;
+  cerrado_por_nombre: string | null;
+  sede_id: string | null;
+  sede_nombre: string | null;
+  ambientes_total: number;
+  ambientes_culminados: number;
+}
+
+/** Detalle de ambientes en una visita cerrada o abierta */
+export interface VisitaCampoAmbienteDetalle {
+  ambiente_id: string;
+  ambiente_nombre: string;
+  sede_nombre: string;
+  es_preregistro: boolean;
+  estado: EstadoVisitaAmbiente | null;
+  culminado_at: string | null;
+  culminado_por_nombre: string | null;
+}
+
 /** Perfil de usuario (tabla profiles) */
 export interface Profile {
   id: string;
@@ -40,6 +87,7 @@ export interface Entidad {
   direccion: string | null;
   admin_nombre: string | null;
   admin_email: string | null;
+  admin_dni: string | null;
   admin_telefono: string | null;
   activo: boolean;
   created_at: string;
@@ -137,6 +185,17 @@ export function validarCreateResponsableInput(input: CreateResponsableInput): st
   return null;
 }
 
+export function validarAdminEntidadDni(dni: string | undefined): string | null {
+  const normalized = normalizeResponsableDni(dni ?? "");
+  if (!normalized) {
+    return "El DNI del administrador es obligatorio.";
+  }
+  if (normalized.length !== 8) {
+    return "El DNI debe tener 8 dígitos.";
+  }
+  return null;
+}
+
 export interface SedeConConteo extends Sede {
   ambiente_count: number;
 }
@@ -204,28 +263,18 @@ export interface EjemplaresSimilaresResumen {
   preregistrados: number;
 }
 
-/** Campos compartidos para edición masiva de ejemplares (sin serie, foto ni comprobante). */
+/** Campos permitidos en edición masiva de un lote (contador). */
 export interface UpdateActivosSimilaresInput {
-  codigo_catalogo?: string;
-  nombre?: string;
-  nombre_etiqueta?: string | null;
-  descripcion?: string | null;
-  caracteristicas?: string | null;
-  observacion?: string | null;
   categoria?: CategoriaBien;
-  estado_bien?: EstadoBien;
-  marca?: string | null;
-  modelo?: string | null;
-  color?: string | null;
-  medidas?: string | null;
-  medida_largo?: number | null;
-  medida_ancho?: number | null;
-  medida_altura?: number | null;
   depreciacion?: string | null;
   valor_adquisicion?: number | null;
   valor_es_mercado?: boolean;
   fecha_adquisicion?: string | null;
-  vida_util_meses?: number | null;
+  comprobante_serie?: string | null;
+  comprobante_path?: string | null;
+  foto_path?: string | null;
+  observacion?: string | null;
+  /** Solo admin: mover todo el lote de ubicación. */
   sede_id?: string | null;
   ambiente_id?: string | null;
   posible_ambiente_id?: string | null;
@@ -235,18 +284,62 @@ export interface UpdateActivosSimilaresResult {
   actualizados: number;
 }
 
+/** Máximo de códigos por operación de eliminación masiva. */
+export const MAX_ELIMINAR_ACTIVOS_POR_CODIGOS = 500;
+
+export interface ActivoEliminarPreviewItem {
+  id: string;
+  codigo_barras: string;
+  nombre: string;
+  sede_nombre?: string | null;
+  ambiente_nombre?: string | null;
+}
+
+export interface ActivoEliminarNoElegibleItem {
+  codigo_barras: string;
+  estado_registro: string;
+  nombre: string;
+}
+
+export interface PreviewDeleteActivosPorCodigosResult {
+  solicitados: number;
+  encontrados: ActivoEliminarPreviewItem[];
+  no_encontrados: string[];
+  no_elegibles: ActivoEliminarNoElegibleItem[];
+}
+
+export interface DeleteActivosPorCodigosResult {
+  eliminados: number;
+  codigos: string[];
+  foto_paths: string[];
+  comprobante_paths: string[];
+}
+
+/** Parsea códigos separados por coma, punto y coma o salto de línea (sin duplicados). */
+export function parseCodigosBarrasInput(text: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of text.split(/[\n,;]+/)) {
+    const code = part.trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    result.push(code);
+  }
+  return result;
+}
+
 export function formatEjemplaresEnAmbienteTexto(resumen: EjemplaresSimilaresResumen): string {
   const { total } = resumen;
   if (total <= 0) return "";
-  return total === 1 ? "1 ejemplar en este ambiente" : `${total} ejemplares en este ambiente`;
+  return total === 1 ? "1 ejemplar en este lote" : `${total} ejemplares en este lote`;
 }
 
 /** @deprecated Usar formatEjemplaresEnAmbienteTexto en la ficha. */
 export function formatEjemplaresSimilaresTexto(resumen: EjemplaresSimilaresResumen): string {
   const { total, registrados, preregistrados } = resumen;
   if (total <= 0) return "Sin ejemplares";
-  if (total === 1) return "1 ejemplar en este ambiente";
-  const partes = [`${total} ejemplares en este ambiente`];
+  if (total === 1) return "1 ejemplar en este lote";
+  const partes = [`${total} ejemplares en este lote`];
   if (registrados > 0) partes.push(`${registrados} registrados`);
   if (preregistrados > 0) partes.push(`${preregistrados} preregistrados`);
   return partes.join(" · ");

@@ -23,6 +23,7 @@ import {
   validarFechaDDMMYYYY,
   vidaUtilMesesFromPorcentaje,
   type ActivoAtributoCampo,
+  type UpdateActivosSimilaresInput,
 } from "@inventario/types";
 import {
   ActivoAtributoAutocomplete,
@@ -35,6 +36,7 @@ import {
   Label,
   LabelPrintTextPreview,
   Select,
+  Textarea,
 } from "@inventario/ui";
 import { panelFieldsetClass, panelLegendClass } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
@@ -55,14 +57,9 @@ import { updateActivoPaths, uploadActivoFile } from "../lib/storage";
 import { suggestActivoAtributo, upsertLocalAtributosFromActivo } from "../lib/atributo-vocab";
 import { getCatalogoByCodigo, searchCatalogo } from "../lib/catalogo";
 
-const textareaClass =
-  "flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
 const fieldsetCompact = `${panelFieldsetClass} lg:col-span-1`;
 const fieldsetWide = `${panelFieldsetClass} col-span-1 lg:col-span-2`;
-const fieldsetNotas = `${panelFieldsetClass} lg:col-span-1 lg:flex lg:flex-col`;
 const detalleGridClass = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4";
-const textareaModalClass = `${textareaClass} min-h-[100px] sm:min-h-[120px] lg:min-h-[160px] lg:flex-1`;
 
 function formatSoles(value: number | null) {
   if (value == null) return "—";
@@ -119,6 +116,7 @@ export function ActivoFormDesktop({
   const [serie, setSerie] = useState(activo?.serie ?? "");
   const [color, setColor] = useState(activo?.color ?? "");
   const [medidas, setMedidas] = useState(activo?.medidas ?? "");
+  const [detalle, setDetalle] = useState(activo?.caracteristicas ?? "");
   const [depreciacion, setDepreciacion] = useState(activo?.depreciacion ?? "");
   const [vidaUtilMeses, setVidaUtilMeses] = useState(
     activo?.vida_util_meses != null ? String(activo.vida_util_meses) : "",
@@ -345,14 +343,16 @@ export function ActivoFormDesktop({
       return;
     }
 
-    const labelWarnings = assessLabelPrintWarnings({
-      nombreBien: nombreEnEtiqueta,
-      entidadNombre: entidadEnEtiqueta,
-    });
-    if (labelWarnings.length > 0) {
-      setLabelWarnText(formatLabelPrintWarnings(labelWarnings));
-      setLabelWarnOpen(true);
-      return;
+    if (!esEdicionMasiva) {
+      const labelWarnings = assessLabelPrintWarnings({
+        nombreBien: nombreEnEtiqueta,
+        entidadNombre: entidadEnEtiqueta,
+      });
+      if (labelWarnings.length > 0) {
+        setLabelWarnText(formatLabelPrintWarnings(labelWarnings));
+        setLabelWarnOpen(true);
+        return;
+      }
     }
 
     await performSave();
@@ -364,6 +364,7 @@ export function ActivoFormDesktop({
     setPending(true);
     setMessage(null);
 
+    try {
     const payload = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
@@ -375,6 +376,7 @@ export function ActivoFormDesktop({
       serie: serie || undefined,
       color: color || undefined,
       medidas: medidas || undefined,
+      caracteristicas: detalle.trim() || undefined,
       ...(mostrarDepreciacion && {
         depreciacion: depreciacion || undefined,
         vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
@@ -397,7 +399,6 @@ export function ActivoFormDesktop({
     const online = navigator.onLine;
 
     if (!online && esEdicionMasiva) {
-      setPending(false);
       setMessage("La edición masiva de ejemplares requiere conexión a internet.");
       return;
     }
@@ -435,7 +436,7 @@ export function ActivoFormDesktop({
         nombre: payload.nombre,
         nombre_etiqueta: payload.nombre_etiqueta ?? null,
         descripcion: activo?.descripcion ?? null,
-        caracteristicas: activo?.caracteristicas ?? null,
+        caracteristicas: detalle.trim() || null,
         marca: payload.marca ?? null,
         modelo: payload.modelo ?? null,
         serie: payload.serie ?? null,
@@ -486,38 +487,48 @@ export function ActivoFormDesktop({
         color: payload.color,
         medidas: payload.medidas,
       });
-      setPending(false);
       setMessage("Guardado en cola offline. Se sincronizará al reconectar.");
       onSuccess(localActivo);
       return;
     }
 
+    let bulkPatch: UpdateActivosSimilaresInput | null = null;
+    if (isEdit && activo && esEdicionMasiva) {
+      bulkPatch = {
+        categoria: payload.categoria,
+        valor_adquisicion: payload.valor_adquisicion ?? null,
+        valor_es_mercado: payload.valor_es_mercado,
+        fecha_adquisicion: payload.fecha_adquisicion ?? null,
+        observacion: observacion.trim() || null,
+      };
+      if (mostrarDepreciacion) {
+        bulkPatch.depreciacion = depreciacion.trim() || null;
+      }
+      if (valorEsMercado) {
+        bulkPatch.comprobante_path = null;
+        bulkPatch.comprobante_serie = null;
+      } else {
+        bulkPatch.comprobante_serie = comprobanteSerie.trim() || null;
+        if (comprobanteFile) {
+          const upload = await uploadActivoFile(
+            entidadId,
+            activo.id,
+            comprobanteFile,
+            "comprobante",
+          );
+          if (upload.path) bulkPatch.comprobante_path = upload.path;
+        }
+      }
+      if (fotoFile) {
+        const uploadFoto = await uploadActivoFile(entidadId, activo.id, fotoFile, "foto");
+        if (uploadFoto.path) bulkPatch.foto_path = uploadFoto.path;
+      }
+    }
+
     const result =
       isEdit && activo
-        ? esEdicionMasiva
-          ? await updateActivosSimilares(activo.id, {
-              codigo_catalogo: catalogo.codigo,
-              nombre: payload.nombre,
-              nombre_etiqueta: payload.nombre_etiqueta ?? null,
-              categoria: payload.categoria,
-              estado_bien: payload.estado_bien,
-              marca: payload.marca ?? null,
-              modelo: payload.modelo ?? null,
-              color: payload.color ?? null,
-              medidas: payload.medidas ?? null,
-              observacion: payload.observacion ?? null,
-              valor_adquisicion: payload.valor_adquisicion ?? null,
-              valor_es_mercado: payload.valor_es_mercado,
-              fecha_adquisicion: payload.fecha_adquisicion ?? null,
-              depreciacion: payload.depreciacion ?? null,
-              vida_util_meses: payload.vida_util_meses ?? null,
-              ...(mostrarPosibleAmbiente
-                ? { posible_ambiente_id: posibleAmbienteId || null }
-                : {
-                    sede_id: (fixedSedeId ?? sedeId) || null,
-                    ambiente_id: (fixedAmbienteId ?? ambienteId) || null,
-                  }),
-            })
+        ? esEdicionMasiva && bulkPatch
+          ? await updateActivosSimilares(activo.id, bulkPatch)
           : await updateActivo(activo.id, payload)
         : await createActivo({
             entidad_id: entidadId,
@@ -526,7 +537,6 @@ export function ActivoFormDesktop({
           });
 
     if (result.error) {
-      setPending(false);
       setMessage(result.error);
       return;
     }
@@ -566,7 +576,6 @@ export function ActivoFormDesktop({
       }
     }
 
-    setPending(false);
     if (esEdicionMasiva && activo) {
       setMessage(
         `${(result.data as { actualizados?: number })?.actualizados ?? ejemplaresTotal} ejemplares actualizados correctamente.`,
@@ -592,10 +601,37 @@ export function ActivoFormDesktop({
       medidas: payload.medidas,
     });
     onSuccess(mapped);
+    } finally {
+      setPending(false);
+    }
   }
 
   const codigoBarrasDisplay =
     activo?.codigo_barras ?? codigoBarrasPreview ?? "Seleccione catálogo…";
+  const messageToneClass =
+    message &&
+    (message.includes("Error") ||
+      message.includes("obligator") ||
+      message.includes("Seleccione") ||
+      message.includes("fecha"))
+      ? "text-destructive"
+      : "text-primary";
+  const formActionButtons = (
+    <div className="flex flex-wrap justify-end gap-2">
+      <Button type="submit" disabled={pending}>
+        {pending
+          ? "Guardando…"
+          : isEdit
+            ? esEdicionMasiva
+              ? `Guardar en ${ejemplaresTotal} ejemplares`
+              : "Guardar cambios"
+            : "Registrar activo"}
+      </Button>
+      <Button type="button" variant="outline" onClick={onCancel}>
+        Cancelar
+      </Button>
+    </div>
+  );
 
   return (
     <>
@@ -606,11 +642,156 @@ export function ActivoFormDesktop({
       {esEdicionMasiva && (
         <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
           Los cambios se aplicarán a los{" "}
-          <strong>{ejemplaresTotal} ejemplares</strong> de este bien en el ambiente. Cada
-          unidad conserva su código de barras, serie, foto y comprobante propios.
+          <strong>{ejemplaresTotal} ejemplares</strong> de este lote de compra. Cada unidad
+          conserva su código de barras y serie propios.
         </div>
       )}
 
+      {esEdicionMasiva && activo && (
+      <>
+      <div className="col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 lg:col-span-2">
+        <p className="font-semibold text-foreground">{activo.nombre}</p>
+        <p className="font-mono text-xs text-muted-foreground">
+          {activo.codigo_catalogo}
+          {activo.codigo_barras ? ` · ${activo.codigo_barras}` : ""}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {[activo.marca, activo.modelo, activo.color, activo.medidas].filter(Boolean).join(" · ") ||
+            "Sin detalle físico adicional"}
+        </p>
+      </div>
+
+      <fieldset className={fieldsetCompact}>
+        <legend className={panelLegendClass}>Categoría</legend>
+        <CategoriaBienSelector
+          value={categoria}
+          onChange={setCategoria}
+          ayuda={CATEGORIA_BIEN_AYUDA}
+          opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
+            key,
+            ...CATEGORIA_BIEN_LABELS[key],
+          }))}
+        />
+      </fieldset>
+
+      <fieldset className={fieldsetCompact}>
+        <legend className={panelLegendClass}>Valoración y documentación</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="valor_bulk">
+              {valorEsMercado ? "Valor de mercado (S/)" : "Precio de adquisición (S/)"}
+            </Label>
+            <Input
+              id="valor_bulk"
+              type="number"
+              step="0.01"
+              min="0"
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end gap-2 pb-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={valorEsMercado}
+                onChange={(e) => handleValorEsMercadoChange(e.target.checked)}
+              />
+              Usar valor de mercado (sin factura)
+            </label>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="fecha_adquisicion_bulk">Fecha de adquisición</Label>
+            <Input
+              id="fecha_adquisicion_bulk"
+              inputMode="numeric"
+              value={fechaAdquisicion}
+              onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
+              onBlur={handleFechaAdquisicionBlur}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+              aria-invalid={Boolean(fechaAdquisicionError)}
+            />
+            {fechaAdquisicionError && (
+              <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+            )}
+          </div>
+        </div>
+        {!valorEsMercado && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="comprobante_serie_bulk">Serie del comprobante</Label>
+              <Input
+                id="comprobante_serie_bulk"
+                spellCheck={false}
+                value={comprobanteSerie}
+                onChange={(e) => setComprobanteSerie(formatComprobanteSerieInput(e.target.value))}
+                placeholder="Ej. E001 - 1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="comprobante_bulk">PDF del comprobante</Label>
+              <FileInput
+                id="comprobante_bulk"
+                accept="application/pdf,image/jpeg,image/png"
+                file={comprobanteFile}
+                onFileChange={setComprobanteFile}
+                buttonLabel="Seleccionar PDF"
+                emptyLabel="Sin archivo adjunto"
+                hint={
+                  activo.comprobante_path && !comprobanteFile
+                    ? "Ya hay un PDF en el lote"
+                    : "Se aplicará a todas las unidades del lote"
+                }
+              />
+            </div>
+          </div>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="foto_bulk">Foto del activo</Label>
+          <FileInput
+            id="foto_bulk"
+            accept="image/jpeg,image/png,image/webp"
+            file={fotoFile}
+            onFileChange={setFotoFile}
+            buttonLabel="Seleccionar foto"
+            emptyLabel="Sin foto adjunta"
+            hint={
+              activo.foto_path && !fotoFile
+                ? "Ya hay una foto en el lote"
+                : "Se aplicará a todas las unidades del lote"
+            }
+          />
+        </div>
+        {mostrarDepreciacion && (
+          <div className="space-y-2">
+            <Label htmlFor="depreciacion_bulk">Depreciación anual (%)</Label>
+            <Input
+              id="depreciacion_bulk"
+              value={depreciacion}
+              onChange={(e) => handleDepreciacionChange(e.target.value)}
+              placeholder="Ej. 10 %"
+            />
+          </div>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="observacion_bulk">Observaciones</Label>
+          <Textarea
+            id="observacion_bulk"
+            className="min-h-[80px]"
+            value={observacion}
+            onChange={(e) => setObservacion(e.target.value)}
+            placeholder="Notas adicionales, incidencias, condiciones especiales…"
+          />
+        </div>
+      </fieldset>
+      </>
+      )}
+
+      {!esEdicionMasiva && (
+      <>
       <fieldset className={fieldsetCompact}>
         <legend className={panelLegendClass}>Identificación</legend>
 
@@ -740,15 +921,28 @@ export function ActivoFormDesktop({
             onSearch={searchAtributo}
           />
         </div>
-        <ActivoAtributoAutocomplete
-          id="medidas"
-          label="Medidas"
-          campo="medidas"
-          value={medidas}
-          onChange={setMedidas}
-          onSearch={searchAtributo}
-          placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
-        />
+        <div className={detalleGridClass}>
+          <div className="col-span-2 min-w-0">
+            <ActivoAtributoAutocomplete
+              id="medidas"
+              label="Medidas"
+              campo="medidas"
+              value={medidas}
+              onChange={setMedidas}
+              onSearch={searchAtributo}
+              placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
+            />
+          </div>
+          <div className="col-span-2 min-w-0 space-y-2">
+            <Label htmlFor="detalle">Detalle</Label>
+            <Input
+              id="detalle"
+              value={detalle}
+              onChange={(e) => setDetalle(e.target.value)}
+              placeholder="Ej. con respaldo, tapizado en cuero…"
+            />
+          </div>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="estado_bien">Estado del bien</Label>
           <Select
@@ -771,6 +965,16 @@ export function ActivoFormDesktop({
             Nombre en mayúsculas; marca como se escribe; modelo, serie, color y medidas en
             minúsculas.
           </p>
+        </div>
+        <div className="space-y-2 border-t border-border/50 pt-4">
+          <Label htmlFor="observacion">Observaciones</Label>
+          <Textarea
+            id="observacion"
+            className="min-h-[80px]"
+            value={observacion}
+            onChange={(e) => setObservacion(e.target.value)}
+            placeholder="Notas adicionales, incidencias, condiciones especiales…"
+          />
         </div>
       </fieldset>
 
@@ -827,6 +1031,7 @@ export function ActivoFormDesktop({
               <Label htmlFor="comprobante_serie">Serie del comprobante</Label>
               <Input
                 id="comprobante_serie"
+                spellCheck={false}
                 value={comprobanteSerie}
                 onChange={(e) => setComprobanteSerie(formatComprobanteSerieInput(e.target.value))}
                 placeholder="Ej. E001 - 1"
@@ -916,22 +1121,6 @@ export function ActivoFormDesktop({
         </div>
         </>
         )}
-      </fieldset>
-
-      <fieldset className={fieldsetNotas}>
-        <legend className={panelLegendClass}>Observación (opcional)</legend>
-        <div className="flex flex-col gap-4 lg:flex-1 lg:flex-col">
-          <div className="space-y-2 lg:flex lg:flex-1 lg:flex-col">
-            <Label htmlFor="observacion">Observación</Label>
-            <textarea
-              id="observacion"
-              className={textareaModalClass}
-              value={observacion}
-              onChange={(e) => setObservacion(e.target.value)}
-              placeholder="Notas adicionales, incidencias, condiciones especiales…"
-            />
-          </div>
-        </div>
       </fieldset>
 
       {mostrarPosibleAmbiente && (
@@ -1028,35 +1217,12 @@ export function ActivoFormDesktop({
         </div>
       </fieldset>
       )}
-
-      {message && (
-        <p
-          className={`col-span-1 text-sm lg:col-span-2 ${
-            message.includes("Error") ||
-            message.includes("obligator") ||
-            message.includes("Seleccione") ||
-            message.includes("fecha")
-              ? "text-destructive"
-              : "text-primary"
-          }`}
-        >
-          {message}
-        </p>
+      </>
       )}
 
-      <div className="col-span-1 flex flex-wrap gap-2 lg:col-span-2">
-        <Button type="submit" disabled={pending}>
-          {pending
-            ? "Guardando…"
-            : isEdit
-              ? esEdicionMasiva
-                ? `Guardar en ${ejemplaresTotal} ejemplares`
-                : "Guardar cambios"
-              : "Registrar activo"}
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancelar
-        </Button>
+      <div className="col-span-1 flex flex-col items-end gap-2 lg:col-start-2">
+        {message && <p className={`text-sm ${messageToneClass}`}>{message}</p>}
+        {formActionButtons}
       </div>
     </form>
 

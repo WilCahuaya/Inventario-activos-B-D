@@ -38,6 +38,7 @@ import { ConfirmDialog } from "@inventario/ui";
 import {
   createEntidad,
   deleteEntidad,
+  inviteEntidadAdminInBackground,
   updateEntidad,
   type CreateEntidadInput,
 } from "../lib/entidades";
@@ -133,6 +134,21 @@ function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadCon
         />
       </div>
       <div className="space-y-2">
+        <Label htmlFor="admin_dni">DNI</Label>
+        <Input
+          id="admin_dni"
+          name="admin_dni"
+          required={requireAdmin}
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={8}
+          pattern="[0-9]{8}"
+          title="8 dígitos"
+          placeholder="12345678"
+          defaultValue={entidad?.admin_dni ?? ""}
+        />
+      </div>
+      <div className="space-y-2">
         <Label htmlFor="admin_email">Correo</Label>
         <Input
           id="admin_email"
@@ -167,6 +183,7 @@ function entidadFromForm(form: FormData): CreateEntidadInput {
     ruc: String(form.get("ruc") || ""),
     direccion: String(form.get("direccion") || ""),
     admin_nombre: String(form.get("admin_nombre") || ""),
+    admin_dni: String(form.get("admin_dni") || ""),
     admin_email: String(form.get("admin_email") || ""),
     admin_telefono: String(form.get("admin_telefono") || ""),
   };
@@ -210,55 +227,63 @@ export function EntidadesView({
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
+    const input = entidadFromForm(new FormData(form));
     setPending(true);
     setError(null);
     setSuccess(null);
 
-    const result = await createEntidad(entidadFromForm(new FormData(form)));
-    setPending(false);
+    try {
+      const result = await createEntidad(input);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      onEntidadesChange(
+        [...entidades, { ...result.data!, ambiente_count: 0 }].sort((a, b) =>
+          a.nombre.localeCompare(b.nombre),
+        ),
+      );
+      setCreateOpen(false);
+      form.reset();
+      if (result.inviteMessage) setSuccess(result.inviteMessage);
+      inviteEntidadAdminInBackground(result.data!.id, input, setSuccess);
+    } finally {
+      setPending(false);
     }
-
-    onEntidadesChange(
-      [...entidades, { ...result.data!, ambiente_count: 0 }].sort((a, b) =>
-        a.nombre.localeCompare(b.nombre),
-      ),
-    );
-    setCreateOpen(false);
-    form.reset();
-    if (result.inviteMessage) setSuccess(result.inviteMessage);
   }
 
   async function handleEdit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editEntidad) return;
+    const input = entidadFromForm(new FormData(event.currentTarget));
     setPending(true);
     setError(null);
     setSuccess(null);
 
-    const result = await updateEntidad(editEntidad.id, entidadFromForm(new FormData(event.currentTarget)));
-    setPending(false);
+    try {
+      const result = await updateEntidad(editEntidad.id, input);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.inviteMessage) setSuccess(result.inviteMessage);
+
+      onEntidadesChange(
+        entidades
+          .map((e) =>
+            e.id === editEntidad.id
+              ? { ...result.data!, ambiente_count: e.ambiente_count }
+              : e,
+          )
+          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      );
+      setEditEntidad(null);
+      inviteEntidadAdminInBackground(editEntidad.id, input, setSuccess);
+    } finally {
+      setPending(false);
     }
-
-    if (result.inviteMessage) setSuccess(result.inviteMessage);
-
-    onEntidadesChange(
-      entidades
-        .map((e) =>
-          e.id === editEntidad.id
-            ? { ...result.data!, ambiente_count: e.ambiente_count }
-            : e,
-        )
-        .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    );
-    setEditEntidad(null);
   }
 
   async function confirmDelete() {
@@ -266,16 +291,18 @@ export function EntidadesView({
     setPending(true);
     setError(null);
 
-    const result = await deleteEntidad(deleteTarget.id);
-    setPending(false);
+    try {
+      const result = await deleteEntidad(deleteTarget.id);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      onEntidadesChange(entidades.filter((e) => e.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } finally {
+      setPending(false);
     }
-
-    onEntidadesChange(entidades.filter((e) => e.id !== deleteTarget.id));
-    setDeleteTarget(null);
   }
 
   return (

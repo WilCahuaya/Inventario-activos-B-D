@@ -133,6 +133,21 @@ function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadCon
         />
       </div>
       <div className="space-y-2">
+        <Label htmlFor="admin_dni">DNI</Label>
+        <Input
+          id="admin_dni"
+          name="admin_dni"
+          required={requireAdmin}
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={8}
+          pattern="[0-9]{8}"
+          title="8 dígitos"
+          placeholder="12345678"
+          defaultValue={entidad?.admin_dni ?? ""}
+        />
+      </div>
+      <div className="space-y-2">
         <Label htmlFor="admin_email">Correo</Label>
         <Input
           id="admin_email"
@@ -167,6 +182,7 @@ function entidadFromForm(form: FormData) {
     ruc: String(form.get("ruc") || ""),
     direccion: String(form.get("direccion") || ""),
     admin_nombre: String(form.get("admin_nombre") || ""),
+    admin_dni: String(form.get("admin_dni") || ""),
     admin_email: String(form.get("admin_email") || ""),
     admin_telefono: String(form.get("admin_telefono") || ""),
   };
@@ -201,23 +217,25 @@ export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConCo
     setError(null);
     setSuccess(null);
 
-    const result = await createEntidad(entidadFromForm(new FormData(form)));
+    try {
+      const result = await createEntidad(entidadFromForm(new FormData(form)));
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+      setEntidades((prev) =>
+        [...prev, { ...result.data!, ambiente_count: 0 }].sort((a, b) =>
+          a.nombre.localeCompare(b.nombre),
+        ),
+      );
+      setCreateOpen(false);
+      form.reset();
+      if (result.inviteMessage) setSuccess(result.inviteMessage);
+      router.refresh();
+    } finally {
+      setPending(false);
     }
-
-    setEntidades((prev) =>
-      [...prev, { ...result.data!, ambiente_count: 0 }].sort((a, b) =>
-        a.nombre.localeCompare(b.nombre),
-      ),
-    );
-    setCreateOpen(false);
-    form.reset();
-    if (result.inviteMessage) setSuccess(result.inviteMessage);
-    router.refresh();
   }
 
   async function handleEdit(event: React.FormEvent<HTMLFormElement>) {
@@ -227,27 +245,29 @@ export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConCo
     setError(null);
     setSuccess(null);
 
-    const result = await updateEntidad(editEntidad.id, entidadFromForm(new FormData(event.currentTarget)));
+    try {
+      const result = await updateEntidad(editEntidad.id, entidadFromForm(new FormData(event.currentTarget)));
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
 
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.inviteMessage) setSuccess(result.inviteMessage);
+
+      setEntidades((prev) =>
+        prev
+          .map((e) =>
+            e.id === editEntidad.id
+              ? { ...result.data!, ambiente_count: e.ambiente_count }
+              : e,
+          )
+          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+      );
+      setEditEntidad(null);
+      router.refresh();
+    } finally {
+      setPending(false);
     }
-
-    if (result.inviteMessage) setSuccess(result.inviteMessage);
-
-    setEntidades((prev) =>
-      prev
-        .map((e) =>
-          e.id === editEntidad.id
-            ? { ...result.data!, ambiente_count: e.ambiente_count }
-            : e,
-        )
-        .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    );
-    setEditEntidad(null);
-    router.refresh();
   }
 
   async function handleDelete(entidad: EntidadConConteo) {

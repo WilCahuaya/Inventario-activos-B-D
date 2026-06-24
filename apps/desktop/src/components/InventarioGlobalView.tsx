@@ -1,10 +1,16 @@
 import type { Entidad } from "@inventario/types";
 import { useState, type ReactNode } from "react";
 import type { ActivoConUbicacion } from "../lib/activos";
+import type { AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
 import type { CatalogSyncState } from "../hooks/useCatalogSync";
 import { Button } from "@inventario/ui";
+import { EliminarActivosPorCodigosDialog } from "@inventario/ui";
 import { ActivosCampoList } from "./ActivosCampoList";
 import { InventarioImportDialog } from "./InventarioImportDialog";
+import {
+  deleteActivosPorCodigos,
+  previewDeleteActivosPorCodigos,
+} from "../lib/activos";
 
 interface InventarioGlobalViewProps {
   entidades: Entidad[];
@@ -21,6 +27,7 @@ interface InventarioGlobalViewProps {
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onEditActivo?: (activo: ActivoConUbicacion) => void;
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
   onActivosImported?: () => void;
 }
@@ -73,10 +80,12 @@ export function InventarioGlobalView({
   onPrintBatch,
   onEditActivo,
   onIrAmbiente,
+  onAbrirAmbienteDestino,
   onActivoUpdated,
   onActivosImported,
 }: InventarioGlobalViewProps) {
   const [importOpen, setImportOpen] = useState(false);
+  const [eliminarOpen, setEliminarOpen] = useState(false);
 
   const toolbarExtra: ReactNode = (
     <>
@@ -88,6 +97,16 @@ export function InventarioGlobalView({
         onClick={() => setImportOpen(true)}
       >
         Importar activos
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 shrink-0 px-2 text-xs text-destructive hover:text-destructive"
+        disabled={!online}
+        onClick={() => setEliminarOpen(true)}
+      >
+        Eliminar por códigos
       </Button>
       <CatalogSyncButton
         catalog={catalog}
@@ -140,6 +159,7 @@ export function InventarioGlobalView({
         onPrintBatch={onPrintBatch}
         onEditActivo={onEditActivo}
         onIrAmbiente={onIrAmbiente}
+        onAbrirAmbienteDestino={onAbrirAmbienteDestino}
         onActivoUpdated={onActivoUpdated}
       />
 
@@ -149,6 +169,15 @@ export function InventarioGlobalView({
         entidades={entidades}
         online={online}
         onImported={onActivosImported}
+      />
+
+      <EliminarActivosPorCodigosDialog
+        open={eliminarOpen}
+        onClose={() => setEliminarOpen(false)}
+        entidades={entidades}
+        onPreview={previewDeleteActivosPorCodigos}
+        onDelete={deleteActivosPorCodigos}
+        onDeleted={onActivosImported}
       />
     </>
   );

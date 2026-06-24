@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./components";
 
 export interface AmbienteReporteOpcion {
@@ -24,13 +25,47 @@ export function AmbienteReportesExportMenu({
   size = "sm",
 }: AmbienteReportesExportMenuProps) {
   const [open, setOpen] = useState(false);
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  );
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const compact = size === "sm";
+
+  const menuWidth = 320;
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuRect(null);
+      return;
+    }
+
+    function updatePosition() {
+      const anchor = rootRef.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const width = Math.min(menuWidth, window.innerWidth - 16);
+      const left = Math.min(
+        Math.max(8, rect.right - width),
+        window.innerWidth - width - 8,
+      );
+      setMenuRect({ top: rect.bottom + 4, left, width });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
       }
     }
@@ -79,46 +114,58 @@ export function AmbienteReportesExportMenu({
         </svg>
       </Button>
 
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 z-50 mt-1 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-border bg-card p-1 shadow-lg"
-        >
-          <p className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Descargar reporte del ambiente
-          </p>
-          <ul className="space-y-0.5">
-            {reportes.map((reporte) => (
-              <li
-                key={reporte.id}
-                className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
-              >
-                <span className="min-w-0 flex-1 text-xs leading-snug text-foreground">
-                  {reporte.label}
-                </span>
-                <div className="flex shrink-0 gap-1">
-                  {(["pdf", "excel"] as const).map((formato) => {
-                    const key = `${reporte.id}:${formato}`;
-                    const active = pending === key;
-                    return (
-                      <button
-                        key={formato}
-                        type="button"
-                        role="menuitem"
-                        disabled={isBusy}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                        onClick={() => handleExport(reporte.id, formato)}
-                      >
-                        {active ? "…" : formato}
-                      </button>
-                    );
-                  })}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {open &&
+        menuRect &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{
+              position: "fixed",
+              top: menuRect.top,
+              left: menuRect.left,
+              width: menuRect.width,
+              zIndex: 9999,
+            }}
+            className="overflow-hidden rounded-lg border border-border bg-card p-1 shadow-lg"
+          >
+            <p className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Descargar reporte del ambiente
+            </p>
+            <ul className="space-y-0.5">
+              {reportes.map((reporte) => (
+                <li
+                  key={reporte.id}
+                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
+                >
+                  <span className="min-w-0 flex-1 text-xs leading-snug text-foreground">
+                    {reporte.label}
+                  </span>
+                  <div className="flex shrink-0 gap-1">
+                    {(["pdf", "excel"] as const).map((formato) => {
+                      const key = `${reporte.id}:${formato}`;
+                      const active = pending === key;
+                      return (
+                        <button
+                          key={formato}
+                          type="button"
+                          role="menuitem"
+                          disabled={isBusy}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                          onClick={() => handleExport(reporte.id, formato)}
+                        >
+                          {active ? "…" : formato}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

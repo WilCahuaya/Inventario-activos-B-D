@@ -200,34 +200,40 @@ export function CatalogoPropioPanel({
     setPending(true);
     setError(null);
     setMessage(null);
-    const result = await onUpdate(editTarget.codigo, {
-      denominacion: editDenominacion,
-      grupo: editGrupo,
-      clase: editClase,
-    });
-    setPending(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await onUpdate(editTarget.codigo, {
+        denominacion: editDenominacion,
+        grupo: editGrupo,
+        clase: editClase,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage(`Ítem ${editTarget.codigo} actualizado.`);
+      setEditTarget(null);
+      void reload();
+    } finally {
+      setPending(false);
     }
-    setMessage(`Ítem ${editTarget.codigo} actualizado.`);
-    setEditTarget(null);
-    await reload();
   }
 
   async function handleDeleteConfirm() {
     if (!deleteTarget) return;
     setPending(true);
     setConfirmError(null);
-    const result = await onDelete(deleteTarget.codigo);
-    setPending(false);
-    if (result.error) {
-      setConfirmError(result.error);
-      return;
+    try {
+      const result = await onDelete(deleteTarget.codigo);
+      if (result.error) {
+        setConfirmError(result.error);
+        return;
+      }
+      setMessage(`Ítem ${deleteTarget.codigo} eliminado.`);
+      setDeleteTarget(null);
+      void reload();
+    } finally {
+      setPending(false);
     }
-    setMessage(`Ítem ${deleteTarget.codigo} eliminado.`);
-    setDeleteTarget(null);
-    await reload();
   }
 
   return (

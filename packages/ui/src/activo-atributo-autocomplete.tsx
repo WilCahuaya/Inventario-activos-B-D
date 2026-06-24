@@ -79,6 +79,7 @@ export function ActivoAtributoAutocomplete({
         <Input
           id={id}
           autoComplete="off"
+          spellCheck={campo === "serie" || campo === "medidas" ? false : undefined}
           value={value}
           disabled={disabled}
           placeholder={placeholder}
