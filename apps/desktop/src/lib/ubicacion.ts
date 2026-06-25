@@ -227,6 +227,7 @@ export async function listSedesConConteo(entidadId: string): Promise<SedeConCont
 export async function createSede(
   entidadId: string,
   nombre: string,
+  direccion?: string,
 ): Promise<{ data?: Sede; error?: string }> {
   const trimmed = nombre.trim();
   if (!trimmed) return { error: "Nombre de sucursal obligatorio." };
@@ -237,7 +238,12 @@ export async function createSede(
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("sedes")
-    .insert({ entidad_id: entidadId, nombre: trimmed, es_principal: false })
+    .insert({
+      entidad_id: entidadId,
+      nombre: trimmed,
+      direccion: direccion?.trim() || null,
+      es_principal: false,
+    })
     .select()
     .single();
 
@@ -248,6 +254,7 @@ export async function createSede(
 export async function updateSede(
   sedeId: string,
   nombre: string,
+  direccion?: string,
 ): Promise<{ success?: true; error?: string }> {
   const trimmed = nombre.trim();
   if (!trimmed) return { error: "Nombre obligatorio." };
@@ -257,7 +264,13 @@ export async function updateSede(
   if (!sede) return { error: "Sucursal no encontrada." };
   if ((sede as Sede).es_principal) return { error: "La sucursal Principal no se puede editar." };
 
-  const { error } = await supabase.from("sedes").update({ nombre: trimmed }).eq("id", sedeId);
+  const { error } = await supabase
+    .from("sedes")
+    .update({
+      nombre: trimmed,
+      direccion: direccion?.trim() || null,
+    })
+    .eq("id", sedeId);
   if (error) return { error: error.message };
   return { success: true };
 }

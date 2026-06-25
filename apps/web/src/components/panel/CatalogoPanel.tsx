@@ -28,6 +28,8 @@ import {
 
   updateCatalogoPropio,
 
+  updateCatalogoNacionalContabilidad,
+
 } from "@/lib/actions/catalogo";
 
 
@@ -71,6 +73,8 @@ export function CatalogoPanel({ initialDenominacion = "" }: CatalogoPanelProps) 
       onDeletePropio={deleteCatalogoPropio}
 
       searchNacional={searchCatalogoNacionalOficial}
+
+      onUpdateNacionalContabilidad={updateCatalogoNacionalContabilidad}
 
     />
 

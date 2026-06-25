@@ -17,7 +17,8 @@ pnpm install
 # Variables de entorno (obligatorias para build y desarrollo)
 cp .env.example apps/desktop/.env.local
 # Editar: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
-# Opcional: SUPABASE_SERVICE_ROLE_KEY (solo invitaciones por correo)
+# Opcional: SUPABASE_SERVICE_ROLE_KEY (invitaciones y reenvío de correos)
+# También puede estar en la raíz del monorepo (.env.local); al compilar se embebe en main-env.json
 ```
 
 En Supabase → Authentication → URL Configuration, incluir en **Redirect URLs**:

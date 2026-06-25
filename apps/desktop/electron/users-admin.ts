@@ -1,12 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getServiceRoleKey, getSupabaseUrl } from "./env";
-
-function createAdminClient(): SupabaseClient | null {
-  const url = getSupabaseUrl();
-  const key = getServiceRoleKey();
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
+import { createAdminClient } from "./supabase-admin";
 
 export async function deleteAuthUser(userId: string): Promise<{ error?: string }> {
   const admin = createAdminClient();

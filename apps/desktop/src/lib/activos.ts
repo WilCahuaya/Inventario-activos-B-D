@@ -21,13 +21,17 @@ export type ActivoConUbicacion = Activo & {
   sede_nombre?: string;
   ambiente_nombre?: string;
   posible_ambiente_nombre?: string;
+  cuenta_codigo?: string | null;
+  contabilidad?: string | null;
 };
 
+const CATALOGO_ACTIVO_SELECT = "catalogo_nacional:codigo_catalogo(cuenta_codigo, contabilidad)";
+
 const ACTIVO_SELECT_SIN_ENTIDAD =
-  "*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre)";
+  `*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre), ${CATALOGO_ACTIVO_SELECT}`;
 
 const ACTIVO_SELECT_GLOBAL =
-  "*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre)";
+  `*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre), ${CATALOGO_ACTIVO_SELECT}`;
 
 export interface CreateActivoInput {
   entidad_id: string;
@@ -63,13 +67,21 @@ function mapActivoRow(row: Record<string, unknown>): ActivoConUbicacion {
   const sedes = row.sedes as { nombre: string } | null;
   const ambientes = row.ambientes as { nombre: string } | null;
   const posibleAmbiente = row.posible_ambiente as { nombre: string } | null;
-  const { entidades: _e, sedes: _s, ambientes: _a, posible_ambiente: _p, ...activo } = row;
+  const catalogo = row.catalogo_nacional as
+    | { cuenta_codigo: string | null; contabilidad: string | null }
+    | null
+    | Array<{ cuenta_codigo: string | null; contabilidad: string | null }>;
+  const cat = Array.isArray(catalogo) ? catalogo[0] : catalogo;
+  const { entidades: _e, sedes: _s, ambientes: _a, posible_ambiente: _p, catalogo_nacional: _c, ...activo } =
+    row;
   return {
     ...(activo as unknown as Activo),
     entidad_nombre: entidades?.nombre,
     sede_nombre: sedes?.nombre,
     ambiente_nombre: ambientes?.nombre,
     posible_ambiente_nombre: posibleAmbiente?.nombre,
+    cuenta_codigo: cat?.cuenta_codigo ?? null,
+    contabilidad: cat?.contabilidad ?? null,
   };
 }
 

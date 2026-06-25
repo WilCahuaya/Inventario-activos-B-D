@@ -325,8 +325,8 @@ export function ActivoForm({
     [valorNum, depreciacionAcumulada],
   );
   const nombreConsolidado = useMemo(
-    () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas),
-    [nombre, marca, modelo, serie, color, medidas],
+    () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas, detalle),
+    [nombre, marca, modelo, serie, color, medidas, detalle],
   );
   const nombreOficial = nombre.trim() || catalogo?.denominacion || "";
   const nombreEtiquetaSugerido = useMemo(

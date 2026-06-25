@@ -278,6 +278,7 @@ export {
   InventarioTablaLeyenda,
   INVENTARIO_TABLA_LEYENDA,
   ValorBienCell,
+  inventarioCuentaContable,
   inventarioDepreciacionFila,
   inventarioDescripcion,
   formatInventarioListaTexto,

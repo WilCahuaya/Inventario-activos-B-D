@@ -10,7 +10,8 @@ import {
   categoriaBienLetra,
   categoriaBienCorto,
   estadoBienLabel,
-  formatCorrelativoDisplay,
+  formatActivoCodigoDisplay,
+  formatCuentaContableDisplay,
   formatFechaISOToCortoES,
   formatMonedaPE,
 } from "@inventario/types";
@@ -79,7 +80,16 @@ export function InventarioEstadoRegistroFilaHint({
   return null;
 }
 
-export function InventarioCorrelativoCellContent({ activo }: { activo: Activo }) {
+export type ActivoConContabilidad = Activo & {
+  cuenta_codigo?: string | null;
+  contabilidad?: string | null;
+};
+
+export function inventarioCuentaContable(activo: ActivoConContabilidad): string {
+  return formatCuentaContableDisplay(activo.cuenta_codigo, activo.contabilidad);
+}
+
+export function InventarioCodigoCellContent({ activo }: { activo: Activo }) {
   if (activo.estado_registro === "DADO_DE_BAJA") {
     return (
       <span className="inline-block rounded bg-red-500/15 px-1 py-0.5 text-[9px] font-semibold uppercase text-red-800 dark:text-red-200">
@@ -94,7 +104,16 @@ export function InventarioCorrelativoCellContent({ activo }: { activo: Activo })
       </span>
     );
   }
-  return <span className="block truncate">{formatCorrelativoDisplay(activo.correlativo)}</span>;
+  return (
+    <span className="block truncate font-mono text-[10px] leading-tight">
+      {formatActivoCodigoDisplay(activo)}
+    </span>
+  );
+}
+
+/** @deprecated Use InventarioCodigoCellContent */
+export function InventarioCorrelativoCellContent({ activo }: { activo: Activo }) {
+  return <InventarioCodigoCellContent activo={activo} />;
 }
 
 export function CategoriaLetraCell({

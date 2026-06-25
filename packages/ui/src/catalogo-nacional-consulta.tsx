@@ -1,81 +1,65 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { CatalogoNacional } from "@inventario/types";
+import type {
+  CatalogoNacional,
+  UpdateCatalogoNacionalContabilidadInput,
+} from "@inventario/types";
 import { CATALOGO_ORIGEN_LABELS, minCatalogoQueryLength } from "@inventario/types";
-import { Dialog } from "./components";
+import { Button, Dialog, Input, Label } from "./components";
 import { PanelIconAction, ViewIcon } from "./panel-action-buttons";
 import {
+  EditIcon,
   PanelCountLabel,
   PanelEmptyState,
+  PanelFlashMessage,
   PanelSearchInput,
   PanelToolbar,
   StatusBadge,
 } from "./panel";
 import {
-  PanelDataTable,
   panelTableBodyRowClass,
   panelTableHeadRowClass,
-  panelTableMutedClass,
   panelTableStickyHeadClass,
 } from "./panel-list-table";
+import { PanelTableColgroup } from "./panel-table-layout";
+import { panelCardClass } from "./panel";
 import {
-  PanelTableColgroup,
-  PanelTableTd,
-  PanelTableTh,
-  panelTableNowrapCellClass,
-} from "./panel-table-layout";
-
-const CATALOGO_NACIONAL_TABLE_COLS = [
-  { type: "shrink" as const },
-  { type: "grow" as const },
-  { type: "grow" as const },
-  { type: "shrink" as const },
-  { type: "shrink" as const },
-];
+  CATALOGO_ITEM_TABLE_COLS,
+  CatalogoItemDetalle,
+  CatalogoItemTableCells,
+  CatalogoItemTableHead,
+} from "./catalogo-item-display";
 
 export interface CatalogoNacionalConsultaProps {
   searchItems: (query: string) => Promise<CatalogoNacional[]>;
   offlineHint?: string;
-}
-
-function CatalogoNacionalDetalle({ item }: { item: CatalogoNacional }) {
-  const rows: Array<{ label: string; value: string | null | undefined }> = [
-    { label: "Código", value: item.codigo },
-    { label: "Denominación", value: item.denominacion },
-    { label: "Grupo", value: item.grupo },
-    { label: "Clase", value: item.clase },
-    { label: "Cuenta contable", value: item.cuenta_codigo },
-    { label: "Contabilidad", value: item.contabilidad },
-    { label: "Depreciación", value: item.depreciacion },
-    { label: "Resolución", value: item.resolucion },
-    { label: "Estado", value: item.estado },
-    { label: "Origen", value: CATALOGO_ORIGEN_LABELS.NACIONAL },
-  ];
-
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2">
-      {rows.map((row) => (
-        <div key={row.label} className="space-y-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {row.label}
-          </dt>
-          <dd className="text-sm text-foreground">{row.value?.trim() || "—"}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  readOnlyContabilidad?: boolean;
+  onUpdateContabilidad?: (
+    codigo: string,
+    input: UpdateCatalogoNacionalContabilidadInput,
+  ) => Promise<{ data?: CatalogoNacional; error?: string }>;
 }
 
 export function CatalogoNacionalConsulta({
   searchItems,
   offlineHint,
+  readOnlyContabilidad = false,
+  onUpdateContabilidad,
 }: CatalogoNacionalConsultaProps) {
   const [busqueda, setBusqueda] = useState("");
   const [items, setItems] = useState<CatalogoNacional[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [viewTarget, setViewTarget] = useState<CatalogoNacional | null>(null);
+  const [editTarget, setEditTarget] = useState<CatalogoNacional | null>(null);
+  const [editCuenta, setEditCuenta] = useState("");
+  const [editContabilidad, setEditContabilidad] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const canEditContabilidad = Boolean(onUpdateContabilidad) && !readOnlyContabilidad;
 
   useEffect(() => {
     const trimmed = busqueda.trim();
@@ -104,12 +88,57 @@ export function CatalogoNacionalConsulta({
 
   const filtrados = useMemo(() => items, [items]);
 
+  function openEdit(item: CatalogoNacional) {
+    setEditTarget(item);
+    setEditCuenta(item.cuenta_codigo ?? "");
+    setEditContabilidad(item.contabilidad ?? "");
+    setError(null);
+  }
+
+  function mergeUpdatedItem(updated: CatalogoNacional) {
+    setItems((prev) => prev.map((row) => (row.codigo === updated.codigo ? updated : row)));
+    setViewTarget((prev) => (prev?.codigo === updated.codigo ? updated : prev));
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editTarget || !onUpdateContabilidad) return;
+
+    setPending(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await onUpdateContabilidad(editTarget.codigo, {
+        cuenta_codigo: editCuenta,
+        contabilidad: editContabilidad,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (result.data) {
+        mergeUpdatedItem(result.data);
+      }
+      setMessage(`Contabilidad del ítem ${editTarget.codigo} actualizada.`);
+      setEditTarget(null);
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Consulta de solo lectura sobre el catálogo oficial SBN. No se pueden modificar estos ítems.
+        Consulta del catálogo oficial SBN. Los datos SBN (código, denominación, grupo, clase, etc.)
+        son de solo lectura; puede completar o corregir la cuenta contable y la contabilidad
+        conforme las vaya identificando.
         {offlineHint ? ` ${offlineHint}` : ""}
+        {readOnlyContabilidad
+          ? " Sin conexión no se puede editar la contabilidad del catálogo nacional."
+          : ""}
       </p>
+
+      {message && <PanelFlashMessage variant="success">{message}</PanelFlashMessage>}
 
       <PanelToolbar
         left={
@@ -141,45 +170,47 @@ export function CatalogoNacionalConsulta({
       )}
 
       {!loading && filtrados.length > 0 && (
-        <PanelDataTable layout="auto">
-          <PanelTableColgroup cols={CATALOGO_NACIONAL_TABLE_COLS} />
-          <thead className={panelTableStickyHeadClass}>
-            <tr className={panelTableHeadRowClass}>
-              <PanelTableTh className={panelTableNowrapCellClass}>Código</PanelTableTh>
-              <PanelTableTh>Denominación</PanelTableTh>
-              <PanelTableTh>Grupo</PanelTableTh>
-              <PanelTableTh className={panelTableNowrapCellClass}>Estado</PanelTableTh>
-              <PanelTableTh align="right" className={panelTableNowrapCellClass}>
-                Ver
-              </PanelTableTh>
-            </tr>
-          </thead>
-          <tbody>
-            {filtrados.map((item) => (
-              <tr key={item.codigo} className={panelTableBodyRowClass}>
-                <PanelTableTd className={`font-mono text-xs ${panelTableNowrapCellClass}`}>
-                  {item.codigo}
-                </PanelTableTd>
-                <PanelTableTd className="font-medium" title={item.denominacion}>
-                  {item.denominacion}
-                </PanelTableTd>
-                <PanelTableTd className={panelTableMutedClass} title={item.grupo ?? undefined}>
-                  {item.grupo ?? "—"}
-                </PanelTableTd>
-                <PanelTableTd className={panelTableNowrapCellClass}>
-                  <StatusBadge variant={item.estado === "ACTIVO" ? "active" : "default"}>
-                    {item.estado ?? "—"}
-                  </StatusBadge>
-                </PanelTableTd>
-                <PanelTableTd align="right" className={panelTableNowrapCellClass}>
-                  <PanelIconAction label="Ver detalle" onClick={() => setViewTarget(item)}>
-                    <ViewIcon />
-                  </PanelIconAction>
-                </PanelTableTd>
+        <div className={`${panelCardClass} min-w-0 max-w-full overflow-x-auto`}>
+          <table className="w-full min-w-[1080px] table-auto text-left text-sm">
+            <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
+            <thead className={panelTableStickyHeadClass}>
+              <tr className={panelTableHeadRowClass}>
+                <CatalogoItemTableHead
+                  actionsLabel={canEditContabilidad ? "Acciones" : "Ver"}
+                />
               </tr>
-            ))}
-          </tbody>
-        </PanelDataTable>
+            </thead>
+            <tbody>
+              {filtrados.map((item) => (
+                <tr key={item.codigo} className={panelTableBodyRowClass}>
+                  <CatalogoItemTableCells
+                    item={item}
+                    estadoBadge={
+                      <StatusBadge variant={item.estado === "ACTIVO" ? "active" : "default"}>
+                        {item.estado ?? "—"}
+                      </StatusBadge>
+                    }
+                    actions={
+                      <div className="flex flex-nowrap items-center justify-end gap-1">
+                        <PanelIconAction label="Ver detalle" onClick={() => setViewTarget(item)}>
+                          <ViewIcon />
+                        </PanelIconAction>
+                        {canEditContabilidad && (
+                          <PanelIconAction
+                            label="Editar cuenta y contabilidad"
+                            onClick={() => openEdit(item)}
+                          >
+                            <EditIcon />
+                          </PanelIconAction>
+                        )}
+                      </div>
+                    }
+                  />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {!loading && !searched && busqueda.trim().length === 0 && (
@@ -191,7 +222,68 @@ export function CatalogoNacionalConsulta({
         onClose={() => setViewTarget(null)}
         title="Ítem del catálogo nacional"
       >
-        {viewTarget && <CatalogoNacionalDetalle item={viewTarget} />}
+        {viewTarget && (
+          <CatalogoItemDetalle item={viewTarget} origenLabel={CATALOGO_ORIGEN_LABELS.NACIONAL} />
+        )}
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editTarget)}
+        onClose={() => setEditTarget(null)}
+        title="Cuenta contable y contabilidad"
+      >
+        {editTarget && (
+          <form className="space-y-4" onSubmit={(e) => void handleEditSubmit(e)}>
+            <p className="text-sm text-muted-foreground">
+              Complete los campos contables de este ítem SBN. El resto del registro no se modifica.
+            </p>
+            <div className="space-y-2">
+              <Label>Código</Label>
+              <Input readOnly disabled value={editTarget.codigo} className="bg-muted font-mono" />
+            </div>
+            <div className="space-y-2">
+              <Label>Denominación</Label>
+              <Input
+                readOnly
+                disabled
+                value={editTarget.denominacion}
+                className="bg-muted"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit_cuenta_codigo">Cuenta contable</Label>
+                <Input
+                  id="edit_cuenta_codigo"
+                  value={editCuenta}
+                  disabled={pending}
+                  placeholder="Ej. 3361"
+                  className="font-mono"
+                  onChange={(e) => setEditCuenta(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit_contabilidad">Contabilidad</Label>
+                <Input
+                  id="edit_contabilidad"
+                  value={editContabilidad}
+                  disabled={pending}
+                  placeholder="Ej. 3361 Equipos diversos"
+                  onChange={(e) => setEditContabilidad(e.target.value)}
+                />
+              </div>
+            </div>
+            {error && <PanelFlashMessage variant="error">{error}</PanelFlashMessage>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={pending}>
+                {pending ? "Guardando…" : "Guardar"}
+              </Button>
+            </div>
+          </form>
+        )}
       </Dialog>
     </div>
   );

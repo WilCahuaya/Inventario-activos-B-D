@@ -105,6 +105,7 @@ export interface ActivoReporte extends Activo {
   sede_nombre?: string;
   ambiente_nombre?: string;
   cuenta_contable?: string | null;
+  contabilidad?: string | null;
   grupo_contable?: string | null;
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Activo } from "@inventario/types";
 import {
-  formatCorrelativoDisplay,
+  formatActivoCodigoDisplay,
   formatFechaISOToCortoES,
   formatMonedaPE,
   categoriaBienLetra,
@@ -10,6 +10,7 @@ import {
   ActivosInventarioTable,
   EstadoBienBadge,
   TablePagination,
+  inventarioCuentaContable,
   inventarioDepreciacionFila,
   inventarioDescripcion,
   formatInventarioListaTexto,
@@ -120,7 +121,7 @@ function ActivosInventarioMobileCards({
                     ? "Dado de baja"
                     : preregistrado
                       ? "Preregistrado"
-                      : formatCorrelativoDisplay(activo.correlativo)}
+                      : formatActivoCodigoDisplay(activo)}
                 </p>
                 <h3
                   className={`mt-1 text-base font-semibold leading-snug text-foreground ${
@@ -130,7 +131,10 @@ function ActivosInventarioMobileCards({
                   {activo.nombre}
                 </h3>
                 <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                  {activo.codigo_catalogo}
+                  {formatActivoCodigoDisplay(activo)}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {inventarioCuentaContable(activo)}
                 </p>
               </div>
               <EstadoBienBadge estado={activo.estado_bien} />

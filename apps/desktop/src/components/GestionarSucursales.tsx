@@ -60,7 +60,8 @@ export function GestionarSucursales({
     setMessage(null);
     try {
       const nombre = String(new FormData(form).get("nombre"));
-      const result = await createSede(entidadId, nombre);
+      const direccion = String(new FormData(form).get("direccion") || "");
+      const result = await createSede(entidadId, nombre, direccion);
       if (result.error) {
         setMessage(result.error);
         return;
@@ -80,12 +81,19 @@ export function GestionarSucursales({
     setMessage(null);
     try {
       const nombre = String(new FormData(event.currentTarget).get("nombre"));
-      const result = await updateSede(editSede.id, nombre);
+      const direccion = String(new FormData(event.currentTarget).get("direccion") || "");
+      const result = await updateSede(editSede.id, nombre, direccion);
       if (result.error) {
         setMessage(result.error);
         return;
       }
-      updateSedes(sedes.map((s) => (s.id === editSede.id ? { ...s, nombre: nombre.trim() } : s)));
+      updateSedes(
+        sedes.map((s) =>
+          s.id === editSede.id
+            ? { ...s, nombre: nombre.trim(), direccion: direccion.trim() || null }
+            : s,
+        ),
+      );
       setEditSede(null);
     } finally {
       setPending(false);
@@ -136,6 +144,7 @@ export function GestionarSucursales({
           <thead className={panelTableStickyHeadClass}>
             <tr className={panelTableHeadRowClass}>
               <PanelTableTh>Sucursal</PanelTableTh>
+              <PanelTableTh>Dirección</PanelTableTh>
               <PanelTableTh align="center" className={panelTableShrinkCellClass}>
                 Ambientes
               </PanelTableTh>
@@ -161,6 +170,9 @@ export function GestionarSucursales({
                   ) : (
                     sede.nombre
                   )}
+                </PanelTableTd>
+                <PanelTableTd className={panelTableMutedClass} title={sede.direccion ?? undefined}>
+                  {sede.direccion ?? "—"}
                 </PanelTableTd>
                 <PanelTableTd align="center" className={panelTableShrinkCellClass}>
                   {onViewAmbientes ? (
@@ -221,6 +233,14 @@ export function GestionarSucursales({
             <Label htmlFor="sucursal_nombre">Nombre</Label>
             <Input id="sucursal_nombre" name="nombre" required placeholder="Ej. Chupaca" />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="sucursal_direccion">Dirección</Label>
+            <Input
+              id="sucursal_direccion"
+              name="direccion"
+              placeholder="Ej. Av. Principal 123, Chupaca"
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
               Cancelar
@@ -238,6 +258,15 @@ export function GestionarSucursales({
             <div className="space-y-2">
               <Label htmlFor="edit_sucursal">Nombre</Label>
               <Input id="edit_sucursal" name="nombre" required defaultValue={editSede.nombre} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit_sucursal_direccion">Dirección</Label>
+              <Input
+                id="edit_sucursal_direccion"
+                name="direccion"
+                defaultValue={editSede.direccion ?? ""}
+                placeholder="Ej. Av. Principal 123, Chupaca"
+              />
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setEditSede(null)}>

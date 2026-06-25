@@ -5,7 +5,9 @@ import {
   calcValorNeto,
   categoriaBienCorto,
   estadoBienLabel,
+  formatActivoCodigoDisplay,
   formatCorrelativoDisplay,
+  formatCuentaContableDisplay,
   formatFechaISOToDDMMYYYY,
   formatMonedaPE,
 } from "@inventario/types";
@@ -148,6 +150,7 @@ const HEADERS_VALORIZADOS_BASE = [
 
 const HEADERS_VALORIZADOS_COLA = [
   "Fecha adq.",
+  "Cuenta contable",
   "Estado",
   "Precio adq.",
   "V. mercado",
@@ -165,10 +168,10 @@ const HEADERS_AMBIENTE_VALORIZADO: ReporteTableHeaderDef[] = [
   { key: "und", line1: "Und." },
   { key: "cat", line1: "Cat." },
   { key: "codigo", line1: "Código" },
-  { key: "corr", line1: "Corr." },
   { key: "nombre", line1: "Nombre del", line2: "bien" },
   { key: "descripcion", line1: "Descripción" },
   { key: "fecha_adq", line1: "Fecha", line2: "adq." },
+  { key: "cuenta_contable", line1: "Cuenta", line2: "contable" },
   { key: "estado", line1: "Estado" },
   { key: "cp", line1: "Comprobante", line2: "de adquisición" },
   { key: KEY_PRECIO, line1: "Precio de", line2: "adquisición" },
@@ -285,6 +288,39 @@ function valoresMonetariosFila(activo: ActivoReporte, fechaCorte: Date): string[
   ];
 }
 
+function cuentaContableExport(activo: ActivoReporte): string {
+  return formatCuentaContableDisplay(activo.cuenta_contable, activo.contabilidad);
+}
+
+interface FilaComunOpciones {
+  codigoCompleto?: boolean;
+  incluirCorr?: boolean;
+}
+
+function filaComunActivo(
+  activo: ActivoReporte,
+  index: number,
+  opciones: FilaComunOpciones = {},
+): string[] {
+  const { codigoCompleto = false, incluirCorr = true } = opciones;
+  const base = [
+    String(index + 1),
+    "1",
+    "Und.",
+    categoriaBienCorto(activo.categoria),
+  ];
+  if (codigoCompleto) {
+    base.push(formatActivoCodigoDisplay(activo));
+  } else {
+    base.push(activo.codigo_catalogo);
+    if (incluirCorr) {
+      base.push(formatCorrelativoDisplay(activo.correlativo));
+    }
+  }
+  base.push(activo.nombre);
+  return base;
+}
+
 function valoresAmbienteValorizadoFila(activo: ActivoReporte, fechaCorte: Date): string[] {
   const [precio, mercado, pctDeprec, , depAcum, valorNeto] = valoresMonetariosFila(
     activo,
@@ -313,6 +349,7 @@ const KEYS_VALORIZADOS_ENTIDAD = [
   "nombre",
   "descripcion",
   "fecha_adq",
+  "cuenta_contable",
   "estado",
   KEY_PRECIO,
   "valor_mercado",
@@ -375,7 +412,7 @@ export function buildPdfTableHead(
 
 /** Pesos relativos por columna (inventario valorizado por ambiente). */
 const AMBIENTE_VALORIZADO_COL_WEIGHTS = [
-  4, 4, 4, 5, 8, 6, 14, 18, 7, 6, 10, 9, 9, 9, 9, 9,
+  4, 4, 4, 5, 10, 14, 18, 7, 10, 6, 10, 9, 9, 9, 9, 9,
 ] as const;
 
 /** Pesos relativos (ficha de asignación y activos fijos por ambiente). */
@@ -419,7 +456,7 @@ export function reporteDisenoPdfColumnStyles(
   reporteId: ReporteId,
 ): Record<number, { cellWidth: number; halign?: "left" | "center" | "right" }> | undefined {
   if (reporteId === "inventario_ambiente_valorizado") {
-    return pdfColumnStylesFromWeights(tableWidthMm, AMBIENTE_VALORIZADO_COL_WEIGHTS, [6, 7]);
+    return pdfColumnStylesFromWeights(tableWidthMm, AMBIENTE_VALORIZADO_COL_WEIGHTS, [5, 6]);
   }
   if (
     reporteId === "inventario_ambiente_sin_valores" ||
@@ -434,7 +471,7 @@ export function reporteDisenoPdfColumnStyles(
     return pdfColumnStylesFromWeights(tableWidthMm, ENTIDAD_SIN_VALOR_COL_WEIGHTS, [6, 7, 10, 11]);
   }
   if (reporteId === "inventario_entidad_valorizado") {
-    return pdfColumnStylesFromWeights(tableWidthMm, ENTIDAD_VALORIZADO_COL_WEIGHTS, [6, 7, 16]);
+    return pdfColumnStylesFromWeights(tableWidthMm, ENTIDAD_VALORIZADO_COL_WEIGHTS, [5, 6, 16]);
   }
   if (reporteId === "reporte_bajas") {
     return pdfColumnStylesFromWeights(tableWidthMm, BAJAS_COL_WEIGHTS, [3]);
@@ -514,15 +551,18 @@ export function buildReporteRows(
     );
 
     const sinUbicacion = omitUbicacionEnTabla(reporteId);
+    const tablaValorizadoAmbiente = valorizado && esReporteValorizadoTablaAmbiente(reporteId);
     const comun = [
-      String(index + 1),
-      "1",
-      "Und.",
-      categoriaBienCorto(activo.categoria),
-      activo.codigo_catalogo,
-      formatCorrelativoDisplay(activo.correlativo),
-      activo.nombre,
+      ...filaComunActivo(activo, index, {
+        codigoCompleto: tablaValorizadoAmbiente,
+        incluirCorr: !tablaValorizadoAmbiente,
+      }),
       descripcion || "—",
+    ];
+    const colaComunValorizado = [
+      formatFechaISOToDDMMYYYY(activo.fecha_adquisicion) || "—",
+      cuentaContableExport(activo),
+      estadoBienLabel(activo.estado_bien),
     ];
     const colaComun = [
       formatFechaISOToDDMMYYYY(activo.fecha_adquisicion) || "—",
@@ -530,8 +570,12 @@ export function buildReporteRows(
     ];
 
     if (valorizado) {
-      if (esReporteValorizadoTablaAmbiente(reporteId)) {
-        const fila = [...comun, ...colaComun, ...valoresAmbienteValorizadoFila(activo, fechaCorte)];
+      if (tablaValorizadoAmbiente) {
+        const fila = [
+          ...comun,
+          ...colaComunValorizado,
+          ...valoresAmbienteValorizadoFila(activo, fechaCorte),
+        ];
         if (reporteId === "inventario_entidad_valorizado") {
           fila.push(ubicacionReporteLabel(activo, reporteId));
         }
@@ -539,7 +583,7 @@ export function buildReporteRows(
       }
       const fila = [
         ...comun,
-        ...colaComun,
+        ...colaComunValorizado,
         ...valoresMonetariosFila(activo, fechaCorte),
         activo.observacion?.trim() || "—",
         comprobanteExport(activo),

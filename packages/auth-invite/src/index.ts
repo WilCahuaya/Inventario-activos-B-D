@@ -48,14 +48,57 @@ function inviteMetadata(input: SendUserInvitationInput) {
   };
 }
 
+export async function mapAuthUsersByEmail(
+  admin: SupabaseClient,
+  emails: string[],
+): Promise<Map<string, User>> {
+  const wanted = new Set(emails.map(normalizeEmail).filter(Boolean));
+  const found = new Map<string, User>();
+  if (wanted.size === 0) return found;
+
+  let page = 1;
+  const perPage = 1000;
+
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) break;
+
+    for (const user of data.users) {
+      const email = user.email ? normalizeEmail(user.email) : "";
+      if (email && wanted.has(email)) {
+        found.set(email, user);
+      }
+    }
+
+    if (found.size >= wanted.size) break;
+    if (data.users.length < perPage) break;
+    page += 1;
+  }
+
+  return found;
+}
+
 export async function findAuthUserByEmail(
   admin: SupabaseClient,
   email: string,
 ): Promise<User | null> {
-  const emailNorm = normalizeEmail(email);
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (error) return null;
-  return data.users.find((u) => u.email?.toLowerCase() === emailNorm) ?? null;
+  const authUsers = await mapAuthUsersByEmail(admin, [email]);
+  return authUsers.get(normalizeEmail(email)) ?? null;
+}
+
+export async function getAccesoEstadoByEmails(
+  admin: SupabaseClient,
+  emails: string[],
+): Promise<Record<string, AccesoInvitacionEstado>> {
+  const authUsers = await mapAuthUsersByEmail(admin, emails);
+  const result: Record<string, AccesoInvitacionEstado> = {};
+
+  for (const email of emails) {
+    const key = normalizeEmail(email);
+    result[key] = accesoInvitacionEstado(authUsers.get(key) ?? null);
+  }
+
+  return result;
 }
 
 export function accesoInvitacionEstado(authUser: User | null): AccesoInvitacionEstado {
@@ -150,7 +193,7 @@ async function upsertProfileForRole(
   return upsertContadorProfile(admin, userId, input.email, input.nombre);
 }
 
-async function deliverResendEmailForConfirmedUser(
+async function deliverResendAccessEmail(
   admin: SupabaseClient,
   email: string,
   redirectTo: string,
@@ -169,6 +212,16 @@ async function deliverResendEmailForConfirmedUser(
     return {};
   }
 
+  const { error: resendError } = await admin.auth.resend({
+    type: "signup",
+    email: emailNorm,
+    options: { emailRedirectTo: redirectTo },
+  });
+
+  if (!resendError) {
+    return {};
+  }
+
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(emailNorm, {
     redirectTo,
   });
@@ -177,7 +230,7 @@ async function deliverResendEmailForConfirmedUser(
     return {};
   }
 
-  return { error: inviteError.message || otpError.message };
+  return { error: inviteError.message || resendError.message || otpError.message };
 }
 
 async function deliverInvitationEmail(
@@ -243,23 +296,21 @@ export async function sendUserInvitation(
   const existingUser = await findAuthUserByEmail(admin, emailNorm);
   const confirmed = existingUser ? isUserConfirmed(existingUser) : false;
 
-  if (confirmed && mode === "resend") {
-    const userId = existingUser!.id;
+  if (existingUser && mode === "resend") {
+    const userId = existingUser.id;
     const profileResult = await upsertProfileForRole(admin, userId, input);
     if (profileResult.error) return { error: profileResult.error };
 
-    const resend = await deliverResendEmailForConfirmedUser(
-      admin,
-      emailNorm,
-      input.redirectTo,
-    );
+    const resend = await deliverResendAccessEmail(admin, emailNorm, input.redirectTo);
     if (resend.error) return { error: resend.error };
 
     return {
       success: true,
       invited: true,
       resent: true,
-      message: `Correo de acceso reenviado a ${emailNorm}. Podrá ingresar con Google o el enlace del correo.`,
+      message: confirmed
+        ? `Correo de acceso reenviado a ${emailNorm}. Podrá ingresar con Google o el enlace del correo.`
+        : `Invitación reenviada a ${emailNorm}. Revise su bandeja de entrada.`,
     };
   }
 

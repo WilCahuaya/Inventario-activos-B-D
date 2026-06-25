@@ -215,8 +215,8 @@ export function ActivoFormDesktop({
   const nombreOficial = nombre.trim() || catalogo?.denominacion || "";
   const mostrarDepreciacion = categoria !== "CUENTA_ORDEN";
   const nombreConsolidado = useMemo(
-    () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas),
-    [nombre, marca, modelo, serie, color, medidas],
+    () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas, detalle),
+    [nombre, marca, modelo, serie, color, medidas, detalle],
   );
   const nombreEtiquetaSugerido = useMemo(
     () => (nombreOficial ? suggestNombreEtiqueta(nombreOficial) : ""),

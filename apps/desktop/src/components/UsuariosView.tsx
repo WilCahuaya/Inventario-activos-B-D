@@ -30,15 +30,23 @@ export function UsuariosView() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void listUsuarios().then((result) => {
-      if (cancelled) return;
-      setLoading(false);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      setUsuarios(result.data ?? []);
-    });
+    void listUsuarios()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        setUsuarios(result.data ?? []);
+        setError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Error al cargar usuarios");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };

@@ -25,26 +25,19 @@ import {
   StatusBadge,
 } from "./panel";
 import {
-  PanelDataTable,
   panelTableBodyRowClass,
   panelTableHeadRowClass,
-  panelTableMutedClass,
   panelTableStickyHeadClass,
 } from "./panel-list-table";
 import {
-  PanelTableColgroup,
-  PanelTableTd,
-  PanelTableTh,
-  panelTableNowrapCellClass,
-} from "./panel-table-layout";
+  CATALOGO_ITEM_TABLE_COLS,
+  CatalogoItemDetalle,
+  CatalogoItemTableCells,
+  CatalogoItemTableHead,
+} from "./catalogo-item-display";
+import { panelCardClass } from "./panel";
 
-const CATALOGO_PROPIO_TABLE_COLS = [
-  { type: "shrink" as const },
-  { type: "grow" as const },
-  { type: "grow" as const },
-  { type: "shrink" as const },
-  { type: "shrink" as const },
-];
+import { PanelTableColgroup } from "./panel-table-layout";
 
 const OPCIONES_VACIAS: CatalogoCampoOpciones = { opciones: [], personalizadas: [] };
 
@@ -68,31 +61,6 @@ export interface CatalogoPropioPanelProps {
   reloadKey?: number;
   readOnly?: boolean;
   onAddNew?: () => void;
-}
-
-function CatalogoDetalleView({ item }: { item: CatalogoNacional }) {
-  const rows: Array<{ label: string; value: string | null | undefined }> = [
-    { label: "Código", value: item.codigo },
-    { label: "Denominación", value: item.denominacion },
-    { label: "Grupo", value: item.grupo },
-    { label: "Clase", value: item.clase },
-    { label: "Contabilidad", value: item.contabilidad },
-    { label: "Estado", value: item.estado },
-    { label: "Origen", value: CATALOGO_ORIGEN_LABELS.PROPIO },
-  ];
-
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2">
-      {rows.map((row) => (
-        <div key={row.label} className="space-y-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {row.label}
-          </dt>
-          <dd className="text-sm text-foreground">{row.value?.trim() || "—"}</dd>
-        </div>
-      ))}
-    </dl>
-  );
 }
 
 export function CatalogoPropioPanel({
@@ -120,6 +88,8 @@ export function CatalogoPropioPanel({
   const [editDenominacion, setEditDenominacion] = useState("");
   const [editGrupo, setEditGrupo] = useState("");
   const [editClase, setEditClase] = useState("");
+  const [editCuentaCodigo, setEditCuentaCodigo] = useState("");
+  const [editContabilidad, setEditContabilidad] = useState("");
   const [pending, setPending] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
@@ -191,6 +161,8 @@ export function CatalogoPropioPanel({
     setEditDenominacion(item.denominacion);
     setEditGrupo(item.grupo ?? "");
     setEditClase(item.clase ?? "");
+    setEditCuentaCodigo(item.cuenta_codigo ?? "");
+    setEditContabilidad(item.contabilidad ?? CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
     setError(null);
   }
 
@@ -205,6 +177,8 @@ export function CatalogoPropioPanel({
         denominacion: editDenominacion,
         grupo: editGrupo,
         clase: editClase,
+        cuenta_codigo: editCuentaCodigo,
+        contabilidad: editContabilidad,
       });
       if (result.error) {
         setError(result.error);
@@ -280,62 +254,52 @@ export function CatalogoPropioPanel({
           }
         />
       ) : (
-        <PanelDataTable layout="auto">
-          <PanelTableColgroup cols={CATALOGO_PROPIO_TABLE_COLS} />
-          <thead className={panelTableStickyHeadClass}>
-            <tr className={panelTableHeadRowClass}>
-              <PanelTableTh className={panelTableNowrapCellClass}>Código</PanelTableTh>
-              <PanelTableTh>Denominación</PanelTableTh>
-              <PanelTableTh>Grupo</PanelTableTh>
-              <PanelTableTh className={panelTableNowrapCellClass}>Estado</PanelTableTh>
-              <PanelTableTh align="right" className={panelTableNowrapCellClass}>
-                {readOnly ? "Ver" : "Acciones"}
-              </PanelTableTh>
-            </tr>
-          </thead>
-          <tbody>
-            {filtrados.map((item) => (
-              <tr key={item.codigo} className={panelTableBodyRowClass}>
-                <PanelTableTd className={`font-mono text-xs ${panelTableNowrapCellClass}`}>
-                  {item.codigo}
-                </PanelTableTd>
-                <PanelTableTd className="font-medium" title={item.denominacion}>
-                  {item.denominacion}
-                </PanelTableTd>
-                <PanelTableTd className={panelTableMutedClass} title={item.grupo ?? undefined}>
-                  {item.grupo ?? "—"}
-                </PanelTableTd>
-                <PanelTableTd className={panelTableNowrapCellClass}>
-                  <StatusBadge variant="default">{item.estado ?? "EXCLUIDO"}</StatusBadge>
-                </PanelTableTd>
-                <PanelTableTd align="right" className={panelTableNowrapCellClass}>
-                  <div className="flex flex-nowrap items-center justify-end gap-1">
-                    <PanelIconAction label="Ver" onClick={() => setViewTarget(item)}>
-                      <ViewIcon />
-                    </PanelIconAction>
-                    {!readOnly && (
-                      <>
-                        <PanelIconAction label="Editar" onClick={() => openEdit(item)}>
-                          <EditIcon />
-                        </PanelIconAction>
-                        <PanelIconAction
-                          label="Eliminar"
-                          variant="danger"
-                          onClick={() => {
-                            setConfirmError(null);
-                            setDeleteTarget(item);
-                          }}
-                        >
-                          <DeleteIcon />
-                        </PanelIconAction>
-                      </>
-                    )}
-                  </div>
-                </PanelTableTd>
+        <div className={`${panelCardClass} min-w-0 max-w-full overflow-x-auto`}>
+          <table className="w-full min-w-[1080px] table-auto text-left text-sm">
+            <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
+            <thead className={panelTableStickyHeadClass}>
+              <tr className={panelTableHeadRowClass}>
+                <CatalogoItemTableHead actionsLabel={readOnly ? "Ver" : "Acciones"} />
               </tr>
-            ))}
-          </tbody>
-        </PanelDataTable>
+            </thead>
+            <tbody>
+              {filtrados.map((item) => (
+                <tr key={item.codigo} className={panelTableBodyRowClass}>
+                  <CatalogoItemTableCells
+                    item={item}
+                    estadoBadge={
+                      <StatusBadge variant="default">{item.estado ?? "EXCLUIDO"}</StatusBadge>
+                    }
+                    actions={
+                      <div className="flex flex-nowrap items-center justify-end gap-1">
+                        <PanelIconAction label="Ver" onClick={() => setViewTarget(item)}>
+                          <ViewIcon />
+                        </PanelIconAction>
+                        {!readOnly && (
+                          <>
+                            <PanelIconAction label="Editar" onClick={() => openEdit(item)}>
+                              <EditIcon />
+                            </PanelIconAction>
+                            <PanelIconAction
+                              label="Eliminar"
+                              variant="danger"
+                              onClick={() => {
+                                setConfirmError(null);
+                                setDeleteTarget(item);
+                              }}
+                            >
+                              <DeleteIcon />
+                            </PanelIconAction>
+                          </>
+                        )}
+                      </div>
+                    }
+                  />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <Dialog
@@ -343,7 +307,9 @@ export function CatalogoPropioPanel({
         onClose={() => setViewTarget(null)}
         title="Detalle del ítem propio"
       >
-        {viewTarget && <CatalogoDetalleView item={viewTarget} />}
+        {viewTarget && (
+          <CatalogoItemDetalle item={viewTarget} origenLabel={CATALOGO_ORIGEN_LABELS.PROPIO} />
+        )}
       </Dialog>
 
       <Dialog
@@ -387,14 +353,28 @@ export function CatalogoPropioPanel({
               onRegisterPersonalizada={(valor) => handleRegister("clase", valor)}
               onDeletePersonalizada={(valor) => handleDeleteOpcion("clase", valor)}
             />
-            <div className="space-y-2">
-              <Label>Contabilidad</Label>
-              <Input
-                readOnly
-                disabled
-                value={CATALOGO_CUENTA_ORDEN_CONTABILIDAD}
-                className="bg-muted font-mono"
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit_cuenta_codigo">Cuenta contable</Label>
+                <Input
+                  id="edit_cuenta_codigo"
+                  value={editCuentaCodigo}
+                  disabled={pending}
+                  placeholder="Ej. 2524"
+                  className="font-mono"
+                  onChange={(e) => setEditCuentaCodigo(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit_contabilidad">Contabilidad</Label>
+                <Input
+                  id="edit_contabilidad"
+                  value={editContabilidad}
+                  disabled={pending}
+                  placeholder="Ej. 2524 Bienes de cuenta de orden"
+                  onChange={(e) => setEditContabilidad(e.target.value)}
+                />
+              </div>
             </div>
             {error && <PanelFlashMessage variant="error">{error}</PanelFlashMessage>}
             <div className="flex justify-end gap-2">

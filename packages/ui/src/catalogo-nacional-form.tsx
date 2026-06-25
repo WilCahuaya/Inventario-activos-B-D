@@ -52,6 +52,8 @@ export function CatalogoNacionalForm({
   const [denominacion, setDenominacion] = useState(initialDenominacion);
   const [grupo, setGrupo] = useState("");
   const [clase, setClase] = useState("");
+  const [cuentaCodigo, setCuentaCodigo] = useState("");
+  const [contabilidad, setContabilidad] = useState(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
   const [grupoSugerido, setGrupoSugerido] = useState<string | null>(null);
   const [grupoManual, setGrupoManual] = useState(false);
   const [sugiriendoGrupo, setSugiriendoGrupo] = useState(false);
@@ -81,6 +83,8 @@ export function CatalogoNacionalForm({
     setDenominacion(initialDenominacion);
     setGrupo("");
     setClase("");
+    setCuentaCodigo("");
+    setContabilidad(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
     setGrupoSugerido(null);
     setGrupoManualState(false);
   }, [initialDenominacion, codigo]);
@@ -150,6 +154,8 @@ export function CatalogoNacionalForm({
           denominacion,
           grupo,
           clase,
+          cuenta_codigo: cuentaCodigo,
+          contabilidad,
           estado: CATALOGO_CUENTA_ORDEN_ESTADO,
         });
       }}
@@ -169,17 +175,6 @@ export function CatalogoNacionalForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="catalogo_contabilidad">Contabilidad</Label>
-        <Input
-          id="catalogo_contabilidad"
-          readOnly
-          disabled
-          value={CATALOGO_CUENTA_ORDEN_CONTABILIDAD}
-          className="bg-muted font-mono"
-        />
-      </div>
-
-      <div className="space-y-2 sm:col-span-2">
         <Label htmlFor="catalogo_denominacion">Denominación</Label>
         <Input
           id="catalogo_denominacion"
@@ -191,7 +186,19 @@ export function CatalogoNacionalForm({
         />
       </div>
 
-      <div className="sm:col-span-2">
+      <div className="space-y-2">
+        <Label htmlFor="catalogo_cuenta_codigo">Cuenta contable</Label>
+        <Input
+          id="catalogo_cuenta_codigo"
+          value={cuentaCodigo}
+          disabled={camposDeshabilitados}
+          placeholder="Ej. 2524"
+          className="font-mono"
+          onChange={(e) => setCuentaCodigo(e.target.value)}
+        />
+      </div>
+
+      <div>
         <ClaseCatalogoCombobox
           id="catalogo_clase"
           value={clase}
@@ -205,7 +212,18 @@ export function CatalogoNacionalForm({
         />
       </div>
 
-      <div className="sm:col-span-2">
+      <div className="space-y-2">
+        <Label htmlFor="catalogo_contabilidad">Contabilidad</Label>
+        <Input
+          id="catalogo_contabilidad"
+          value={contabilidad}
+          disabled={camposDeshabilitados}
+          placeholder="Ej. 2524 Bienes de cuenta de orden"
+          onChange={(e) => setContabilidad(e.target.value)}
+        />
+      </div>
+
+      <div>
         <GrupoCatalogoCombobox
           id="catalogo_grupo"
           value={grupo}

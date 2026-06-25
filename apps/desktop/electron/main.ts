@@ -274,7 +274,15 @@ ipcMain.handle("print:listPrinters", (event) => {
 
 ipcMain.handle("invite:entidadAdmin", (_event, input) => inviteEntidadAdmin(input));
 ipcMain.handle("invite:contador", (_event, input) => inviteContador(input));
-ipcMain.handle("users:resendInvitation", (_event, input) => resendInvitacionUsuario(input));
+ipcMain.handle("users:resendInvitation", async (_event, input) => {
+  try {
+    return await resendInvitacionUsuario(input);
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Error al reenviar la invitación.",
+    };
+  }
+});
 ipcMain.handle("users:accesoEstado", (_event, emails: string[]) =>
   getUsuariosAccesoEstado(emails),
 );

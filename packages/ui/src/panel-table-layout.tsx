@@ -73,14 +73,15 @@ export const AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA: PanelTableColSpec[] = [
   ...AMBIENTES_TABLE_COLS_SIN_SUCURSAL.slice(4),
 ];
 
-/** Anchos % — sucursales: nombre, # ambientes, tipo, acciones */
-export const SUCURSALES_TABLE_COL_WIDTHS_PCT = [42, 12, 16, 30] as const;
+/** Anchos % — sucursales: nombre, dirección, # ambientes, tipo, acciones */
+export const SUCURSALES_TABLE_COL_WIDTHS_PCT = [24, 26, 10, 14, 26] as const;
 
 /** #, sucursal, apertura, cierre, ambientes, estado, detalle */
 export const VISITAS_HISTORIAL_TABLE_WIDTHS_PCT = [5, 18, 22, 22, 9, 11, 13] as const;
 
-/** Sucursales: nombre, ambientes, tipo, acciones */
+/** Sucursales: nombre, dirección, ambientes, tipo, acciones */
 export const SUCURSALES_TABLE_COLS: PanelTableColSpec[] = [
+  { type: "grow" },
   { type: "grow" },
   { type: "shrink" },
   { type: "shrink" },

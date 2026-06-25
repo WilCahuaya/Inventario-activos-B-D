@@ -117,8 +117,8 @@ export function CatalogoAltaPanel({
           <div>
             <h3 className="font-semibold">Nuevo bien de cuenta de orden</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Registre artículos menores que no figuran en el catálogo oficial. El código y la
-              contabilidad se asignan automáticamente; seleccione clase y grupo.
+              Registre artículos menores que no figuran en el catálogo oficial. El código se asigna
+              automáticamente; complete cuenta contable y contabilidad según corresponda.
             </p>
           </div>
           {onClose && (
@@ -170,7 +170,9 @@ export function CatalogoAltaPanel({
             <li>
               Código propio secuencial: <code>BD000001</code>, <code>BD000002</code>, etc.
             </li>
-            <li>Contabilidad fija: <strong>2524</strong>.</li>
+            <li>
+              Cuenta contable y contabilidad editables (por defecto contabilidad <strong>2524</strong>).
+            </li>
             <li>Estado en catálogo: <strong>EXCLUIDO</strong> (cuenta de orden).</li>
             <li>Elija clase y grupo; puede agregar valores con «Otros» y eliminar los que creó.</li>
           </ul>

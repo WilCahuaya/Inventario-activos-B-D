@@ -14,9 +14,9 @@ function mapActivoReporteRows(data: Record<string, unknown>[] | null): ActivoRep
     const sedes = row.sedes as { nombre: string } | null;
     const ambientes = row.ambientes as { nombre: string; responsable?: string | null } | null;
     const catalogo = row.catalogo_nacional as
-      | { cuenta_codigo: string | null; grupo: string | null }
+      | { cuenta_codigo: string | null; contabilidad: string | null; grupo: string | null }
       | null
-      | Array<{ cuenta_codigo: string | null; grupo: string | null }>;
+      | Array<{ cuenta_codigo: string | null; contabilidad: string | null; grupo: string | null }>;
     const cat = Array.isArray(catalogo) ? catalogo[0] : catalogo;
     const { entidades: _e, sedes: _s, ambientes: _a, catalogo_nacional: _c, ...activo } = row;
     return {
@@ -25,6 +25,7 @@ function mapActivoReporteRows(data: Record<string, unknown>[] | null): ActivoRep
       sede_nombre: sedes?.nombre,
       ambiente_nombre: ambientes?.nombre,
       cuenta_contable: cat?.cuenta_codigo ?? null,
+      contabilidad: cat?.contabilidad ?? null,
       grupo_contable: cat?.grupo ?? null,
     };
   });
@@ -46,7 +47,7 @@ export async function cargarActivosReporte(
   let query = supabase
     .from("activos")
     .select(
-      "*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre, responsable), catalogo_nacional:codigo_catalogo(cuenta_codigo, grupo)",
+      "*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre, responsable), catalogo_nacional:codigo_catalogo(cuenta_codigo, contabilidad, grupo)",
     )
     .eq("entidad_id", input.entidadId)
     .order("codigo_catalogo")

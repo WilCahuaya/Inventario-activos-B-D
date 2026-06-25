@@ -5,11 +5,13 @@ import type {
   CatalogoOrigen,
   CreateCatalogoNacionalInput,
   UpdateCatalogoPropioInput,
+  UpdateCatalogoNacionalContabilidadInput,
 } from "@inventario/types";
 import {
   buildCatalogoCampoOpciones,
   buildCreateCatalogoCuentaOrdenPayload,
   buildUpdateCatalogoPropioPayload,
+  buildUpdateCatalogoNacionalContabilidadPayload,
   CATALOGO_PROPIO_CODIGO_RE,
   isCatalogoNacionalOficial,
   minCatalogoQueryLength,
@@ -386,6 +388,35 @@ export async function updateCatalogoPropio(
   const row = data as CatalogoNacional;
   syncLocalRow(row);
   await registrarOpcionesDesdeCatalogoInput(input);
+  return { data: row };
+}
+
+export async function updateCatalogoNacionalContabilidad(
+  codigo: string,
+  input: UpdateCatalogoNacionalContabilidadInput,
+): Promise<{ data?: CatalogoNacional; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+
+  const trimmed = codigo.trim();
+  if (CATALOGO_PROPIO_CODIGO_RE.test(trimmed)) {
+    return { error: "Use el catálogo propio para ítems BD…" };
+  }
+
+  const payload = buildUpdateCatalogoNacionalContabilidadPayload(input);
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("update_catalogo_nacional_contabilidad", {
+    p_codigo: trimmed,
+    p_cuenta_codigo: payload.cuenta_codigo ?? "",
+    p_contabilidad: payload.contabilidad ?? "",
+  });
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "No se pudo actualizar el ítem." };
+
+  const row = data as CatalogoNacional;
+  syncLocalRow(row);
   return { data: row };
 }
 

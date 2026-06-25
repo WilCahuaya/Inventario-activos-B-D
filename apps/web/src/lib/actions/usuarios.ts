@@ -2,16 +2,16 @@
 
 import type { Profile } from "@inventario/types";
 import type { AccesoInvitacionEstado } from "@inventario/auth-invite";
-import { accesoInvitacionEstado, findAuthUserByEmail } from "@inventario/auth-invite";
+import { getAccesoEstadoByEmails } from "@inventario/auth-invite";
 import { revalidatePath } from "next/cache";
 import {
   inviteContador as inviteContadorAuth,
-  resendInvitacionUsuario as resendInvitacionAuth,
 } from "@/lib/auth/contador-invite";
 import {
   deleteUsuarioForAdmin,
   setUsuarioActivoForAdmin,
 } from "@/lib/auth/usuario-admin";
+import { resendInvitacionUsuarioById } from "@/lib/auth/resend-invitacion-usuario";
 import { requireProfile } from "@/lib/auth/profile";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -29,13 +29,14 @@ async function enrichUsuariosAcceso(
     return usuarios.map((u) => ({ ...u, acceso_estado: "desconocido" as const }));
   }
 
-  const authUsers = await Promise.all(
-    usuarios.map((u) => findAuthUserByEmail(admin, u.email)),
+  const estados = await getAccesoEstadoByEmails(
+    admin,
+    usuarios.map((u) => u.email),
   );
 
-  return usuarios.map((usuario, index) => ({
+  return usuarios.map((usuario) => ({
     ...usuario,
-    acceso_estado: accesoInvitacionEstado(authUsers[index] ?? null),
+    acceso_estado: estados[usuario.email.toLowerCase()] ?? "desconocido",
   }));
 }
 
@@ -81,40 +82,11 @@ export async function inviteContador(input: { email: string; nombre: string }) {
 export async function resendInvitacionUsuario(userId: string) {
   await requireProfile("CONTADOR");
   const supabase = await createClient();
-
-  const { data: row, error } = await supabase
-    .from("profiles")
-    .select("*, entidades(nombre)")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error || !row) return { error: "Usuario no encontrado." };
-
-  const { entidades, ...profile } = row as Profile & {
-    entidades: { nombre: string } | null;
-  };
-
-  if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
-    return { error: "Rol de usuario no admitido para invitación." };
-  }
-
-  const result = await resendInvitacionAuth({
-    email: profile.email,
-    nombre: profile.nombre,
-    rol: profile.rol,
-    entidadId: profile.entidad_id,
-    entidadNombre: entidades?.nombre ?? null,
-  });
-
+  const result = await resendInvitacionUsuarioById(supabase, userId);
   if (result.error) return { error: result.error };
 
   revalidatePath("/contador/usuarios");
-
-  return {
-    success: true,
-    invited: result.invited,
-    message: result.message ?? result.warning ?? null,
-  };
+  return result;
 }
 
 export async function setUsuarioActivo(userId: string, activo: boolean) {

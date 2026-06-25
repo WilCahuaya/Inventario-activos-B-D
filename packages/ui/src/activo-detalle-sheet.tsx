@@ -7,8 +7,8 @@ import {
   buildDescripcionBien,
   buildNombreConsolidado,
   categoriaBienCorto,
-  formatCorrelativoDisplay,
-  formatCorrelativoCompleto,
+  formatActivoCodigoDisplay,
+  formatCuentaContableDisplay,
   formatFechaISOToCortoES,
   formatMonedaPE,
 } from "@inventario/types";
@@ -21,6 +21,8 @@ export type ActivoDetalle = Activo & {
   sede_nombre?: string;
   ambiente_nombre?: string;
   posible_ambiente_nombre?: string;
+  cuenta_codigo?: string | null;
+  contabilidad?: string | null;
 };
 
 function DetalleMetric({
@@ -118,14 +120,9 @@ export function ActivoDetalleSheet({
     activo.valor_adquisicion != null ? `S/ ${formatMonedaPE(activo.valor_adquisicion)}` : "—";
   const valorNetoTexto = valorNeto != null ? `S/ ${formatMonedaPE(valorNeto)}` : "—";
 
-  const codigoTitulo =
-    activo.codigo_barras?.trim() || activo.codigo_catalogo?.trim() || "Sin código";
+  const codigoTitulo = formatActivoCodigoDisplay(activo);
 
-  const correlativo =
-    activo.codigo_barras?.trim() ||
-    formatCorrelativoCompleto(activo.codigo_catalogo, activo.correlativo) ||
-    formatCorrelativoDisplay(activo.correlativo) ||
-    undefined;
+  const cuentaContable = formatCuentaContableDisplay(activo.cuenta_codigo, activo.contabilidad);
 
   const descripcion = buildDescripcionBien(
     activo.marca,
@@ -142,6 +139,7 @@ export function ActivoDetalleSheet({
     activo.serie,
     activo.color,
     activo.medidas,
+    activo.caracteristicas,
   );
 
   const estadoRegistro = preregistrado
@@ -214,8 +212,12 @@ export function ActivoDetalleSheet({
             className="col-span-2 sm:col-span-1"
           />
           <DetalleField label="Código catálogo" value={activo.codigo_catalogo} mono />
-          <DetalleField label="Código de barras" value={activo.codigo_barras} mono />
-          <DetalleField label="Correlativo" value={correlativo} mono />
+          <DetalleField label="Código de barras" value={formatActivoCodigoDisplay(activo)} mono />
+          <DetalleField
+            label="Cuenta contable"
+            value={cuentaContable !== "—" ? cuentaContable : undefined}
+            className="col-span-2"
+          />
           <DetalleField label="Nombre en etiqueta" value={activo.nombre_etiqueta} className="col-span-2" />
           <DetalleField label="Responsable" value={activo.responsable} className="col-span-2" />
           <DetalleField

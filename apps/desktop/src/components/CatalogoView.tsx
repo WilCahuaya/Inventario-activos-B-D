@@ -12,6 +12,7 @@ import {
   searchCatalogoNacionalOficial,
   suggestCatalogoGrupo,
   updateCatalogoPropio,
+  updateCatalogoNacionalContabilidad,
 } from "../lib/catalogo";
 
 interface CatalogoViewProps {
@@ -39,6 +40,17 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
       return { error: "Se requiere conexión para editar el catálogo propio." };
     }
     return updateCatalogoPropio(...args);
+  }
+
+  async function handleUpdateNacionalContabilidad(
+    ...args: Parameters<typeof updateCatalogoNacionalContabilidad>
+  ) {
+    if (!online) {
+      return {
+        error: "Se requiere conexión para editar la contabilidad del catálogo nacional.",
+      };
+    }
+    return updateCatalogoNacionalContabilidad(...args);
   }
 
   async function handleDelete(codigo: string) {
@@ -76,10 +88,11 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
         </p>
       </div>
 
-      {!online && (
+        {!online && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-foreground">
           Sin conexión. Puede consultar el catálogo nacional ya sincronizado y ver ítems propios en
-          caché; crear, editar o eliminar propios requiere internet.
+          caché; crear, editar o eliminar propios y completar contabilidad nacional requiere
+          internet.
         </p>
       )}
 
@@ -103,6 +116,8 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
         onUpdatePropio={handleUpdate}
         onDeletePropio={handleDelete}
         searchNacional={searchCatalogoNacionalOficial}
+        onUpdateNacionalContabilidad={handleUpdateNacionalContabilidad}
+        readOnlyNacionalContabilidad={!online}
       />
     </div>
   );

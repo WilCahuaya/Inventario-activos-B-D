@@ -102,6 +102,7 @@ export interface Sede {
   id: string;
   entidad_id: string;
   nombre: string;
+  direccion: string | null;
   es_principal: boolean;
   activo: boolean;
   created_at: string;
@@ -459,7 +460,7 @@ export function formatDepreciacionResumida(
 
 export type { CodigoBarrasPayload } from "./codigo-barras-types";
 
-import { CORRELATIVO_DIGITS, formatCodigoBarras } from "./codigo-barras";
+import { CORRELATIVO_DIGITS, formatCodigoBarras, normalizeCodigoBarrasDisplay } from "./codigo-barras";
 
 export {
   CODIGO_BARRAS_CATALOGO_DIGITS,
@@ -483,13 +484,40 @@ export function formatCorrelativoDisplay(
   return String(correlativo).padStart(digits, "0");
 }
 
-/** Código completo catálogo-correlativo (ej. 74643712-0003). */
+/** Código completo catálogo-correlativo (ej. 74643712-0003 o BD000003-0001). */
 export function formatCorrelativoCompleto(
   codigoCatalogo: string,
   correlativo: number | null,
 ): string {
   if (correlativo == null || !codigoCatalogo.trim()) return "";
   return formatCodigoBarras({ codigo_catalogo: codigoCatalogo.trim(), correlativo });
+}
+
+/** Código legible del activo para tablas y reportes (barras, catálogo-correlativo o solo catálogo). */
+export function formatActivoCodigoDisplay(activo: {
+  codigo_barras?: string | null;
+  codigo_catalogo: string;
+  correlativo?: number | null;
+}): string {
+  const barras = activo.codigo_barras?.trim();
+  if (barras) return normalizeCodigoBarrasDisplay(barras);
+  const completo = formatCorrelativoCompleto(activo.codigo_catalogo, activo.correlativo ?? null);
+  if (completo) return completo;
+  return activo.codigo_catalogo?.trim() || "—";
+}
+
+/** Etiqueta de cuenta contable (ej. 3362 Equipo de comunicación). */
+export function formatCuentaContableDisplay(
+  cuentaCodigo?: string | null,
+  contabilidad?: string | null,
+): string {
+  const codigo = cuentaCodigo?.trim();
+  const texto = contabilidad?.trim();
+  if (texto) {
+    if (codigo && !texto.startsWith(codigo)) return `${codigo} ${texto}`;
+    return texto;
+  }
+  return codigo || "—";
 }
 
 export function formatMonedaPE(value: number | null | undefined): string {
@@ -632,7 +660,7 @@ export function estadoBienLabel(estado: EstadoBien): string {
   return "Malo";
 }
 
-/** Nombre del bien + marca, modelo, serie, color y medidas (en ese orden). */
+/** Nombre del bien + marca, modelo, serie, color, medidas y detalle (en ese orden). */
 export function buildNombreConsolidado(
   nombre: string,
   marca?: string | null,
@@ -640,11 +668,15 @@ export function buildNombreConsolidado(
   serie?: string | null,
   color?: string | null,
   medidas?: string | null,
+  detalle?: string | null,
 ): string {
   const base = nombre.trim().toUpperCase();
   if (!base) return "";
 
   const partes = caracteristicasPartes(marca, modelo, serie, color, medidas);
+  const detalleTrim = detalle?.trim();
+  if (detalleTrim) partes.push(detalleTrim);
+
   if (partes.length === 0) return base;
   return `${base} ${partes.join(", ")}`;
 }
@@ -865,13 +897,14 @@ export function validarCreateCatalogoCuentaOrdenInput(
 export function buildCreateCatalogoCuentaOrdenPayload(
   input: CreateCatalogoNacionalInput,
 ): Omit<CatalogoNacional, "created_at"> {
+  const contabilidad = input.contabilidad?.trim();
   return {
     codigo: input.codigo.trim(),
     denominacion: normalizeCatalogoDenominacion(input.denominacion),
     grupo: input.grupo!.trim(),
     clase: input.clase!.trim(),
-    cuenta_codigo: null,
-    contabilidad: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+    cuenta_codigo: input.cuenta_codigo?.trim() || null,
+    contabilidad: contabilidad || CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
     depreciacion: null,
     resolucion: null,
     estado: CATALOGO_CUENTA_ORDEN_ESTADO,
@@ -883,6 +916,22 @@ export interface UpdateCatalogoPropioInput {
   denominacion: string;
   grupo: string;
   clase: string;
+  cuenta_codigo?: string | null;
+  contabilidad?: string | null;
+}
+
+export interface UpdateCatalogoNacionalContabilidadInput {
+  cuenta_codigo?: string | null;
+  contabilidad?: string | null;
+}
+
+export function buildUpdateCatalogoNacionalContabilidadPayload(
+  input: UpdateCatalogoNacionalContabilidadInput,
+) {
+  return {
+    cuenta_codigo: input.cuenta_codigo?.trim() || null,
+    contabilidad: input.contabilidad?.trim() || null,
+  };
 }
 
 export function validarUpdateCatalogoPropioInput(input: UpdateCatalogoPropioInput): string | null {
@@ -899,11 +948,13 @@ export function validarUpdateCatalogoPropioInput(input: UpdateCatalogoPropioInpu
 }
 
 export function buildUpdateCatalogoPropioPayload(input: UpdateCatalogoPropioInput) {
+  const contabilidad = input.contabilidad?.trim();
   return {
     denominacion: normalizeCatalogoDenominacion(input.denominacion),
     grupo: input.grupo.trim(),
     clase: input.clase.trim(),
-    contabilidad: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+    cuenta_codigo: input.cuenta_codigo?.trim() || null,
+    contabilidad: contabilidad || CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
     estado: CATALOGO_CUENTA_ORDEN_ESTADO,
   };
 }

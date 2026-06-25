@@ -20,13 +20,14 @@ import {
   CategoriaLetraCell,
   EstadoBienBadge,
   InventarioEstadoRegistroFilaHint,
-  InventarioCorrelativoCellContent,
+  InventarioCodigoCellContent,
   InventarioFechaCell,
   InventarioTablaLeyenda,
   InventarioTextCell,
   ObservacionCell,
   ValorBienCell,
   ValorNetoCell,
+  inventarioCuentaContable,
   inventarioDepreciacionFila,
   inventarioDescripcion,
   inventarioThAccent,
@@ -183,6 +184,15 @@ function SelectionCell<T extends Activo>({
   );
 }
 
+function CuentaContableCell<T extends Activo>({ activo }: { activo: T }) {
+  const texto = inventarioCuentaContable(activo);
+  return (
+    <InventarioTextCell title={texto} className="text-[10px]">
+      {texto !== "—" ? texto : ""}
+    </InventarioTextCell>
+  );
+}
+
 function CompactTableBody<T extends Activo>({
   activos,
   paginated,
@@ -216,9 +226,9 @@ function CompactTableBody<T extends Activo>({
             {selection?.withSelection && <SelectionCell activo={activo} selection={selection} />}
             <InventarioTextCell center>{rowIndex + 1}</InventarioTextCell>
             <CategoriaLetraCell categoria={activo.categoria} />
-            <InventarioTextCell center title={activo.codigo_catalogo}>
-              <span className="font-mono text-[10px] leading-tight">{activo.codigo_catalogo}</span>
-            </InventarioTextCell>
+            <td className={`${tdBase} text-center`}>
+              <InventarioCodigoCellContent activo={activo} />
+            </td>
             <InventarioTextCell title={activo.nombre} lineClamp2={modoPreregistro}>
               <span className={inactivo ? "line-through decoration-red-400/60" : undefined}>
                 {activo.nombre}
@@ -237,6 +247,7 @@ function CompactTableBody<T extends Activo>({
               {descripcion}
             </InventarioTextCell>
             <InventarioFechaCell fecha={activo.fecha_adquisicion} />
+            <CuentaContableCell activo={activo} />
             <td className={`${tdBase} text-center`}>
               <EstadoBienBadge estado={activo.estado_bien} />
             </td>
@@ -290,14 +301,9 @@ function FullTableBody<T extends Activo>({
             {selection?.withSelection && <SelectionCell activo={activo} selection={selection} />}
             <InventarioTextCell center>{rowIndex + 1}</InventarioTextCell>
             <InventarioTextCell center>{categoriaBienCorto(activo.categoria)}</InventarioTextCell>
-            <InventarioTextCell center title={activo.codigo_catalogo}>
-              <span className="font-mono text-[10px] leading-tight">{activo.codigo_catalogo}</span>
-            </InventarioTextCell>
-            {!modoPreregistro && (
-              <td className={`${tdBase} text-center`}>
-                <InventarioCorrelativoCellContent activo={activo} />
-              </td>
-            )}
+            <td className={`${tdBase} text-center`}>
+              <InventarioCodigoCellContent activo={activo} />
+            </td>
             <InventarioTextCell title={activo.nombre} lineClamp2={modoPreregistro}>
               <span className={inactivo ? "line-through decoration-red-400/60" : undefined}>
                 {activo.nombre}
@@ -316,6 +322,7 @@ function FullTableBody<T extends Activo>({
               {descripcion}
             </InventarioTextCell>
             <InventarioFechaCell fecha={activo.fecha_adquisicion} />
+            <CuentaContableCell activo={activo} />
             <td className={`${tdBase} text-center`}>
               <EstadoBienBadge estado={activo.estado_bien} />
             </td>
@@ -390,6 +397,9 @@ export function ActivosInventarioTable<T extends Activo>(props: ActivosInventari
                 Descripción
               </Th>
               <Th multiline>Fecha adq.</Th>
+              <Th multiline className={`${inventarioThStd} normal-case`}>
+                Cuenta contable
+              </Th>
               <Th>Estado</Th>
               <Th>Precio</Th>
               {!modoPreregistro && (
@@ -439,6 +449,9 @@ export function ActivosInventarioTable<T extends Activo>(props: ActivosInventari
                 <Th rowSpan={1} multiline>
                   Fecha adq.
                 </Th>
+                <Th rowSpan={1} multiline className={`${inventarioThStd} normal-case`}>
+                  Cuenta contable
+                </Th>
                 <Th rowSpan={1}>Estado</Th>
                 <Th rowSpan={1}>Precio adq.</Th>
                 <Th rowSpan={1}>V. mercado</Th>
@@ -456,7 +469,6 @@ export function ActivosInventarioTable<T extends Activo>(props: ActivosInventari
                   </Th>
                   <Th rowSpan={2}>Cat.</Th>
                   <Th rowSpan={2}>Código</Th>
-                  <Th rowSpan={2}>Corr.</Th>
                   <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
                     Nombre del bien
                   </Th>
@@ -464,6 +476,9 @@ export function ActivosInventarioTable<T extends Activo>(props: ActivosInventari
                     Descripción
                   </Th>
                   <Th rowSpan={2}>Fecha adq.</Th>
+                  <Th rowSpan={2} multiline className={`${inventarioThStd} normal-case`}>
+                    Cuenta contable
+                  </Th>
                   <Th rowSpan={2}>Estado</Th>
                   <Th rowSpan={2}>Precio adq.</Th>
                   <Th rowSpan={2}>V. mercado</Th>

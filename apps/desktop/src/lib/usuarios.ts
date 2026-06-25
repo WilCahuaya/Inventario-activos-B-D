@@ -7,7 +7,9 @@ import {
   type UsuarioGestionResumen,
 } from "@inventario/types";
 import { fetchProfile } from "./profile";
+import { finalizeResendInviteResult } from "./resend-result";
 import { getSupabaseClient } from "./supabase";
+import { resendInvitacionViaWebApi } from "./web-api";
 
 async function countUsuarioVinculos(userId: string): Promise<{
   activos: number;
@@ -63,14 +65,44 @@ async function enrichAccesoEstado(
     return usuarios;
   }
 
-  const estados = await window.electronAPI.getUsuariosAccesoEstado(
-    usuarios.map((u) => u.email),
-  );
+  try {
+    const estados = await window.electronAPI.getUsuariosAccesoEstado(
+      usuarios.map((u) => u.email),
+    );
 
-  return usuarios.map((usuario) => ({
-    ...usuario,
-    acceso_estado: estados[usuario.email.toLowerCase()] ?? "desconocido",
-  }));
+    return usuarios.map((usuario) => ({
+      ...usuario,
+      acceso_estado: estados[usuario.email.toLowerCase()] ?? "desconocido",
+    }));
+  } catch {
+    return usuarios;
+  }
+}
+
+async function loadResendTarget(userId: string) {
+  const supabase = getSupabaseClient();
+  const { data: row, error } = await supabase
+    .from("profiles")
+    .select("*, entidades(nombre)")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error || !row) {
+    return { error: "Usuario no encontrado." as const };
+  }
+
+  const { entidades, ...target } = row as Profile & {
+    entidades: { nombre: string } | null;
+  };
+
+  if (target.rol !== "CONTADOR" && target.rol !== "ADMIN_ENTIDAD") {
+    return { error: "Rol de usuario no admitido para invitación." as const };
+  }
+
+  return {
+    target,
+    entidadNombre: entidades?.nombre ?? null,
+  };
 }
 
 export async function listUsuarios(): Promise<{ data?: ProfileConEntidad[]; error?: string }> {
@@ -127,44 +159,62 @@ export async function inviteContador(input: {
 export async function resendInvitacionUsuario(
   userId: string,
 ): Promise<{ message?: string; error?: string }> {
-  const profile = await fetchProfile();
-  if (!profile) return { error: "Sesión no válida." };
-  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+  try {
+    const profile = await fetchProfile();
+    if (!profile) return { error: "Sesión no válida." };
+    if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
 
-  const supabase = getSupabaseClient();
-  const { data: row, error } = await supabase
-    .from("profiles")
-    .select("*, entidades(nombre)")
-    .eq("id", userId)
-    .maybeSingle();
+    const loaded = await loadResendTarget(userId);
+    if ("error" in loaded) return { error: loaded.error };
 
-  if (error || !row) return { error: "Usuario no encontrado." };
+    const { target, entidadNombre } = loaded;
+    const errors: string[] = [];
 
-  const { entidades, ...target } = row as Profile & {
-    entidades: { nombre: string } | null;
-  };
+    if (window.electronAPI?.resendInvitacionUsuario) {
+      try {
+        const electronResult = await window.electronAPI.resendInvitacionUsuario({
+          email: target.email,
+          nombre: target.nombre,
+          rol: target.rol,
+          entidadId: target.entidad_id,
+          entidadNombre,
+        });
+        const finalized = finalizeResendInviteResult(electronResult);
+        if (!finalized.error) {
+          return finalized;
+        }
+        errors.push(finalized.error);
+      } catch (err) {
+        errors.push(
+          err instanceof Error ? err.message : "Error al reenviar desde la aplicación de escritorio.",
+        );
+      }
+    } else {
+      errors.push(
+        "Reenvío local no disponible. Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local.",
+      );
+    }
 
-  if (target.rol !== "CONTADOR" && target.rol !== "ADMIN_ENTIDAD") {
-    return { error: "Rol de usuario no admitido para invitación." };
-  }
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      const webResult = await resendInvitacionViaWebApi(userId);
+      const finalized = finalizeResendInviteResult(webResult);
+      if (!finalized.error) {
+        return finalized;
+      }
+      errors.push(finalized.error);
+    }
 
-  if (!window.electronAPI?.resendInvitacionUsuario) {
+    const uniqueErrors = [...new Set(errors.filter(Boolean))];
     return {
       error:
-        "Reenvío no disponible. Configure SUPABASE_SERVICE_ROLE_KEY en apps/desktop/.env.local.",
+        uniqueErrors.join(" ") ||
+        "No se pudo reenviar la invitación. Verifique su conexión y la configuración de correo.",
+    };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Error inesperado al reenviar la invitación.",
     };
   }
-
-  const result = await window.electronAPI.resendInvitacionUsuario({
-    email: target.email,
-    nombre: target.nombre,
-    rol: target.rol,
-    entidadId: target.entidad_id,
-    entidadNombre: entidades?.nombre ?? null,
-  });
-
-  if (result.error) return { error: result.error };
-  return { message: result.message ?? result.warning ?? "Invitación reenviada." };
 }
 
 export async function setUsuarioActivo(

@@ -6,11 +6,13 @@ import type {
   CatalogoOpcionTipo,
   CreateCatalogoNacionalInput,
   UpdateCatalogoPropioInput,
+  UpdateCatalogoNacionalContabilidadInput,
 } from "@inventario/types";
 import {
   buildCatalogoCampoOpciones,
   buildCreateCatalogoCuentaOrdenPayload,
   buildUpdateCatalogoPropioPayload,
+  buildUpdateCatalogoNacionalContabilidadPayload,
   CATALOGO_PROPIO_CODIGO_RE,
   isCatalogoNacionalOficial,
   minCatalogoQueryLength,
@@ -318,6 +320,31 @@ export async function updateCatalogoPropio(
 
   if (error) return { error: error.message };
   await registrarOpcionesDesdeCatalogoInput(input);
+  return { data: data as CatalogoNacional };
+}
+
+export async function updateCatalogoNacionalContabilidad(
+  codigo: string,
+  input: UpdateCatalogoNacionalContabilidadInput,
+): Promise<{ data?: CatalogoNacional; error?: string }> {
+  await requireProfile("CONTADOR");
+
+  const trimmed = codigo.trim();
+  if (CATALOGO_PROPIO_CODIGO_RE.test(trimmed)) {
+    return { error: "Use el catálogo propio para ítems BD…" };
+  }
+
+  const payload = buildUpdateCatalogoNacionalContabilidadPayload(input);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("update_catalogo_nacional_contabilidad", {
+    p_codigo: trimmed,
+    p_cuenta_codigo: payload.cuenta_codigo ?? "",
+    p_contabilidad: payload.contabilidad ?? "",
+  });
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "No se pudo actualizar el ítem." };
+
   return { data: data as CatalogoNacional };
 }
 

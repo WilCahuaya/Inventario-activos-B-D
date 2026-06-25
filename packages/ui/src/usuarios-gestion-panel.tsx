@@ -159,6 +159,8 @@ export function UsuariosGestionPanel({
       setEmail("");
       setInviteOpen(false);
       void onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al invitar contador.");
     } finally {
       setPending(false);
     }
@@ -178,6 +180,8 @@ export function UsuariosGestionPanel({
       }
       setMessage(result.message ?? "Invitación reenviada.");
       void onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al reenviar la invitación.");
     } finally {
       setPending(false);
       setResendUserId(null);

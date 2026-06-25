@@ -38,11 +38,12 @@ Migraciones de tablas, RLS, roles y storage.
 
 👉 **[docs/FASE1_SETUP.md](../docs/FASE1_SETUP.md)**
 
-## Plantilla de invitación (correo)
+## Plantillas de correo (invitación y acceso)
 
-Al crear una entidad se envía una invitación al administrador. La plantilla con marca **B&D Consultores** está en:
+Al crear una entidad se envía una invitación al administrador; el reenvío a usuarios ya confirmados usa **Magic Link**. Las plantillas con marca **B&D Consultores** están en:
 
-`supabase/templates/invite.html`
+- `supabase/templates/invite.html` — primera invitación
+- `supabase/templates/magic-link.html` — reenvío / acceso
 
 ### Desarrollo local
 
@@ -63,9 +64,8 @@ Esto sube la plantilla de `config.toml` al proyecto remoto.
 **Opción B — Panel manual**
 
 1. [Supabase Dashboard](https://supabase.com/dashboard) → **Authentication** → **Email Templates**
-2. Abrir **Invite user**
-3. **Subject:** `B&D Consultores — Invitación al Inventario de Activos Fijos`
-4. Pegar el contenido de `supabase/templates/invite.html` en el cuerpo HTML
-5. Guardar
+2. **Invite user** — Subject: `B&D Consultores — Invitación al Inventario de Activos Fijos` — pegar `supabase/templates/invite.html`
+3. **Magic Link** — Subject: `B&D Consultores — Acceso al Inventario de Activos Fijos` — pegar `supabase/templates/magic-link.html`
+4. Guardar cada plantilla
 
 **Remitente:** en **Authentication** → **SMTP Settings** puede configurar un correo propio (p. ej. `noreply@bdconsultores.pe`) para que no aparezca “Supabase Auth” como remitente.

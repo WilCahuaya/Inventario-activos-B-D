@@ -7,6 +7,7 @@ import type {
   CatalogoOpcionTipo,
   CreateCatalogoNacionalInput,
   UpdateCatalogoPropioInput,
+  UpdateCatalogoNacionalContabilidadInput,
 } from "@inventario/types";
 import { Button } from "./components";
 import { CatalogoAltaPanel } from "./catalogo-alta-panel";
@@ -48,6 +49,11 @@ export interface CatalogoPageProps {
   ) => Promise<{ data?: CatalogoNacional; error?: string }>;
   onDeletePropio: (codigo: string) => Promise<{ error?: string }>;
   searchNacional: (query: string) => Promise<CatalogoNacional[]>;
+  onUpdateNacionalContabilidad?: (
+    codigo: string,
+    input: UpdateCatalogoNacionalContabilidadInput,
+  ) => Promise<{ data?: CatalogoNacional; error?: string }>;
+  readOnlyNacionalContabilidad?: boolean;
 }
 
 export function CatalogoPage({
@@ -66,6 +72,8 @@ export function CatalogoPage({
   onUpdatePropio,
   onDeletePropio,
   searchNacional,
+  onUpdateNacionalContabilidad,
+  readOnlyNacionalContabilidad = false,
 }: CatalogoPageProps) {
   const [tab, setTab] = useState<CatalogoTab>("propio");
   const [propioReloadKey, setPropioReloadKey] = useState(0);
@@ -139,7 +147,12 @@ export function CatalogoPage({
           <div className="mb-4">
             <h3 className="font-semibold">Consulta catálogo nacional</h3>
           </div>
-          <CatalogoNacionalConsulta searchItems={searchNacional} offlineHint={offlineHint} />
+          <CatalogoNacionalConsulta
+            searchItems={searchNacional}
+            offlineHint={offlineHint}
+            onUpdateContabilidad={onUpdateNacionalContabilidad}
+            readOnlyContabilidad={readOnlyNacionalContabilidad}
+          />
         </div>
       )}
     </div>
