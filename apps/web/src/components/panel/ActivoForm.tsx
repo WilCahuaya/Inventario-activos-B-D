@@ -37,6 +37,7 @@ import {
   Input,
   Label,
   LabelPrintTextPreview,
+  PorcentajeInput,
   Select,
   Textarea,
 } from "@inventario/ui";
@@ -865,12 +866,11 @@ export function ActivoForm({
         </div>
         {mostrarDepreciacion && (
           <div className="space-y-2">
-            <Label htmlFor="depreciacion_bulk">Depreciación anual (%)</Label>
-            <Input
+            <Label htmlFor="depreciacion_bulk">Depreciación anual</Label>
+            <PorcentajeInput
               id="depreciacion_bulk"
               value={depreciacion}
-              onChange={(e) => handleDepreciacionChange(e.target.value)}
-              placeholder="Ej. 10 %"
+              onChange={handleDepreciacionChange}
             />
           </div>
         )}
@@ -1213,12 +1213,11 @@ export function ActivoForm({
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="depreciacion">Depreciación anual (%)</Label>
-                <Input
+                <Label htmlFor="depreciacion">Depreciación anual</Label>
+                <PorcentajeInput
                   id="depreciacion"
                   value={depreciacion}
-                  onChange={(e) => handleDepreciacionChange(e.target.value)}
-                  placeholder="Ej. 10 %"
+                  onChange={handleDepreciacionChange}
                 />
                 <p className="text-xs text-muted-foreground">
                   Al ingresar el % se calcula la vida útil en meses

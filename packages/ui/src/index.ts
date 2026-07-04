@@ -1,4 +1,5 @@
 export * from "./components";
+export * from "./porcentaje-input";
 export * from "./select";
 export * from "./activo-atributo-autocomplete";
 export * from "./info-hint-button";
@@ -8,6 +9,7 @@ export * from "./catalogo-alta-panel";
 export * from "./catalogo-page";
 export * from "./catalogo-propio-panel";
 export * from "./catalogo-nacional-consulta";
+export * from "./cuentas-contables-panel";
 export * from "./grupo-catalogo-combobox";
 export * from "./clase-catalogo-combobox";
 export * from "./catalogo-picker";

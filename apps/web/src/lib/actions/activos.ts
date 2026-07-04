@@ -65,9 +65,12 @@ export interface ActivoListRow {
   posible_ambiente_nombre?: string;
   cuenta_codigo?: string | null;
   contabilidad?: string | null;
+  catalogo_grupo?: string | null;
+  catalogo_clase?: string | null;
 }
 
-const CATALOGO_ACTIVO_SELECT = "catalogo_nacional:codigo_catalogo(cuenta_codigo, contabilidad)";
+const CATALOGO_ACTIVO_SELECT =
+  "catalogo_nacional:codigo_catalogo(cuenta_codigo, contabilidad, grupo, clase)";
 
 const ACTIVO_SELECT =
   `*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre), ${CATALOGO_ACTIVO_SELECT}`;
@@ -757,9 +760,19 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
     const ambientes = row.ambientes as { nombre: string } | null;
     const posibleAmbiente = row.posible_ambiente as { nombre: string } | null;
     const catalogo = row.catalogo_nacional as
-      | { cuenta_codigo: string | null; contabilidad: string | null }
+      | {
+          cuenta_codigo: string | null;
+          contabilidad: string | null;
+          grupo: string | null;
+          clase: string | null;
+        }
       | null
-      | Array<{ cuenta_codigo: string | null; contabilidad: string | null }>;
+      | Array<{
+          cuenta_codigo: string | null;
+          contabilidad: string | null;
+          grupo: string | null;
+          clase: string | null;
+        }>;
     const cat = Array.isArray(catalogo) ? catalogo[0] : catalogo;
     const { entidades: _e, sedes: _s, ambientes: _a, posible_ambiente: _p, catalogo_nacional: _c, ...activo } =
       row;
@@ -771,6 +784,8 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
       posible_ambiente_nombre: posibleAmbiente?.nombre,
       cuenta_codigo: cat?.cuenta_codigo ?? null,
       contabilidad: cat?.contabilidad ?? null,
+      catalogo_grupo: cat?.grupo?.trim() || null,
+      catalogo_clase: cat?.clase?.trim() || null,
     };
   });
 }

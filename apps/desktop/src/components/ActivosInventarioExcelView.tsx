@@ -16,6 +16,7 @@ import {
   formatInventarioListaTexto,
   panelCardClass,
   panelDataCardsWrapClass,
+  scrollbarThemedClass,
   useTablePagination,
 } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
@@ -271,7 +272,9 @@ export function ActivosInventarioExcelView({
   }
 
   return (
-    <div className="w-full max-w-full overflow-x-clip rounded-xl border border-border/60 bg-card shadow-sm">
+    <div
+      className={`${scrollbarThemedClass} min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border/60 bg-card shadow-sm`}
+    >
       <div className={panelDataCardsWrapClass}>
         <ActivosInventarioMobileCards
           activos={paginated}

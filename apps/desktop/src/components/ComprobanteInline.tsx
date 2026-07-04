@@ -7,7 +7,7 @@ interface ComprobanteInlineProps {
   className?: string;
 }
 
-export function ComprobanteInline({ activo, className = "text-[9px] leading-tight" }: ComprobanteInlineProps) {
+export function ComprobanteInline({ activo, className = "text-xs leading-snug" }: ComprobanteInlineProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const serie = activo.comprobante_serie?.trim();
   const tienePdf = Boolean(activo.comprobante_path);
@@ -24,7 +24,7 @@ export function ComprobanteInline({ activo, className = "text-[9px] leading-tigh
         <button
           type="button"
           onClick={() => setPreviewOpen(true)}
-          className={`font-medium text-primary underline-offset-2 hover:underline ${className}`}
+          className={`block w-full break-words text-left font-medium text-primary underline-offset-2 hover:underline ${className}`}
         >
           {label}
         </button>
@@ -38,5 +38,9 @@ export function ComprobanteInline({ activo, className = "text-[9px] leading-tigh
     );
   }
 
-  return <span className={`font-medium text-foreground ${className}`}>{label}</span>;
+  return (
+    <span className={`block w-full break-words font-medium text-foreground ${className}`}>
+      {label}
+    </span>
+  );
 }

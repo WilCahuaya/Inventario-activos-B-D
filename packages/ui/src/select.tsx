@@ -84,9 +84,12 @@ export function Select({
 }) {
   const [open, setOpen] = useState(false);
   const [internalValue, setInternalValue] = useState(defaultValue);
-  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(
-    null,
-  );
+  const [menuRect, setMenuRect] = useState<{
+    top: number;
+    left: number;
+    minWidth: number;
+    maxWidth: number;
+  } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -118,10 +121,12 @@ export function Select({
     function updatePosition() {
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
+      const viewportPadding = 8;
       setMenuRect({
         top: rect.bottom + 4,
         left: rect.left,
-        width: rect.width,
+        minWidth: rect.width,
+        maxWidth: Math.max(rect.width, window.innerWidth - rect.left - viewportPadding),
       });
     }
 
@@ -179,7 +184,9 @@ export function Select({
           position: "fixed",
           top: menuRect.top,
           left: menuRect.left,
-          width: menuRect.width,
+          minWidth: menuRect.minWidth,
+          maxWidth: menuRect.maxWidth,
+          width: "max-content",
           zIndex: 300,
         }}
       >
@@ -247,7 +254,7 @@ export function Select({
                   onClick={() => !option.disabled && setCurrentValue(option.value)}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate">{option.label}</span>
+                    <span className="whitespace-nowrap">{option.label}</span>
                     {isPersonalizado && !isSelected && (
                       <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-primary">
                         Propio

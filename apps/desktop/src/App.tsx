@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@inventario/ui";
 import { ThemeToggle } from "@inventario/ui/theme-toggle";
-import { withSedeBreadcrumb } from "@inventario/ui/panel";
+import { buildAmbienteContextBreadcrumbs } from "./lib/ambiente-context-breadcrumbs";
 import { ActivoFormDesktop } from "./components/ActivoFormDesktop";
 import { ActivoEditWithScopeDesktop } from "./components/ActivoEditWithScopeDesktop";
 import { ActivosAmbienteView } from "./components/ActivosAmbienteView";
@@ -55,6 +55,7 @@ type EntidadesFlow =
       type: "ambientes";
       entidadId: string;
       initialTab?: "ambientes" | "responsables" | "sucursales";
+      sedeFocus?: { id: string; nombre: string };
     }
   | { type: "activos"; context: AmbienteContext }
   | { type: "register"; context: AmbienteContext; initialCodigo?: string }
@@ -258,6 +259,15 @@ function MainApp({ userId }: { userId: string; email: string }) {
     setEntidadesFlow({ type: "ambientes", entidadId: entidadIdTarget });
   }
 
+  function goSedeAmbientes(entidadIdTarget: string, sedeId: string, sedeNombre: string) {
+    setEntidadId(entidadIdTarget);
+    setEntidadesFlow({
+      type: "ambientes",
+      entidadId: entidadIdTarget,
+      sedeFocus: { id: sedeId, nombre: sedeNombre },
+    });
+  }
+
   function goResponsables(entidadIdTarget: string) {
     setEntidadId(entidadIdTarget);
     setEntidadesFlow({
@@ -323,75 +333,107 @@ function MainApp({ userId }: { userId: string; email: string }) {
 
   const drillEntidad = entidades.find((e) => e.id === drillEntidadId) ?? entidad;
 
+  function navigateAmbienteFromContext(
+    context: AmbienteContext,
+    ambienteId: string,
+    ambienteNombre: string,
+  ) {
+    if (ambienteId === context.ambienteId) return;
+    goActivosAmbiente({
+      ...context,
+      ambienteId,
+      ambienteNombre,
+    });
+  }
+
+  const sedeBreadcrumbLink = (context: AmbienteContext) =>
+    context.sedeId && context.sedeNombre?.trim()
+      ? {
+          onClick: () =>
+            goSedeAmbientes(context.entidadId, context.sedeId, context.sedeNombre!.trim()),
+        }
+      : undefined;
+
   let subheader: AppSubheader | undefined;
 
   if (mainNav === "entidades") {
     if (entidadesFlow.type === "ambientes" && drillEntidad) {
-      subheader = {
-        breadcrumbs: [
-          { label: "Entidades", onClick: goEntidadesList },
-          { label: drillEntidad.nombre },
-        ],
-        subtitle: drillEntidad.ruc
-          ? `RUC ${drillEntidad.ruc} · Ambientes, responsables y sucursales`
-          : "Ambientes, responsables y sucursales",
-      };
+      subheader = entidadesFlow.sedeFocus
+        ? {
+            breadcrumbs: [
+              { label: "Entidades", onClick: goEntidadesList },
+              {
+                label: drillEntidad.nombre,
+                onClick: () => goAmbientes(entidadesFlow.entidadId),
+              },
+              { label: entidadesFlow.sedeFocus.nombre },
+            ],
+            subtitle: `Ambientes de la sucursal · ${entidadesFlow.sedeFocus.nombre}`,
+          }
+        : {
+            breadcrumbs: [
+              { label: "Entidades", onClick: goEntidadesList },
+              { label: drillEntidad.nombre },
+            ],
+            subtitle: drillEntidad.ruc
+              ? `RUC ${drillEntidad.ruc} · Ambientes, responsables y sucursales`
+              : "Ambientes, responsables y sucursales",
+          };
     } else if (entidadesFlow.type === "activos") {
       subheader = {
-        breadcrumbs: withSedeBreadcrumb(
-          [
-            {
-              label: drillEntidad?.nombre ?? "Entidad",
-              onClick: () => goAmbientes(entidadesFlow.context.entidadId),
-            },
-            { label: entidadesFlow.context.ambienteNombre },
-          ],
-          entidadesFlow.context.sedeNombre,
-          1,
-        ),
+        breadcrumbs: buildAmbienteContextBreadcrumbs({
+          entidadLabel: drillEntidad?.nombre ?? "Entidad",
+          onEntidadClick: () => goAmbientes(entidadesFlow.context.entidadId),
+          context: entidadesFlow.context,
+          sedeLink: sedeBreadcrumbLink(entidadesFlow.context),
+          onAmbienteNavigate: (ambienteId, ambienteNombre) =>
+            navigateAmbienteFromContext(entidadesFlow.context, ambienteId, ambienteNombre),
+        }),
         subtitle: entidadesFlow.context.ambienteResponsable
           ? `Responsable: ${entidadesFlow.context.ambienteResponsable}`
           : undefined,
       };
     } else if (entidadesFlow.type === "register") {
       subheader = {
-        breadcrumbs: withSedeBreadcrumb(
-          [
-            {
-              label: drillEntidad?.nombre ?? "Entidad",
-              onClick: () => goAmbientes(entidadesFlow.context.entidadId),
-            },
-            {
-              label: entidadesFlow.context.ambienteNombre,
-              onClick: () => goActivosListFromContext(entidadesFlow.context),
-            },
-            { label: "Crear activo" },
-          ],
-          entidadesFlow.context.sedeNombre,
-          1,
-        ),
+        breadcrumbs: buildAmbienteContextBreadcrumbs({
+          entidadLabel: drillEntidad?.nombre ?? "Entidad",
+          onEntidadClick: () => goAmbientes(entidadesFlow.context.entidadId),
+          context: entidadesFlow.context,
+          sedeLink: sedeBreadcrumbLink(entidadesFlow.context),
+          trailing: [{ label: "Crear activo" }],
+          onAmbienteNavigate: (ambienteId, ambienteNombre) => {
+            if (ambienteId === entidadesFlow.context.ambienteId) return;
+            setEntidadesFlow({
+              type: "register",
+              context: { ...entidadesFlow.context, ambienteId, ambienteNombre },
+              initialCodigo: entidadesFlow.initialCodigo,
+            });
+          },
+        }),
       };
     } else if (entidadesFlow.type === "edit") {
       subheader = {
-        breadcrumbs: withSedeBreadcrumb(
-          [
-            {
-              label: drillEntidad?.nombre ?? "Entidad",
-              onClick: () => goAmbientes(entidadesFlow.context.entidadId),
-            },
-            {
-              label: entidadesFlow.context.ambienteNombre,
-              onClick: () => goActivosListFromContext(entidadesFlow.context),
-            },
+        breadcrumbs: buildAmbienteContextBreadcrumbs({
+          entidadLabel: drillEntidad?.nombre ?? "Entidad",
+          onEntidadClick: () => goAmbientes(entidadesFlow.context.entidadId),
+          context: entidadesFlow.context,
+          sedeLink: sedeBreadcrumbLink(entidadesFlow.context),
+          trailing: [
             {
               label: entidadesFlow.activo.nombre,
               onClick: () => goActivosListFromContext(entidadesFlow.context),
             },
             { label: "Editar activo" },
           ],
-          entidadesFlow.context.sedeNombre,
-          1,
-        ),
+          onAmbienteNavigate: (ambienteId, ambienteNombre) => {
+            if (ambienteId === entidadesFlow.context.ambienteId) return;
+            setEntidadesFlow({
+              type: "edit",
+              activo: entidadesFlow.activo,
+              context: { ...entidadesFlow.context, ambienteId, ambienteNombre },
+            });
+          },
+        }),
       };
     }
   } else if (mainNav === "inventario") {
@@ -441,6 +483,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
           entidad={drillEntidad}
           entidadId={entidadesFlow.entidadId}
           initialTab={entidadesFlow.initialTab}
+          sedeFocus={entidadesFlow.sedeFocus}
           drillDown
           online={online}
           onViewActivos={(amb) =>
@@ -548,7 +591,6 @@ function MainApp({ userId }: { userId: string; email: string }) {
           onIrAmbiente={goAmbienteFromActivo}
           onAbrirAmbienteDestino={goAmbienteDestino}
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
-          onActivosImported={() => void refreshActivos()}
         />
       )}
 

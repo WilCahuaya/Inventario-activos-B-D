@@ -5,8 +5,10 @@ import type {
   CatalogoCampoOpciones,
   CatalogoOpcionTipo,
   CreateCatalogoNacionalInput,
+  CuentaContable,
   UpdateCatalogoPropioInput,
   UpdateCatalogoNacionalContabilidadInput,
+  UpsertCuentaContableInput,
 } from "@inventario/types";
 import {
   buildCatalogoCampoOpciones,
@@ -17,13 +19,56 @@ import {
   isCatalogoNacionalOficial,
   minCatalogoQueryLength,
   nextCodigoCatalogoPropioFromMax,
+  normalizeCuentaCodigo,
   shouldRegistrarCatalogoOpcionPersonalizada,
   suggestGrupoForDenominacion,
   validarCreateCatalogoCuentaOrdenInput,
   validarUpdateCatalogoPropioInput,
+  validarUpsertCuentaContableInput,
 } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
+
+async function ensureCuentaContableForCatalogo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  cuenta_codigo: string | null,
+  nombre: string | null,
+): Promise<{ error?: string }> {
+  if (!cuenta_codigo) return {};
+
+  const nombreTrim = nombre?.trim() || null;
+  const { data: existing, error: fetchError } = await supabase
+    .from("cuentas_contables")
+    .select("codigo, nombre")
+    .eq("codigo", cuenta_codigo)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+
+  if (!existing) {
+    if (!nombreTrim) {
+      return {
+        error: `La cuenta contable ${cuenta_codigo} no existe. Indique el nombre para crearla.`,
+      };
+    }
+    const { error } = await supabase.rpc("upsert_cuenta_contable", {
+      p_codigo: cuenta_codigo,
+      p_nombre: nombreTrim,
+    });
+    if (error) return { error: error.message };
+    return {};
+  }
+
+  if (nombreTrim && nombreTrim !== existing.nombre) {
+    const { error } = await supabase.rpc("upsert_cuenta_contable", {
+      p_codigo: cuenta_codigo,
+      p_nombre: nombreTrim,
+    });
+    if (error) return { error: error.message };
+  }
+
+  return {};
+}
 
 export async function searchCatalogo(query: string, limit = 20): Promise<CatalogoNacional[]> {
   const profile = await getProfile();
@@ -272,6 +317,13 @@ export async function createCatalogoNacional(
     return { error: `El código ${payload.codigo} ya existe en el catálogo.` };
   }
 
+  const cuentaError = await ensureCuentaContableForCatalogo(
+    supabase,
+    payload.cuenta_codigo,
+    payload.contabilidad,
+  );
+  if (cuentaError.error) return { error: cuentaError.error };
+
   const { data, error } = await supabase
     .from("catalogo_nacional")
     .insert(payload)
@@ -310,6 +362,13 @@ export async function updateCatalogoPropio(
   }
 
   const payload = buildUpdateCatalogoPropioPayload(input);
+  const cuentaError = await ensureCuentaContableForCatalogo(
+    supabase,
+    payload.cuenta_codigo,
+    payload.contabilidad,
+  );
+  if (cuentaError.error) return { error: cuentaError.error };
+
   const { data, error } = await supabase
     .from("catalogo_nacional")
     .update(payload)
@@ -340,6 +399,7 @@ export async function updateCatalogoNacionalContabilidad(
     p_codigo: trimmed,
     p_cuenta_codigo: payload.cuenta_codigo ?? "",
     p_contabilidad: payload.contabilidad ?? "",
+    p_depreciacion: payload.depreciacion ?? "",
   });
 
   if (error) return { error: error.message };
@@ -387,6 +447,70 @@ export async function deleteCatalogoPropio(
     .delete()
     .eq("codigo", trimmed)
     .eq("origen", "PROPIO");
+
+  if (error) return { error: error.message };
+  return {};
+}
+
+export async function searchCuentasContables(
+  query = "",
+  limit = 30,
+): Promise<CuentaContable[]> {
+  const profile = await getProfile();
+  if (!profile) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("search_cuentas_contables", {
+    p_query: query.trim(),
+    p_limit: limit,
+  });
+
+  if (error) {
+    console.error("search_cuentas_contables:", error.message);
+    return [];
+  }
+
+  return (data ?? []) as CuentaContable[];
+}
+
+export async function listCuentasContables(query = ""): Promise<CuentaContable[]> {
+  return searchCuentasContables(query, 100);
+}
+
+export async function upsertCuentaContable(
+  input: UpsertCuentaContableInput,
+): Promise<{ data?: CuentaContable; error?: string }> {
+  await requireProfile("CONTADOR");
+
+  const validationError = validarUpsertCuentaContableInput(input);
+  if (validationError) return { error: validationError };
+
+  const codigo = normalizeCuentaCodigo(input.codigo);
+  if (!codigo) return { error: "Código de cuenta contable inválido." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("upsert_cuenta_contable", {
+    p_codigo: codigo,
+    p_nombre: input.nombre.trim(),
+  });
+
+  if (error) return { error: error.message };
+  return { data: data as CuentaContable };
+}
+
+export async function deleteCuentaContable(codigo: string): Promise<{ error?: string }> {
+  await requireProfile("CONTADOR");
+
+  const trimmed = codigo.trim();
+  const normalizado = normalizeCuentaCodigo(trimmed);
+  if (!normalizado || !/^\d{4,5}$/.test(normalizado)) {
+    return { error: "Código de cuenta contable inválido." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_cuenta_contable", {
+    p_codigo: normalizado,
+  });
 
   if (error) return { error: error.message };
   return {};

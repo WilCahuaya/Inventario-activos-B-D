@@ -113,6 +113,9 @@ function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadCon
       <div className="space-y-2">
         <Label htmlFor="direccion">Dirección</Label>
         <Input id="direccion" name="direccion" defaultValue={entidad?.direccion ?? ""} />
+        <p className="text-xs text-muted-foreground">
+          Corresponde a la sede Principal de la entidad.
+        </p>
       </div>
       <p className="text-sm font-medium text-muted-foreground">
         Administrador de la entidad

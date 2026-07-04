@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Activo, EstadoRegistro } from "@inventario/types";
-import { ActivoEditScopeNav, type ActivoEditScope, withSedeBreadcrumb } from "@inventario/ui/panel";
+import {
+  ActivoEditScopeNav,
+  type ActivoEditScope,
+  AMBIENTE_BREADCRUMB_INDEX_AFTER_SEDE,
+  withAmbienteBreadcrumbSelect,
+  withSedeBreadcrumb,
+} from "@inventario/ui/panel";
 import { ActivoForm } from "./ActivoForm";
 import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
 import { AmbienteReportesExport } from "./AmbienteReportesExport";
 import type { FichaAsignacionExportMeta } from "@/lib/actions/ficha-asignacion-meta";
+import { fetchAmbientesPorSedeWeb } from "@/lib/ambiente-nav";
 import { useEjemplaresResumen } from "@/hooks/useEjemplaresResumen";
 import {
   PanelPageHeader,
@@ -79,19 +86,66 @@ export function ActivosAmbientePanel({
   const nuevoLabel = isAdmin || esAmbientePreregistro ? "+ Preregistrar activo" : "+ Nuevo activo";
   const editarLabel = isAdmin ? undefined : "Editar activo";
 
-  const listBreadcrumbs: PanelBreadcrumbItem[] = withSedeBreadcrumb(
-    isAdmin
-      ? [
-          { label: "Ambientes", href: "/admin/activos" },
-          { label: ambienteNombre },
-        ]
-      : [
-          { label: entidadNombre, href: `/contador/entidades/${entidadId}` },
-          { label: ambienteNombre },
-        ],
-    sedeNombre,
-    1,
+  const sedeBreadcrumbLink =
+    sedeId && sedeNombre?.trim()
+      ? isAdmin
+        ? { href: `/admin/sedes/${sedeId}` }
+        : { href: `/contador/entidades/${entidadId}/sedes/${sedeId}` }
+      : undefined;
+
+  const ambienteListHref = useCallback(
+    (targetAmbienteId: string) =>
+      isAdmin
+        ? `/admin/ambientes/${targetAmbienteId}`
+        : `/contador/entidades/${entidadId}/ambientes/${targetAmbienteId}`,
+    [entidadId, isAdmin],
   );
+
+  const handleAmbienteNav = useCallback(
+    (targetAmbienteId: string) => {
+      if (targetAmbienteId === ambienteId) return;
+      router.push(ambienteListHref(targetAmbienteId));
+    },
+    [ambienteId, ambienteListHref, router],
+  );
+
+  const ambienteSelectProps = useMemo(
+    () => ({
+      entidadId,
+      sedeId,
+      ambienteId,
+      ambienteNombre,
+      onAmbienteChange: handleAmbienteNav,
+      fetchAmbientes: fetchAmbientesPorSedeWeb,
+    }),
+    [entidadId, sedeId, ambienteId, ambienteNombre, handleAmbienteNav],
+  );
+
+  const listBreadcrumbs: PanelBreadcrumbItem[] = useMemo(() => {
+    const base = withSedeBreadcrumb(
+      isAdmin
+        ? [
+            { label: "Ambientes", href: "/admin/activos" },
+            { label: ambienteNombre },
+          ]
+        : [
+            { label: entidadNombre, href: `/contador/entidades/${entidadId}` },
+            { label: ambienteNombre },
+          ],
+      sedeNombre,
+      1,
+      sedeBreadcrumbLink,
+    );
+    return withAmbienteBreadcrumbSelect(base, AMBIENTE_BREADCRUMB_INDEX_AFTER_SEDE, ambienteSelectProps);
+  }, [
+    isAdmin,
+    ambienteNombre,
+    entidadNombre,
+    entidadId,
+    sedeNombre,
+    sedeBreadcrumbLink,
+    ambienteSelectProps,
+  ]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -127,17 +181,22 @@ export function ActivosAmbientePanel({
           ? "Editar preregistro"
           : "Editar activo";
 
-    const editBreadcrumbs: PanelBreadcrumbItem[] = withSedeBreadcrumb(
-      [
-        ...(isAdmin
-          ? [{ label: "Ambientes", href: "/admin/activos" }]
-          : [{ label: entidadNombre, href: `/contador/entidades/${entidadId}` }]),
-        { label: ambienteNombre, onClick: () => setEditActivo(null) },
-        { label: editActivo.nombre },
-        { label: editTitle },
-      ],
-      sedeNombre,
-      1,
+    const editBreadcrumbs: PanelBreadcrumbItem[] = withAmbienteBreadcrumbSelect(
+      withSedeBreadcrumb(
+        [
+          ...(isAdmin
+            ? [{ label: "Ambientes", href: "/admin/activos" }]
+            : [{ label: entidadNombre, href: `/contador/entidades/${entidadId}` }]),
+          { label: ambienteNombre, onClick: () => setEditActivo(null) },
+          { label: editActivo.nombre },
+          { label: editTitle },
+        ],
+        sedeNombre,
+        1,
+        sedeBreadcrumbLink,
+      ),
+      AMBIENTE_BREADCRUMB_INDEX_AFTER_SEDE,
+      ambienteSelectProps,
     );
 
     return (

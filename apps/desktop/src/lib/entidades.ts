@@ -1,6 +1,7 @@
 import type { Entidad, EntidadConConteo } from "@inventario/types";
 import { normalizeResponsableDni, validarAdminEntidadDni } from "@inventario/types";
 import { getSupabaseClient } from "./supabase";
+import { syncSedePrincipalDireccionFromEntidad } from "./sede-principal-direccion";
 import { syncAdminResponsableForEntidad } from "./responsables-admin-sync";
 
 export interface CreateEntidadInput {
@@ -121,6 +122,12 @@ export async function createEntidad(
 
   if (error) return { error: error.message };
 
+  await syncSedePrincipalDireccionFromEntidad(
+    supabase,
+    (data as Entidad).id,
+    (data as Entidad).direccion,
+  );
+
   await syncAdminResponsableForEntidad(
     supabase,
     (data as Entidad).id,
@@ -187,6 +194,12 @@ export async function updateEntidad(
     .single();
 
   if (error) return { error: error.message };
+
+  await syncSedePrincipalDireccionFromEntidad(
+    supabase,
+    (data as Entidad).id,
+    (data as Entidad).direccion,
+  );
 
   await syncAdminResponsableForEntidad(
     supabase,

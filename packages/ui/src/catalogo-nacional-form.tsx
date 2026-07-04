@@ -7,9 +7,12 @@ import {
   type CatalogoCampoOpciones,
   type CatalogoOpcionTipo,
   type CreateCatalogoNacionalInput,
+  type CuentaContable,
+  validarCuentaContableParaCatalogo,
 } from "@inventario/types";
 import { Button, Input, Label } from "./components";
 import { ClaseCatalogoCombobox } from "./clase-catalogo-combobox";
+import { CuentaContableFields } from "./cuenta-contable-fields";
 import { GrupoCatalogoCombobox } from "./grupo-catalogo-combobox";
 
 export interface CatalogoNacionalFormProps {
@@ -21,6 +24,7 @@ export interface CatalogoNacionalFormProps {
   gruposLoading?: boolean;
   clasesLoading?: boolean;
   pending?: boolean;
+  searchCuentasContables: (query: string) => Promise<CuentaContable[]>;
   onSuggestGrupo?: (denominacion: string) => Promise<string | null>;
   onRegisterOpcionPersonalizada?: (
     tipo: CatalogoOpcionTipo,
@@ -43,6 +47,7 @@ export function CatalogoNacionalForm({
   gruposLoading = false,
   clasesLoading = false,
   pending = false,
+  searchCuentasContables,
   onSuggestGrupo,
   onRegisterOpcionPersonalizada,
   onDeleteOpcionPersonalizada,
@@ -52,8 +57,10 @@ export function CatalogoNacionalForm({
   const [denominacion, setDenominacion] = useState(initialDenominacion);
   const [grupo, setGrupo] = useState("");
   const [clase, setClase] = useState("");
-  const [cuentaCodigo, setCuentaCodigo] = useState("");
-  const [contabilidad, setContabilidad] = useState(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+  const [cuentaCodigo, setCuentaCodigo] = useState(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+  const [contabilidad, setContabilidad] = useState("");
+  const [cuentaError, setCuentaError] = useState<string | null>(null);
+  const [codigosCuentaMaestra, setCodigosCuentaMaestra] = useState<string[]>([]);
   const [grupoSugerido, setGrupoSugerido] = useState<string | null>(null);
   const [grupoManual, setGrupoManual] = useState(false);
   const [sugiriendoGrupo, setSugiriendoGrupo] = useState(false);
@@ -83,8 +90,9 @@ export function CatalogoNacionalForm({
     setDenominacion(initialDenominacion);
     setGrupo("");
     setClase("");
-    setCuentaCodigo("");
-    setContabilidad(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+    setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+    setContabilidad("");
+    setCuentaError(null);
     setGrupoSugerido(null);
     setGrupoManualState(false);
   }, [initialDenominacion, codigo]);
@@ -149,6 +157,14 @@ export function CatalogoNacionalForm({
       className="grid gap-4 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
+        const err = validarCuentaContableParaCatalogo(cuentaCodigo, contabilidad, {
+          codigosEnMaestra: codigosCuentaMaestra,
+        });
+        if (err) {
+          setCuentaError(err);
+          return;
+        }
+        setCuentaError(null);
         void onSubmit({
           codigo,
           denominacion,
@@ -186,17 +202,27 @@ export function CatalogoNacionalForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="catalogo_cuenta_codigo">Cuenta contable</Label>
-        <Input
-          id="catalogo_cuenta_codigo"
-          value={cuentaCodigo}
-          disabled={camposDeshabilitados}
-          placeholder="Ej. 2524"
-          className="font-mono"
-          onChange={(e) => setCuentaCodigo(e.target.value)}
-        />
-      </div>
+      <CuentaContableFields
+        codigo={cuentaCodigo}
+        nombre={contabilidad}
+        onCodigoChange={(value) => {
+          setCuentaCodigo(value);
+          setCuentaError(null);
+        }}
+        onNombreChange={(value) => {
+          setContabilidad(value);
+          setCuentaError(null);
+        }}
+        searchCuentas={searchCuentasContables}
+        disabled={camposDeshabilitados}
+        codigoId="catalogo_cuenta_codigo"
+        nombreId="catalogo_contabilidad"
+        allowCreateNew
+        onCodigosMaestraLoaded={setCodigosCuentaMaestra}
+      />
+      {cuentaError && (
+        <p className="text-sm text-destructive sm:col-span-2">{cuentaError}</p>
+      )}
 
       <div>
         <ClaseCatalogoCombobox
@@ -209,17 +235,6 @@ export function CatalogoNacionalForm({
           onChange={setClase}
           onRegisterPersonalizada={(valor) => handleRegister("clase", valor)}
           onDeletePersonalizada={(valor) => handleDelete("clase", valor)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="catalogo_contabilidad">Contabilidad</Label>
-        <Input
-          id="catalogo_contabilidad"
-          value={contabilidad}
-          disabled={camposDeshabilitados}
-          placeholder="Ej. 2524 Bienes de cuenta de orden"
-          onChange={(e) => setContabilidad(e.target.value)}
         />
       </div>
 

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { Ambiente, Sede, SedeConConteo } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
+import { loadSedesForEntidad } from "@/lib/sede-principal-direccion";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
 
 function revalidateEntidad(entidadId: string, sedeId?: string) {
@@ -20,15 +21,8 @@ function revalidateEntidad(entidadId: string, sedeId?: string) {
 
 export async function getSedePrincipal(entidadId: string): Promise<Sede | null> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("sedes")
-    .select("*")
-    .eq("entidad_id", entidadId)
-    .eq("es_principal", true)
-    .eq("activo", true)
-    .maybeSingle();
-
-  return (data as Sede) ?? null;
+  const sedes = await loadSedesForEntidad(supabase, entidadId);
+  return sedes.find((sede) => sede.es_principal) ?? null;
 }
 
 export async function getSede(sedeId: string): Promise<Sede | null> {
@@ -73,15 +67,9 @@ export async function listSedesConConteo(entidadId: string): Promise<SedeConCont
   if (!profile) return [];
 
   const supabase = await createClient();
-  const { data: sedes, error } = await supabase
-    .from("sedes")
-    .select("*")
-    .eq("entidad_id", entidadId)
-    .eq("activo", true);
+  const sedes = await loadSedesForEntidad(supabase, entidadId);
 
-  if (error || !sedes) return [];
-
-  const sorted = (sedes as Sede[]).sort((a, b) => {
+  const sorted = sedes.sort((a, b) => {
     if (a.es_principal !== b.es_principal) return a.es_principal ? -1 : 1;
     return a.nombre.localeCompare(b.nombre);
   });
@@ -103,15 +91,7 @@ export async function listSedes(entidadId: string): Promise<Sede[]> {
   if (!profile) return [];
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("sedes")
-    .select("*")
-    .eq("entidad_id", entidadId)
-    .eq("activo", true)
-    .order("nombre");
-
-  if (error) return [];
-  return (data ?? []) as Sede[];
+  return loadSedesForEntidad(supabase, entidadId);
 }
 
 export type AmbienteConSede = Ambiente & {

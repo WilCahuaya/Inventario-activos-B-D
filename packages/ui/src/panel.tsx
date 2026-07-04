@@ -4,6 +4,13 @@ import { PanelBreadcrumbs, type PanelBreadcrumbItem } from "./panel-breadcrumbs"
 
 export type { PanelBreadcrumbItem };
 export { PanelBreadcrumbs, withSedeBreadcrumb } from "./panel-breadcrumbs";
+export {
+  AmbienteBreadcrumbSelect,
+  AMBIENTE_BREADCRUMB_INDEX_AFTER_SEDE,
+  withAmbienteBreadcrumbSelect,
+  type AmbienteNavOption,
+  type FetchAmbientesPorSede,
+} from "./ambiente-breadcrumb-select";
 
 export const panelCardClass =
   "overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm";
@@ -122,29 +129,34 @@ export function PanelTabs<T extends string>({
   tabs,
   value,
   onChange,
+  actions,
 }: {
   tabs: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
+  actions?: ReactNode;
 }) {
   return (
-    <div className="flex gap-1 border-b border-border/60" role="tablist">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          role="tab"
-          aria-selected={value === tab.id}
-          className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-            value === tab.id
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          onClick={() => onChange(tab.id)}
-        >
-          {tab.label}
-        </button>
-      ))}
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/60">
+      <div className="flex gap-1" role="tablist">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={value === tab.id}
+            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              value === tab.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => onChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {actions ? <div className="flex shrink-0 pb-2">{actions}</div> : null}
     </div>
   );
 }
@@ -281,6 +293,9 @@ export {
   inventarioCuentaContable,
   inventarioDepreciacionFila,
   inventarioDescripcion,
+  inventarioTdAccionesClass,
+  inventarioTdComprobanteClass,
+  inventarioTdFechaClass,
   formatInventarioListaTexto,
 } from "./inventario-table-cells";
 export {
@@ -298,6 +313,7 @@ export * from "./panel-nav-icons";
 export * from "./panel-sidebar";
 export * from "./reportes-panel";
 export * from "./ambiente-reportes-export-menu";
+export * from "./ambientes-datos-menu";
 export * from "./activo-edit-scope-nav";
 export * from "./responsive-layout";
 export * from "./sede-nav-cards";

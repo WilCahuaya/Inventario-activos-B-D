@@ -75,7 +75,7 @@ export async function parseImportActivosWorkbook(
     return { filas: [], error: "No se reconocieron las columnas del archivo." };
   }
 
-  const required = ["Sucursal", "Ambiente", "Código catálogo", "Nombre del bien"] as const;
+  const required = ["Sucursal", "Ambiente", "Código catálogo"] as const;
   const mappedHeaders = new Set(headerMap.values());
   const missing = required.filter((h) => !mappedHeaders.has(h));
   if (missing.length > 0) {
@@ -112,22 +112,24 @@ export async function downloadImportActivosPlantilla(
 ): Promise<void> {
   const XLSX = await import("xlsx");
   const ejemplo: ImportActivoFila = {
-    Sucursal: ubicaciones[0]?.sedeNombre ?? "Principal",
-    Ambiente: ubicaciones[0]?.ambienteNombre ?? "",
-    "Código catálogo": "12345678",
-    "Nombre del bien": "Ejemplo de bien",
     Categoría: "Activo",
-    Estado: "Bueno",
+    "Código catálogo": "12345678",
     Marca: "",
     Modelo: "",
     Serie: "",
     Color: "",
     Medidas: "",
-    Descripción: "",
-    "Fecha adq.": "",
-    "Precio adq.": "",
+    Detalle: "",
+    Estado: "Bueno",
+    "Fecha de adquisición": "",
+    "Precio de adquisición (S/)": "",
+    "Valor de mercado (S/)": "",
     "% Deprec.": "",
-    Observación: "",
+    Observaciones: "",
+    "Código cuenta contable": "",
+    "Nombre cuenta contable": "",
+    Sucursal: ubicaciones[0]?.sedeNombre ?? "Principal",
+    Ambiente: ubicaciones[0]?.ambienteNombre ?? "",
   };
 
   const plantillaRows = [[...IMPORT_ACTIVOS_HEADERS], IMPORT_ACTIVOS_HEADERS.map((h) => ejemplo[h])];

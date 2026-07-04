@@ -1,6 +1,6 @@
 "use client";
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, DragEvent, InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 
@@ -141,6 +141,18 @@ function FileClearIcon({ className }: { className?: string }) {
   );
 }
 
+function fileMatchesAccept(file: File, accept?: string): boolean {
+  if (!accept?.trim()) return true;
+  const parts = accept.split(",").map((part) => part.trim()).filter(Boolean);
+  const name = file.name.toLowerCase();
+  const type = file.type.toLowerCase();
+  return parts.some((part) => {
+    if (part.startsWith(".")) return name.endsWith(part.toLowerCase());
+    if (part.endsWith("/*")) return type.startsWith(part.slice(0, -1).toLowerCase());
+    return type === part.toLowerCase();
+  });
+}
+
 export function FileInput({
   id,
   accept,
@@ -151,6 +163,9 @@ export function FileInput({
   buttonLabel = "Seleccionar",
   emptyLabel = "Ningún archivo seleccionado",
   hint,
+  variant = "inline",
+  dropzoneLabel = "Arrastre el archivo aquí",
+  dropzoneHint = "o haga clic para seleccionarlo",
 }: {
   id?: string;
   accept?: string;
@@ -161,16 +176,138 @@ export function FileInput({
   buttonLabel?: string;
   emptyLabel?: string;
   hint?: string;
+  variant?: "inline" | "dropzone";
+  dropzoneLabel?: string;
+  dropzoneHint?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [rejectHint, setRejectHint] = useState<string | null>(null);
+
+  function applyFile(next: File | null) {
+    setRejectHint(null);
+    onFileChange(next);
+  }
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    onFileChange(event.target.files?.[0] ?? null);
+    const picked = event.target.files?.[0] ?? null;
+    if (picked && !fileMatchesAccept(picked, accept)) {
+      setRejectHint("Tipo de archivo no permitido.");
+      return;
+    }
+    applyFile(picked);
   }
 
   function handleClear() {
-    onFileChange(null);
+    applyFile(null);
     if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function handleDragOver(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (disabled) return;
+    setDragActive(true);
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+  }
+
+  function handleDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+    if (disabled) return;
+
+    const dropped = event.dataTransfer.files?.[0] ?? null;
+    if (!dropped) return;
+    if (!fileMatchesAccept(dropped, accept)) {
+      setRejectHint("Tipo de archivo no permitido.");
+      return;
+    }
+    applyFile(dropped);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  if (variant === "dropzone") {
+    return (
+      <div className="space-y-1">
+        <div
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          onKeyDown={(event) => {
+            if (disabled) return;
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              inputRef.current?.click();
+            }
+          }}
+          onClick={() => !disabled && inputRef.current?.click()}
+          onDragEnter={handleDragOver}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={cn(
+            "relative flex min-h-[8.5rem] w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors",
+            dragActive
+              ? "border-primary bg-primary/10"
+              : "border-border/70 bg-muted/20 hover:border-primary/50 hover:bg-muted/35",
+            file && "border-solid border-primary/40 bg-primary/5",
+            disabled && "cursor-not-allowed opacity-50",
+            className,
+          )}
+        >
+          <input
+            ref={inputRef}
+            id={id}
+            type="file"
+            accept={accept}
+            disabled={disabled}
+            className="sr-only"
+            onChange={handleChange}
+          />
+          <FileUploadIcon
+            className={cn("h-8 w-8", dragActive || file ? "text-primary" : "text-muted-foreground")}
+          />
+          {file ? (
+            <>
+              <p className="max-w-full truncate text-sm font-medium text-foreground" title={file.name}>
+                {file.name}
+              </p>
+              <p className="text-xs text-muted-foreground">Archivo listo para importar</p>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleClear();
+                  }}
+                  className="mt-1 text-xs font-medium text-primary hover:underline"
+                >
+                  Cambiar archivo
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-foreground">{dropzoneLabel}</p>
+              <p className="text-xs text-muted-foreground">{dropzoneHint}</p>
+              <span className="mt-1 inline-flex h-8 items-center rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground">
+                {buttonLabel}
+              </span>
+            </>
+          )}
+        </div>
+        {(rejectHint || hint) && (
+          <p className={cn("text-xs", rejectHint ? "text-destructive" : "text-muted-foreground")}>
+            {rejectHint ?? hint}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (

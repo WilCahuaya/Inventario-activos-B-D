@@ -62,6 +62,39 @@
     border-color: hsl(192 18% 88% / 0.1);
   }
 
+  /** Tarjetas del detalle de activo — contorno legible en tema oscuro. */
+  .detalle-surface {
+    @apply rounded-xl border border-border/60 shadow-sm;
+  }
+
+  .dark .detalle-surface {
+    border-color: hsl(192 18% 88% / 0.18);
+  }
+
+  .detalle-surface-header {
+    @apply border-b border-border/50 bg-muted/20;
+  }
+
+  .dark .detalle-surface-header {
+    border-color: hsl(192 18% 88% / 0.14);
+  }
+
+  .detalle-surface-divider {
+    @apply border-r border-border/50;
+  }
+
+  .dark .detalle-surface-divider {
+    border-color: hsl(192 18% 88% / 0.14);
+  }
+
+  .detalle-surface-button {
+    @apply rounded-lg border border-border/60 bg-muted/10 transition-colors hover:bg-muted/25;
+  }
+
+  .dark .detalle-surface-button {
+    border-color: hsl(192 18% 88% / 0.16);
+  }
+
   /* Contenedor principal del panel (web + desktop) */
   .panel-page {
     @apply mx-auto w-full min-w-0 max-w-full;
@@ -122,17 +155,17 @@
     @apply hidden text-xs text-muted-foreground sm:block md:text-sm;
   }
 
-  /** Tarjetas hasta xl; tabla compacta xl–3xl; tabla completa 3xl+ */
+  /** Tabla inventario desde xl; el scroll horizontal lo maneja el contenedor padre. */
   .panel-data-table-wrap {
-    @apply hidden min-w-0 w-full max-w-full overflow-x-auto xl:block;
+    @apply hidden min-w-0 w-full max-w-full xl:block;
   }
 
   .panel-data-table-compact {
-    @apply xl:block 3xl:hidden;
+    @apply hidden;
   }
 
   .panel-data-table-full {
-    @apply hidden 3xl:block;
+    @apply block min-w-0;
   }
 
   .panel-data-cards-wrap {
@@ -197,10 +230,10 @@
 
   .inventario-activos-table--preregistro th,
   .inventario-activos-table--preregistro td {
-    @apply px-2 py-1.5 sm:px-2.5;
+    @apply px-2.5 py-2;
   }
 
-  .inventario-activos-table--preregistro td:last-child {
+  .inventario-activos-table td.inventario-td-acciones {
     @apply px-1.5;
   }
 
@@ -286,6 +319,41 @@
 
   .scrollbar-none::-webkit-scrollbar {
     display: none;
+  }
+
+  .scrollbar-themed {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.45) hsl(var(--muted) / 0.65);
+  }
+
+  .scrollbar-themed::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .scrollbar-themed::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.65);
+  }
+
+  .scrollbar-themed::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.4);
+    border: 2px solid hsl(var(--muted) / 0.65);
+    border-radius: 9999px;
+    background-clip: padding-box;
+  }
+
+  .scrollbar-themed::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.58);
+  }
+
+  .scrollbar-themed::-webkit-scrollbar-corner {
+    background: hsl(var(--muted) / 0.65);
+  }
+
+  .scrollbar-themed::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   html.dialog-open main {

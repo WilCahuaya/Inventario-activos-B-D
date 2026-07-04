@@ -12,13 +12,15 @@ export const panelFilterRowClass = "panel-filter-row";
 
 export const panelToolbarActionsClass = "panel-toolbar-actions";
 
-export const panelDataTableWrapClass = "panel-data-table-wrap";
+export const panelDataTableWrapClass = "panel-data-table-wrap scrollbar-themed";
 
 export const panelDataTableCompactClass = "panel-data-table-compact";
 
 export const panelDataTableFullClass = "panel-data-table-full";
 
 export const panelDataCardsWrapClass = "panel-data-cards-wrap";
+
+export const scrollbarThemedClass = "scrollbar-themed";
 
 export const panelMainScrollClass =
   "scrollbar-none min-w-0 flex-1 overflow-x-clip overflow-y-auto panel-main-padding";

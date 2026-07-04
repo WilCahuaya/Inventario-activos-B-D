@@ -6,7 +6,7 @@ export type EstadoRegistro = "PREREGISTRADO" | "REGISTRADO" | "DADO_DE_BAJA";
 
 /** Nombre del ambiente sistema donde se alojan los preregistros de una entidad. */
 export function buildAmbientePreregistroNombre(year = new Date().getFullYear()): string {
-  return `Adquisiciones preregistrados ${year}`;
+  return `Adquisicion ${year}`;
 }
 
 /** Estado físico del bien */
@@ -507,6 +507,54 @@ export function formatActivoCodigoDisplay(activo: {
 }
 
 /** Etiqueta de cuenta contable (ej. 3362 Equipo de comunicación). */
+export const CUENTA_CONTABLE_CODIGO_RE = /^\d{1,6}$/;
+const CUENTA_CONTA_COMBINADA_RE = /^(\d{1,6})\s+(.+)$/;
+
+export function normalizeCuentaCodigo(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  return CUENTA_CONTABLE_CODIGO_RE.test(digits) ? digits : null;
+}
+
+export function normalizeNombreCuentaContable(
+  cuentaCodigo: string | null,
+  contabilidad?: string | null,
+): string | null {
+  let nombre = contabilidad?.trim().replace(/\s+/g, " ") ?? "";
+  if (!nombre) return null;
+  if (cuentaCodigo && (nombre === cuentaCodigo || nombre.startsWith(`${cuentaCodigo} `))) {
+    nombre = nombre.slice(cuentaCodigo.length).trim();
+  }
+  if (!nombre || nombre === cuentaCodigo) return null;
+  return nombre;
+}
+
+export function normalizeCuentaContableFields(
+  cuentaCodigo?: string | null,
+  contabilidad?: string | null,
+): { cuenta_codigo: string | null; contabilidad: string | null } {
+  let codigo = normalizeCuentaCodigo(cuentaCodigo);
+  let rawNombre = contabilidad?.trim().replace(/\s+/g, " ") ?? "";
+
+  if (!codigo && rawNombre) {
+    const soloCodigo = normalizeCuentaCodigo(rawNombre);
+    if (soloCodigo && rawNombre === soloCodigo) {
+      return { cuenta_codigo: soloCodigo, contabilidad: null };
+    }
+    const match = CUENTA_CONTA_COMBINADA_RE.exec(rawNombre);
+    if (match) {
+      codigo = match[1];
+      rawNombre = match[2].trim();
+    }
+  }
+
+  return {
+    cuenta_codigo: codigo,
+    contabilidad: normalizeNombreCuentaContable(codigo, rawNombre || null),
+  };
+}
+
 export function formatCuentaContableDisplay(
   cuentaCodigo?: string | null,
   contabilidad?: string | null,
@@ -598,10 +646,10 @@ export function calcValorNeto(
   return Math.max(VALOR_NETO_MINIMO_ACTIVO, neto);
 }
 
-/** Extrae el % anual de textos como "10 %", "10%" o "10,5 %". */
+/** Extrae el % anual de textos como "10 %", "10%" o "10,5 %". Acepta solo el número. */
 export function parsePorcentajeDepreciacion(text: string): number | null {
   const normalized = text.replace(/\u00a0/g, " ").trim();
-  const match = normalized.match(/(\d+(?:[.,]\d+)?)\s*%/);
+  const match = normalized.match(/^(\d+(?:[.,]\d+)?)\s*%?$/);
   if (!match) return null;
   const value = Number(match[1].replace(",", "."));
   return Number.isFinite(value) && value > 0 ? value : null;
@@ -681,11 +729,9 @@ export function buildNombreConsolidado(
   return `${base} ${partes.join(", ")}`;
 }
 
-/** Serie de comprobante: mayúsculas; primeros 4 caracteres + « - » + resto. */
+/** Serie de comprobante: mayúsculas; solo letras y números (sin guiones ni espacios). */
 export function formatComprobanteSerieInput(value: string): string {
-  const upper = value.replace(/\s*-\s*/g, "").toUpperCase();
-  if (upper.length <= 4) return upper;
-  return `${upper.slice(0, 4)} - ${upper.slice(4)}`;
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
 export function formatMedidas(
@@ -708,6 +754,33 @@ export const CATALOGO_ORIGEN_LABELS: Record<CatalogoOrigen, string> = {
 /** Mínimo de caracteres para buscar en catálogo (1 si solo dígitos, 2 si hay texto). */
 export function minCatalogoQueryLength(query: string): number {
   return /^\d+$/.test(query.trim()) ? 1 : 2;
+}
+
+/** Tope de resultados en búsqueda de catálogo (coincide con search_catalogo_nacional en BD). */
+export const CATALOGO_SEARCH_MAX_RESULTS = 50;
+
+/** Ítem del catálogo nacional SBN (tabla catalogo_nacional) */
+export interface CuentaContable {
+  codigo: string;
+  nombre: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UpsertCuentaContableInput {
+  codigo: string;
+  nombre: string;
+}
+
+export function validarUpsertCuentaContableInput(input: UpsertCuentaContableInput): string | null {
+  const codigo = normalizeCuentaCodigo(input.codigo);
+  if (!codigo || !/^\d{4,5}$/.test(codigo)) {
+    return "El código de cuenta contable debe tener 4 o 5 dígitos.";
+  }
+  if (!input.nombre?.trim()) {
+    return "El nombre de la cuenta contable es obligatorio.";
+  }
+  return null;
 }
 
 /** Ítem del catálogo nacional SBN (tabla catalogo_nacional) */
@@ -891,20 +964,63 @@ export function validarCreateCatalogoCuentaOrdenInput(
   if (!input.clase?.trim()) {
     return "Seleccione una clase del catálogo.";
   }
+  return validarCuentaContableParaCatalogo(input.cuenta_codigo, input.contabilidad);
+}
+
+/** Cuenta contable del ítem propio: vacío → 2524 (cuenta de orden). */
+export function resolveCatalogoPropioCuenta(
+  cuentaCodigo?: string | null,
+  nombre?: string | null,
+): { cuenta_codigo: string | null; contabilidad: string | null } {
+  const codigoRaw = cuentaCodigo?.trim() ?? "";
+  const nombreRaw = nombre?.trim() ?? "";
+  if (!codigoRaw && !nombreRaw) {
+    return {
+      cuenta_codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+      contabilidad: null,
+    };
+  }
+  return normalizeCuentaContableFields(cuentaCodigo, nombre);
+}
+
+export function validarCuentaContableParaCatalogo(
+  cuentaCodigo?: string | null,
+  nombre?: string | null,
+  options?: { codigosEnMaestra?: readonly string[] },
+): string | null {
+  const codigoRaw = cuentaCodigo?.trim() ?? "";
+  const nombreRaw = nombre?.trim() ?? "";
+  if (!codigoRaw && !nombreRaw) return null;
+
+  const cuenta = normalizeCuentaContableFields(cuentaCodigo, nombre);
+  if (!cuenta.cuenta_codigo) {
+    return "El código de cuenta contable debe tener entre 4 y 6 dígitos.";
+  }
+
+  const codigos = options?.codigosEnMaestra;
+  if (codigos) {
+    const existeEnMaestra = codigos.includes(cuenta.cuenta_codigo);
+    const esCuentaOrden = cuenta.cuenta_codigo === CATALOGO_CUENTA_ORDEN_CONTABILIDAD;
+    if (!existeEnMaestra && !esCuentaOrden && !nombreRaw) {
+      return `Indique el nombre para crear la cuenta contable ${cuenta.cuenta_codigo}.`;
+    }
+  }
+
   return null;
 }
 
 export function buildCreateCatalogoCuentaOrdenPayload(
   input: CreateCatalogoNacionalInput,
 ): Omit<CatalogoNacional, "created_at"> {
-  const contabilidad = input.contabilidad?.trim();
+  const cuentaContable = resolveCatalogoPropioCuenta(input.cuenta_codigo, input.contabilidad);
+
   return {
     codigo: input.codigo.trim(),
     denominacion: normalizeCatalogoDenominacion(input.denominacion),
     grupo: input.grupo!.trim(),
     clase: input.clase!.trim(),
-    cuenta_codigo: input.cuenta_codigo?.trim() || null,
-    contabilidad: contabilidad || CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+    cuenta_codigo: cuentaContable.cuenta_codigo,
+    contabilidad: cuentaContable.contabilidad,
     depreciacion: null,
     resolucion: null,
     estado: CATALOGO_CUENTA_ORDEN_ESTADO,
@@ -923,14 +1039,17 @@ export interface UpdateCatalogoPropioInput {
 export interface UpdateCatalogoNacionalContabilidadInput {
   cuenta_codigo?: string | null;
   contabilidad?: string | null;
+  depreciacion?: string | null;
 }
 
 export function buildUpdateCatalogoNacionalContabilidadPayload(
   input: UpdateCatalogoNacionalContabilidadInput,
 ) {
+  const cuenta = normalizeCuentaContableFields(input.cuenta_codigo, input.contabilidad);
   return {
-    cuenta_codigo: input.cuenta_codigo?.trim() || null,
-    contabilidad: input.contabilidad?.trim() || null,
+    cuenta_codigo: cuenta.cuenta_codigo,
+    contabilidad: cuenta.contabilidad,
+    depreciacion: input.depreciacion?.trim() || null,
   };
 }
 
@@ -944,17 +1063,18 @@ export function validarUpdateCatalogoPropioInput(input: UpdateCatalogoPropioInpu
   if (!input.clase?.trim()) {
     return "Seleccione una clase del catálogo.";
   }
-  return null;
+  return validarCuentaContableParaCatalogo(input.cuenta_codigo, input.contabilidad);
 }
 
 export function buildUpdateCatalogoPropioPayload(input: UpdateCatalogoPropioInput) {
-  const contabilidad = input.contabilidad?.trim();
+  const cuentaContable = resolveCatalogoPropioCuenta(input.cuenta_codigo, input.contabilidad);
+
   return {
     denominacion: normalizeCatalogoDenominacion(input.denominacion),
     grupo: input.grupo.trim(),
     clase: input.clase.trim(),
-    cuenta_codigo: input.cuenta_codigo?.trim() || null,
-    contabilidad: contabilidad || CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+    cuenta_codigo: cuentaContable.cuenta_codigo,
+    contabilidad: cuentaContable.contabilidad,
     estado: CATALOGO_CUENTA_ORDEN_ESTADO,
   };
 }
@@ -1107,12 +1227,15 @@ export {
   MAX_IMPORT_ACTIVOS_FILAS,
   IMPORT_ACTIVOS_COLUMN_ERROR,
   IMPORT_ACTIVOS_HEADERS,
+  buildCuentaContableLookup,
   buildUbicacionLookup,
   emptyImportActivoFila,
   importErrorFilaFromItem,
   mapImportHeaders,
   normalizeImportKey,
   validateImportActivoFila,
+  type ImportActivoCatalogoContabilidadUpdate,
+  type ImportActivoCatalogoItem,
   type ImportActivoErrorFila,
   type ImportActivoErrorItem,
   type ImportActivoFila,
@@ -1121,6 +1244,33 @@ export {
   type ImportActivosResult,
   type ImportUbicacionRef,
 } from "./import-activos";
+
+export {
+  MAX_IMPORT_AMBIENTES_FILAS,
+  IMPORT_AMBIENTES_COLUMN_ERROR,
+  IMPORT_AMBIENTES_HEADERS,
+  buildExistingAmbienteKeys,
+  buildResponsableDniLookup,
+  buildSedeLookup,
+  emptyImportAmbienteFila,
+  findPrincipalSede,
+  importAmbienteErrorFilaFromItem,
+  isPrincipalSedeNombre,
+  mapImportAmbienteHeaders,
+  parseImportAmbienteFila,
+  validateImportAmbienteDuplicado,
+  type ImportAmbienteErrorFila,
+  type ImportAmbienteErrorItem,
+  type ImportAmbienteExistingRef,
+  type ImportAmbienteFila,
+  type ImportAmbienteHeader,
+  type ImportAmbienteInsertPayload,
+  type ImportAmbienteResponsableRef,
+  type ImportAmbienteRowData,
+  type ImportAmbienteSedeRef,
+  type ImportAmbientesContext,
+  type ImportAmbientesResult,
+} from "./import-ambientes";
 
 export {
   assessLabelPrintWarnings,

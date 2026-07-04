@@ -6,19 +6,23 @@ import type {
   CatalogoCampoOpciones,
   CatalogoOpcionTipo,
   CreateCatalogoNacionalInput,
+  CuentaContable,
   UpdateCatalogoPropioInput,
   UpdateCatalogoNacionalContabilidadInput,
+  UpsertCuentaContableInput,
 } from "@inventario/types";
 import { Button } from "./components";
 import { CatalogoAltaPanel } from "./catalogo-alta-panel";
 import { CatalogoNacionalConsulta } from "./catalogo-nacional-consulta";
 import { CatalogoPropioPanel } from "./catalogo-propio-panel";
+import { CuentasContablesPanel } from "./cuentas-contables-panel";
 import { PanelTabs } from "./panel";
 
-type CatalogoTab = "propio" | "nacional";
+type CatalogoTab = "propio" | "nacional" | "cuentas";
 
 const CATALOGO_TABS: { id: CatalogoTab; label: string }[] = [
   { id: "propio", label: "Catálogo propio" },
+  { id: "cuentas", label: "Cuentas contables" },
   { id: "nacional", label: "Consultar nacional" },
 ];
 
@@ -49,6 +53,13 @@ export interface CatalogoPageProps {
   ) => Promise<{ data?: CatalogoNacional; error?: string }>;
   onDeletePropio: (codigo: string) => Promise<{ error?: string }>;
   searchNacional: (query: string) => Promise<CatalogoNacional[]>;
+  searchCuentasContables: (query: string) => Promise<CuentaContable[]>;
+  listCuentasContables?: (query?: string) => Promise<CuentaContable[]>;
+  onUpsertCuentaContable?: (
+    input: UpsertCuentaContableInput,
+  ) => Promise<{ data?: CuentaContable; error?: string }>;
+  onDeleteCuentaContable?: (codigo: string) => Promise<{ error?: string }>;
+  readOnlyCuentasContables?: boolean;
   onUpdateNacionalContabilidad?: (
     codigo: string,
     input: UpdateCatalogoNacionalContabilidadInput,
@@ -72,12 +83,20 @@ export function CatalogoPage({
   onUpdatePropio,
   onDeletePropio,
   searchNacional,
+  searchCuentasContables,
+  listCuentasContables,
+  onUpsertCuentaContable,
+  onDeleteCuentaContable,
+  readOnlyCuentasContables = false,
   onUpdateNacionalContabilidad,
   readOnlyNacionalContabilidad = false,
 }: CatalogoPageProps) {
   const [tab, setTab] = useState<CatalogoTab>("propio");
   const [propioReloadKey, setPropioReloadKey] = useState(0);
+  const [cuentasReloadKey, setCuentasReloadKey] = useState(0);
   const [showAltaForm, setShowAltaForm] = useState(false);
+
+  const listCuentas = listCuentasContables ?? ((query = "") => searchCuentasContables(query));
 
   useEffect(() => {
     if (initialDenominacion.trim()) {
@@ -87,7 +106,30 @@ export function CatalogoPage({
 
   function handleItemCreated() {
     setPropioReloadKey((k) => k + 1);
+    setCuentasReloadKey((k) => k + 1);
     setShowAltaForm(false);
+  }
+
+  async function handleUpsertCuenta(input: UpsertCuentaContableInput) {
+    if (!onUpsertCuentaContable) {
+      return { error: "No se puede guardar la cuenta contable." };
+    }
+    const result = await onUpsertCuentaContable(input);
+    if (!result.error) {
+      setCuentasReloadKey((k) => k + 1);
+    }
+    return result;
+  }
+
+  async function handleDeleteCuenta(codigo: string) {
+    if (!onDeleteCuentaContable) {
+      return { error: "No se puede eliminar la cuenta contable." };
+    }
+    const result = await onDeleteCuentaContable(codigo);
+    if (!result.error) {
+      setCuentasReloadKey((k) => k + 1);
+    }
+    return result;
   }
 
   return (
@@ -119,6 +161,7 @@ export function CatalogoPage({
                 loadNextCodigo={loadNextCodigo}
                 loadGrupos={loadGrupos}
                 loadClases={loadClases}
+                searchCuentasContables={searchCuentasContables}
                 suggestGrupo={suggestGrupo}
                 onRegisterOpcionPersonalizada={onRegisterOpcionPersonalizada}
                 onDeleteOpcionPersonalizada={onDeleteOpcionPersonalizada}
@@ -133,6 +176,7 @@ export function CatalogoPage({
             listItems={listPropio}
             loadGrupos={loadGrupos}
             loadClases={loadClases}
+            searchCuentasContables={searchCuentasContables}
             onRegisterOpcionPersonalizada={onRegisterOpcionPersonalizada}
             onDeleteOpcionPersonalizada={onDeleteOpcionPersonalizada}
             onUpdate={onUpdatePropio}
@@ -142,6 +186,23 @@ export function CatalogoPage({
             onAddNew={readOnlyPropio || showAltaForm ? undefined : () => setShowAltaForm(true)}
           />
         </div>
+      ) : tab === "cuentas" ? (
+        <div className="overflow-visible rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:p-6">
+          <div className="mb-4">
+            <h3 className="font-semibold">Cuentas contables</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Catálogo maestro de códigos y nombres contables. Puede crear, editar o eliminar
+              cuentas que no estén en uso por bienes del catálogo.
+            </p>
+          </div>
+          <CuentasContablesPanel
+            listCuentas={listCuentas}
+            onUpsert={handleUpsertCuenta}
+            onDelete={onDeleteCuentaContable ? handleDeleteCuenta : undefined}
+            readOnly={readOnlyCuentasContables || !onUpsertCuentaContable}
+            reloadKey={cuentasReloadKey}
+          />
+        </div>
       ) : (
         <div className="overflow-visible rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:p-6">
           <div className="mb-4">
@@ -149,6 +210,7 @@ export function CatalogoPage({
           </div>
           <CatalogoNacionalConsulta
             searchItems={searchNacional}
+            searchCuentasContables={searchCuentasContables}
             offlineHint={offlineHint}
             onUpdateContabilidad={onUpdateNacionalContabilidad}
             readOnlyContabilidad={readOnlyNacionalContabilidad}

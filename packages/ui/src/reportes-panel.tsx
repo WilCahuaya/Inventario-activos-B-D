@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Button, Input, Select } from "./components";
 import { PanelBanner, PanelCountLabel, StatusBadge, panelCardClass } from "./panel";
 import { PanelTableTd, PanelTableTh } from "./panel-table-layout";
-import { panelStickyToolbarClass } from "./responsive-layout";
+import { panelStickyToolbarClass, scrollbarThemedClass } from "./responsive-layout";
 
 export interface ReporteDefinicionUI {
   id: string;
@@ -400,7 +400,7 @@ export function ReportesPanelContent({
             />
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-border/60">
+          <div className={`${scrollbarThemedClass} overflow-x-auto rounded-lg border border-border/60`}>
             <table className="w-full min-w-[48rem] border-collapse text-left">
               <thead className="border-b border-border/60 bg-muted/40">
                 <tr>

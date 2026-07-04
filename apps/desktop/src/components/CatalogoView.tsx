@@ -13,6 +13,10 @@ import {
   suggestCatalogoGrupo,
   updateCatalogoPropio,
   updateCatalogoNacionalContabilidad,
+  searchCuentasContables,
+  listCuentasContables,
+  upsertCuentaContable,
+  deleteCuentaContable,
 } from "../lib/catalogo";
 
 interface CatalogoViewProps {
@@ -47,7 +51,7 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
   ) {
     if (!online) {
       return {
-        error: "Se requiere conexión para editar la contabilidad del catálogo nacional.",
+        error: "Se requiere conexión para editar los datos contables del catálogo nacional.",
       };
     }
     return updateCatalogoNacionalContabilidad(...args);
@@ -78,6 +82,24 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
     return registerCatalogoOpcionPersonalizada(...args);
   }
 
+  async function handleUpsertCuentaContable(
+    ...args: Parameters<typeof upsertCuentaContable>
+  ) {
+    if (!online) {
+      return { error: "Se requiere conexión para guardar cuentas contables." };
+    }
+    return upsertCuentaContable(...args);
+  }
+
+  async function handleDeleteCuentaContable(
+    ...args: Parameters<typeof deleteCuentaContable>
+  ) {
+    if (!online) {
+      return { error: "Se requiere conexión para eliminar cuentas contables." };
+    }
+    return deleteCuentaContable(...args);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -91,7 +113,7 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
         {!online && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-foreground">
           Sin conexión. Puede consultar el catálogo nacional ya sincronizado y ver ítems propios en
-          caché; crear, editar o eliminar propios y completar contabilidad nacional requiere
+          caché; crear, editar o eliminar propios y completar los datos contables del catálogo nacional requiere
           internet.
         </p>
       )}
@@ -116,6 +138,11 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
         onUpdatePropio={handleUpdate}
         onDeletePropio={handleDelete}
         searchNacional={searchCatalogoNacionalOficial}
+        searchCuentasContables={searchCuentasContables}
+        listCuentasContables={listCuentasContables}
+        onUpsertCuentaContable={handleUpsertCuentaContable}
+        onDeleteCuentaContable={handleDeleteCuentaContable}
+        readOnlyCuentasContables={!online}
         onUpdateNacionalContabilidad={handleUpdateNacionalContabilidad}
         readOnlyNacionalContabilidad={!online}
       />

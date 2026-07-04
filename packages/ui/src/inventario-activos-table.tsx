@@ -8,60 +8,50 @@ import {
 } from "@inventario/types";
 import {
   INVENTARIO_TABLE_COL_COUNT,
-  INVENTARIO_TABLE_COMPACT_COL_COUNT,
   INVENTARIO_TABLE_FULL_PREREGISTRO_COL_COUNT,
-  INVENTARIO_TABLE_PREREGISTRO_COL_COUNT,
   inventarioTableColWidths,
-  inventarioTableColWidthsCompact,
   inventarioTableColWidthsFullPreregistro,
-  inventarioTableColWidthsPreregistro,
+  inventarioTableMinWidthPx,
 } from "./inventario-table-cols";
 import {
-  CategoriaLetraCell,
   EstadoBienBadge,
   InventarioEstadoRegistroFilaHint,
   InventarioCodigoCellContent,
   InventarioFechaCell,
-  InventarioTablaLeyenda,
   InventarioTextCell,
+  InventarioValorPaVmCell,
   ObservacionCell,
-  ValorBienCell,
-  ValorNetoCell,
   inventarioCuentaContable,
   inventarioDepreciacionFila,
   inventarioDescripcion,
+  inventarioTdAccionesClass,
+  inventarioTdComprobanteClass,
+  inventarioTdFechaClass,
   inventarioThAccent,
   inventarioThStd,
 } from "./inventario-table-cells";
 import {
-  panelDataTableCompactClass,
   panelDataTableFullClass,
   panelDataTableWrapClass,
 } from "./responsive-layout";
 
 const tdBase =
-  "max-w-0 overflow-hidden border-b border-r border-border/40 px-3 py-1.5 text-xs text-foreground last:border-r-0";
+  "max-w-0 overflow-hidden border-b border-r border-border/40 px-2.5 py-2 text-xs leading-snug text-foreground last:border-r-0";
 
 function Colgroup({
-  compact,
-  withSelection,
   modoPreregistro,
+  withSelection,
 }: {
-  compact: boolean;
-  withSelection?: boolean;
   modoPreregistro?: boolean;
+  withSelection?: boolean;
 }) {
   const widths = modoPreregistro
-    ? compact
-      ? inventarioTableColWidthsPreregistro({ withSelection })
-      : inventarioTableColWidthsFullPreregistro({ withSelection })
-    : compact
-      ? inventarioTableColWidthsCompact({ withSelection })
-      : inventarioTableColWidths({ withSelection });
+    ? inventarioTableColWidthsFullPreregistro({ withSelection })
+    : inventarioTableColWidths({ withSelection });
   return (
     <colgroup>
       {widths.map((w, i) => (
-        <col key={i} style={{ width: w }} />
+        <col key={i} style={{ width: w, minWidth: w }} />
       ))}
     </colgroup>
   );
@@ -187,81 +177,9 @@ function SelectionCell<T extends Activo>({
 function CuentaContableCell<T extends Activo>({ activo }: { activo: T }) {
   const texto = inventarioCuentaContable(activo);
   return (
-    <InventarioTextCell title={texto} className="text-[10px]">
+    <InventarioTextCell title={texto} lineClamp2>
       {texto !== "—" ? texto : ""}
     </InventarioTextCell>
-  );
-}
-
-function CompactTableBody<T extends Activo>({
-  activos,
-  paginated,
-  rowOffset,
-  emptyMessage,
-  colSpan,
-  selection,
-  mostrarEstadoRegistro,
-  mostrarPosibleAmbiente,
-  renderComprobante,
-  renderAcciones,
-}: ActivosInventarioTableProps<T> & { colSpan: number }) {
-  const modoPreregistro = Boolean(mostrarPosibleAmbiente);
-
-  return (
-    <tbody>
-      {activos.length === 0 && (
-        <tr>
-          <td colSpan={colSpan} className="px-4 py-12 text-center text-sm text-muted-foreground">
-            {emptyMessage}
-          </td>
-        </tr>
-      )}
-      {paginated.map((activo, index) => {
-        const rowIndex = rowOffset + index;
-        const descripcion = inventarioDescripcion(activo);
-        const inactivo = activo.estado_registro === "DADO_DE_BAJA";
-
-        return (
-          <tr key={activo.id} className={rowClassName(activo, rowIndex)}>
-            {selection?.withSelection && <SelectionCell activo={activo} selection={selection} />}
-            <InventarioTextCell center>{rowIndex + 1}</InventarioTextCell>
-            <CategoriaLetraCell categoria={activo.categoria} />
-            <td className={`${tdBase} text-center`}>
-              <InventarioCodigoCellContent activo={activo} />
-            </td>
-            <InventarioTextCell title={activo.nombre} lineClamp2={modoPreregistro}>
-              <span className={inactivo ? "line-through decoration-red-400/60" : undefined}>
-                {activo.nombre}
-              </span>
-              <InventarioEstadoRegistroFilaHint
-                activo={activo}
-                mostrarPreregistro={mostrarEstadoRegistro && !modoPreregistro}
-              />
-            </InventarioTextCell>
-            {modoPreregistro && (
-              <InventarioTextCell title={posibleAmbienteNombre(activo)} lineClamp2>
-                {posibleAmbienteNombre(activo)}
-              </InventarioTextCell>
-            )}
-            <InventarioTextCell title={descripcion} lineClamp2={modoPreregistro} className="text-[10px]">
-              {descripcion}
-            </InventarioTextCell>
-            <InventarioFechaCell fecha={activo.fecha_adquisicion} />
-            <CuentaContableCell activo={activo} />
-            <td className={`${tdBase} text-center`}>
-              <EstadoBienBadge estado={activo.estado_bien} />
-            </td>
-            <ValorBienCell activo={activo} />
-            {!modoPreregistro && <ValorNetoCell activo={activo} inactivo={inactivo} />}
-            <ObservacionCell observacion={activo.observacion} lineClamp2={modoPreregistro} />
-            {!modoPreregistro && renderComprobante(activo)}
-            <td className={`${tdBase} overflow-visible last:border-r-0`}>
-              {renderAcciones(activo)}
-            </td>
-          </tr>
-        );
-      })}
-    </tbody>
   );
 }
 
@@ -291,8 +209,6 @@ function FullTableBody<T extends Activo>({
       {paginated.map((activo, index) => {
         const rowIndex = rowOffset + index;
         const descripcion = inventarioDescripcion(activo);
-        const precioAdq = !activo.valor_es_mercado ? activo.valor_adquisicion : null;
-        const valorMercado = activo.valor_es_mercado ? activo.valor_adquisicion : null;
         const inactivo = activo.estado_registro === "DADO_DE_BAJA";
         const { periodo, depAcum, valorNeto } = inventarioDepreciacionFila(activo, inactivo);
 
@@ -304,7 +220,7 @@ function FullTableBody<T extends Activo>({
             <td className={`${tdBase} text-center`}>
               <InventarioCodigoCellContent activo={activo} />
             </td>
-            <InventarioTextCell title={activo.nombre} lineClamp2={modoPreregistro}>
+            <InventarioTextCell title={activo.nombre} lineClamp2>
               <span className={inactivo ? "line-through decoration-red-400/60" : undefined}>
                 {activo.nombre}
               </span>
@@ -318,7 +234,7 @@ function FullTableBody<T extends Activo>({
                 {posibleAmbienteNombre(activo)}
               </InventarioTextCell>
             )}
-            <InventarioTextCell title={descripcion} lineClamp2={modoPreregistro} className="text-[10px]">
+            <InventarioTextCell title={descripcion} lineClamp2>
               {descripcion}
             </InventarioTextCell>
             <InventarioFechaCell fecha={activo.fecha_adquisicion} />
@@ -326,32 +242,25 @@ function FullTableBody<T extends Activo>({
             <td className={`${tdBase} text-center`}>
               <EstadoBienBadge estado={activo.estado_bien} />
             </td>
-            <InventarioTextCell className="text-right tabular-nums text-[11px]">
-              {precioAdq != null ? `S/ ${formatMonedaPE(precioAdq)}` : ""}
+            <InventarioValorPaVmCell activo={activo} />
+            <InventarioTextCell center>
+              {activo.depreciacion?.trim() || ""}
             </InventarioTextCell>
-            <InventarioTextCell className="text-right tabular-nums text-[11px]">
-              {valorMercado != null ? `S/ ${formatMonedaPE(valorMercado)}` : ""}
+            <InventarioTextCell center className="tabular-nums">
+              {periodo > 0 ? String(Math.round(periodo)) : ""}
             </InventarioTextCell>
-            {!modoPreregistro && (
-              <>
-                <InventarioTextCell center className="text-[10px]">
-                  {activo.depreciacion?.trim() || ""}
-                </InventarioTextCell>
-                <InventarioTextCell center className="text-[10px] tabular-nums">
-                  {periodo > 0 ? String(Math.round(periodo)) : ""}
-                </InventarioTextCell>
-                <InventarioTextCell className="text-right text-[10px] tabular-nums">
-                  {depAcum != null ? `S/ ${formatMonedaPE(depAcum)}` : ""}
-                </InventarioTextCell>
-                <InventarioTextCell className="text-right text-[10px] tabular-nums font-semibold text-primary">
-                  {valorNeto != null ? `S/ ${formatMonedaPE(valorNeto)}` : ""}
-                </InventarioTextCell>
-              </>
-            )}
-            <ObservacionCell observacion={activo.observacion} lineClamp2={modoPreregistro} />
-            {!modoPreregistro && renderComprobante(activo)}
-            <td className={`${tdBase} overflow-visible last:border-r-0`}>
-              {renderAcciones(activo)}
+            <InventarioTextCell className="text-right tabular-nums">
+              {depAcum != null ? `S/ ${formatMonedaPE(depAcum)}` : ""}
+            </InventarioTextCell>
+            <InventarioTextCell className="text-right tabular-nums font-semibold text-primary">
+              {valorNeto != null ? `S/ ${formatMonedaPE(valorNeto)}` : ""}
+            </InventarioTextCell>
+            <ObservacionCell observacion={activo.observacion} lineClamp2 />
+            {renderComprobante(activo)}
+            <td className={inventarioTdAccionesClass}>
+              <div className="flex flex-nowrap items-center justify-center gap-0.5">
+                {renderAcciones(activo)}
+              </div>
             </td>
           </tr>
         );
@@ -364,145 +273,70 @@ export function ActivosInventarioTable<T extends Activo>(props: ActivosInventari
   const { selection, mostrarPosibleAmbiente } = props;
   const modoPreregistro = Boolean(mostrarPosibleAmbiente);
   const withSelection = selection?.withSelection ?? false;
-  const compactColSpan =
-    (modoPreregistro ? INVENTARIO_TABLE_PREREGISTRO_COL_COUNT : INVENTARIO_TABLE_COMPACT_COL_COUNT) +
-    (withSelection ? 1 : 0);
-  const fullColSpan =
+  const colSpan =
     (modoPreregistro ? INVENTARIO_TABLE_FULL_PREREGISTRO_COL_COUNT : INVENTARIO_TABLE_COL_COUNT) +
     (withSelection ? 1 : 0);
   const tableClass = `${inventarioActivosTableClass}${modoPreregistro ? " inventario-activos-table--preregistro" : ""}`;
+  const tableMinWidth = inventarioTableMinWidthPx({ modoPreregistro, withSelection });
 
   return (
     <div className={panelDataTableWrapClass}>
-      <div className={panelDataTableCompactClass}>
-        <table className={`${tableClass} min-w-0 w-full max-w-full table-fixed border-collapse`}>
-          <Colgroup compact modoPreregistro={modoPreregistro} withSelection={withSelection} />
-          <thead className="sticky top-0 z-10 border-b border-border/60 bg-card">
-            <tr>
-              {withSelection && selection && (
-                <SelectionHeader selection={selection} rowSpan={1} />
-              )}
-              <Th>N°</Th>
-              <Th>Cat.</Th>
-              <Th>Código</Th>
-              <Th multiline className={`${inventarioThStd} normal-case`}>
-                Nombre del bien
-              </Th>
-              {modoPreregistro && (
-                <Th multiline className={`${inventarioThStd} normal-case`}>
-                  Posible ambiente
-                </Th>
-              )}
-              <Th multiline className={`${inventarioThStd} normal-case`}>
-                Descripción
-              </Th>
-              <Th multiline>Fecha adq.</Th>
-              <Th multiline className={`${inventarioThStd} normal-case`}>
-                Cuenta contable
-              </Th>
-              <Th>Estado</Th>
-              <Th>Precio</Th>
-              {!modoPreregistro && (
-                <Th multiline className={`${inventarioThStd} normal-case`}>
-                  Valor neto
-                </Th>
-              )}
-              <Th multiline className={`${inventarioThStd} normal-case`}>
-                Observación
-              </Th>
-              {!modoPreregistro && (
-                <Th className={`${inventarioThStd} normal-case`}>CP</Th>
-              )}
-              <Th>Acciones</Th>
-            </tr>
-          </thead>
-          <CompactTableBody {...props} colSpan={compactColSpan} />
-        </table>
-        <InventarioTablaLeyenda />
-      </div>
-
       <div className={panelDataTableFullClass}>
         <table
-          className={`${tableClass} w-full table-fixed border-collapse ${
-            modoPreregistro ? "min-w-0 3xl:min-w-0" : "min-w-[1760px] 3xl:min-w-0"
-          }`}
+          className={`${tableClass} table-fixed border-collapse`}
+          style={{ minWidth: tableMinWidth, width: tableMinWidth }}
         >
-          <Colgroup compact={false} modoPreregistro={modoPreregistro} withSelection={withSelection} />
+          <Colgroup modoPreregistro={modoPreregistro} withSelection={withSelection} />
           <thead className="sticky top-0 z-10 border-b border-border/60 bg-card">
-            {modoPreregistro ? (
-              <tr>
-                {withSelection && selection && <SelectionHeader selection={selection} />}
-                <Th rowSpan={1} className={`${inventarioThStd} normal-case`}>
-                  N°
+            <tr>
+              {withSelection && selection && <SelectionHeader selection={selection} />}
+              <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
+                N°
+              </Th>
+              <Th rowSpan={2}>Cat.</Th>
+              <Th rowSpan={2}>Código</Th>
+              <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
+                Nombre
+              </Th>
+              {modoPreregistro && (
+                <Th rowSpan={2} multiline className={`${inventarioThStd} normal-case`}>
+                  Pos. ambiente
                 </Th>
-                <Th rowSpan={1}>Cat.</Th>
-                <Th rowSpan={1}>Código</Th>
-                <Th rowSpan={1} multiline className={`${inventarioThStd} normal-case`}>
-                  Nombre del bien
-                </Th>
-                <Th rowSpan={1} multiline className={`${inventarioThStd} normal-case`}>
-                  Posible ambiente
-                </Th>
-                <Th rowSpan={1} multiline className={`${inventarioThStd} normal-case`}>
-                  Descripción
-                </Th>
-                <Th rowSpan={1} multiline>
-                  Fecha adq.
-                </Th>
-                <Th rowSpan={1} multiline className={`${inventarioThStd} normal-case`}>
-                  Cuenta contable
-                </Th>
-                <Th rowSpan={1}>Estado</Th>
-                <Th rowSpan={1}>Precio adq.</Th>
-                <Th rowSpan={1}>V. mercado</Th>
-                <Th rowSpan={1} multiline className={`${inventarioThStd} normal-case`}>
-                  Observación
-                </Th>
-                <Th rowSpan={1}>Acciones</Th>
-              </tr>
-            ) : (
-              <>
-                <tr>
-                  {withSelection && selection && <SelectionHeader selection={selection} />}
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    N°
-                  </Th>
-                  <Th rowSpan={2}>Cat.</Th>
-                  <Th rowSpan={2}>Código</Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    Nombre del bien
-                  </Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    Descripción
-                  </Th>
-                  <Th rowSpan={2}>Fecha adq.</Th>
-                  <Th rowSpan={2} multiline className={`${inventarioThStd} normal-case`}>
-                    Cuenta contable
-                  </Th>
-                  <Th rowSpan={2}>Estado</Th>
-                  <Th rowSpan={2}>Precio adq.</Th>
-                  <Th rowSpan={2}>V. mercado</Th>
-                  <Th colSpan={4} className={inventarioThAccent}>
-                    Depreciación y valor neto
-                  </Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    Observación
-                  </Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    CP
-                  </Th>
-                  <Th rowSpan={2}>Acciones</Th>
-                </tr>
-                <tr>
-                  <Th className={inventarioThAccent}>% Deprec.</Th>
-                  <Th className={inventarioThAccent}>Periodo</Th>
-                  <Th className={inventarioThAccent}>Dep. acum.</Th>
-                  <Th className={inventarioThAccent}>Valor neto</Th>
-                </tr>
-              </>
-            )}
+              )}
+              <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
+                Descripción
+              </Th>
+              <Th rowSpan={2} className={`${inventarioThStd} whitespace-nowrap`}>
+                Fecha
+              </Th>
+              <Th rowSpan={2} multiline className={`${inventarioThStd} normal-case`}>
+                Cuenta
+              </Th>
+              <Th rowSpan={2}>Estado</Th>
+              <Th rowSpan={2} multiline>
+                PA / VM
+              </Th>
+              <Th colSpan={4} className={inventarioThAccent}>
+                Depreciación
+              </Th>
+              <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
+                Obs.
+              </Th>
+              <Th rowSpan={2} className={`${inventarioThStd} normal-case whitespace-nowrap`}>
+                CP
+              </Th>
+              <Th rowSpan={2} className={`${inventarioThStd} whitespace-nowrap`}>
+                Acciones
+              </Th>
+            </tr>
+            <tr>
+              <Th className={inventarioThAccent}>% Dep.</Th>
+              <Th className={inventarioThAccent}>Per.</Th>
+              <Th className={inventarioThAccent}>D. acum.</Th>
+              <Th className={inventarioThAccent}>V. neto</Th>
+            </tr>
           </thead>
-          <FullTableBody {...props} colSpan={fullColSpan} />
+          <FullTableBody {...props} colSpan={colSpan} />
         </table>
       </div>
     </div>

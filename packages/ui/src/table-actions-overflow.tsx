@@ -195,7 +195,7 @@ export function TableActionsOverflow({
 
   if (iconsOnly) {
     return (
-      <div ref={containerRef} className="flex items-center justify-center gap-0.5">
+      <div ref={containerRef} className="flex shrink-0 flex-nowrap items-center justify-center gap-0.5">
         {items.map((item) => (
           <ActionButton key={item.id} item={item} />
         ))}
@@ -227,7 +227,7 @@ export function TableActionsOverflow({
   if (iconsAndMenu) {
     return (
       <>
-        <div ref={containerRef} className="flex items-center justify-center gap-0.5">
+        <div ref={containerRef} className="flex shrink-0 flex-nowrap items-center justify-center gap-0.5">
           {items.map((item) => (
             <ActionButton key={item.id} item={item} />
           ))}

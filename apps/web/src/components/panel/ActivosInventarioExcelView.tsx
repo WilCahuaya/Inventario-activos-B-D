@@ -6,6 +6,7 @@ import {
   ActivosInventarioTable,
   TablePagination,
   panelDataCardsWrapClass,
+  scrollbarThemedClass,
   useTablePagination,
 } from "@inventario/ui/panel";
 import { ActivoAccionesBar } from "./ActivoAccionesBar";
@@ -66,7 +67,9 @@ export function ActivosInventarioExcelView({
       : "";
 
   return (
-    <div className="min-w-0 w-full max-w-full overflow-x-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+    <div
+      className={`${scrollbarThemedClass} min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border/60 bg-card shadow-sm`}
+    >
       <div className={panelDataCardsWrapClass}>
         <ActivosInventarioMobileCards
           activos={paginated}

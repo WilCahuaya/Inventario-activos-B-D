@@ -37,8 +37,8 @@ export function CatalogoItemTableHead({
       <PanelTableTh>Denominación</PanelTableTh>
       <PanelTableTh>Grupo</PanelTableTh>
       <PanelTableTh>Clase</PanelTableTh>
-      <PanelTableTh className={panelTableNowrapCellClass}>Cuenta contable</PanelTableTh>
-      <PanelTableTh>Contabilidad</PanelTableTh>
+      <PanelTableTh className={panelTableNowrapCellClass}>Código cuenta contable</PanelTableTh>
+      <PanelTableTh>Nombre cuenta contable</PanelTableTh>
       <PanelTableTh className={panelTableNowrapCellClass}>Depreciación</PanelTableTh>
       <PanelTableTh>Resolución</PanelTableTh>
       <PanelTableTh className={panelTableNowrapCellClass}>Estado</PanelTableTh>
@@ -107,8 +107,8 @@ export function CatalogoItemDetalle({
     { label: "Denominación", value: item.denominacion },
     { label: "Grupo", value: item.grupo },
     { label: "Clase", value: item.clase },
-    { label: "Cuenta contable", value: item.cuenta_codigo },
-    { label: "Contabilidad", value: item.contabilidad },
+    { label: "Código cuenta contable", value: item.cuenta_codigo },
+    { label: "Nombre cuenta contable", value: item.contabilidad },
     { label: "Depreciación", value: item.depreciacion },
     { label: "Resolución", value: item.resolucion },
     { label: "Estado", value: item.estado },

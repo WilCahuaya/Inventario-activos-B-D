@@ -17,7 +17,13 @@ def parse_conta(raw: str):
         return None, None
     m = re.match(r"^(\d{4,5})\s*(.*)$", t)
     if m:
-        return m.group(1), t
+        codigo = m.group(1)
+        rest = m.group(2).strip()
+        if rest:
+            if rest == codigo or rest.startswith(f"{codigo} "):
+                rest = rest[len(codigo) :].strip()
+            return codigo, rest or None
+        return codigo, None
     return None, t
 
 

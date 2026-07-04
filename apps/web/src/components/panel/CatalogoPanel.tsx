@@ -30,6 +30,14 @@ import {
 
   updateCatalogoNacionalContabilidad,
 
+  searchCuentasContables,
+
+  listCuentasContables,
+
+  upsertCuentaContable,
+
+  deleteCuentaContable,
+
 } from "@/lib/actions/catalogo";
 
 
@@ -73,6 +81,14 @@ export function CatalogoPanel({ initialDenominacion = "" }: CatalogoPanelProps) 
       onDeletePropio={deleteCatalogoPropio}
 
       searchNacional={searchCatalogoNacionalOficial}
+
+      searchCuentasContables={searchCuentasContables}
+
+      listCuentasContables={listCuentasContables}
+
+      onUpsertCuentaContable={upsertCuentaContable}
+
+      onDeleteCuentaContable={deleteCuentaContable}
 
       onUpdateNacionalContabilidad={updateCatalogoNacionalContabilidad}
 

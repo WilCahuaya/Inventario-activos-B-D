@@ -17,9 +17,17 @@ interface InventarioImportDialogProps {
   open: boolean;
   onClose: () => void;
   entidades: Entidad[];
+  fixedEntidad?: Entidad | null;
+  onImported?: () => void;
 }
 
-export function InventarioImportDialog({ open, onClose, entidades }: InventarioImportDialogProps) {
+export function InventarioImportDialog({
+  open,
+  onClose,
+  entidades,
+  fixedEntidad = null,
+  onImported,
+}: InventarioImportDialogProps) {
   const router = useRouter();
   const [entidadId, setEntidadId] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -29,7 +37,8 @@ export function InventarioImportDialog({ open, onClose, entidades }: InventarioI
   const [result, setResult] = useState<ImportActivosResult | null>(null);
   const [templatePending, setTemplatePending] = useState(false);
 
-  const entidad = entidades.find((e) => e.id === entidadId);
+  const entidad = fixedEntidad ?? entidades.find((e) => e.id === entidadId);
+  const resolvedEntidadId = fixedEntidad?.id ?? entidadId;
 
   useEffect(() => {
     if (!open) {
@@ -40,15 +49,19 @@ export function InventarioImportDialog({ open, onClose, entidades }: InventarioI
       setActionError(null);
       setResult(null);
       setTemplatePending(false);
+      return;
     }
-  }, [open]);
+    if (fixedEntidad) {
+      setEntidadId(fixedEntidad.id);
+    }
+  }, [open, fixedEntidad]);
 
   async function handleDownloadPlantilla() {
-    if (!entidadId || !entidad) return;
+    if (!resolvedEntidadId || !entidad) return;
     setTemplatePending(true);
     setActionError(null);
     try {
-      const ubicaciones = await getImportActivosUbicaciones(entidadId);
+      const ubicaciones = await getImportActivosUbicaciones(resolvedEntidadId);
       if (ubicaciones.length === 0) {
         setActionError("La entidad no tiene ambientes activos.");
         return;
@@ -63,7 +76,7 @@ export function InventarioImportDialog({ open, onClose, entidades }: InventarioI
   }
 
   async function handleImport() {
-    if (!entidadId || !file) return;
+    if (!resolvedEntidadId || !file) return;
     setPending(true);
     setParseError(null);
     setActionError(null);
@@ -76,7 +89,7 @@ export function InventarioImportDialog({ open, onClose, entidades }: InventarioI
         return;
       }
 
-      const response = await importActivos(entidadId, parsed.filas);
+      const response = await importActivos(resolvedEntidadId, parsed.filas);
       if (response.error) {
         setActionError(response.error);
         return;
@@ -84,6 +97,7 @@ export function InventarioImportDialog({ open, onClose, entidades }: InventarioI
       if (response.data) {
         setResult(response.data);
         if (response.data.importados > 0) {
+          onImported?.();
           router.refresh();
         }
       }
@@ -100,36 +114,47 @@ export function InventarioImportDialog({ open, onClose, entidades }: InventarioI
     await downloadImportActivosErrores(entidad.nombre, result.errores);
   }
 
-  const canImport = Boolean(entidadId && file && !pending);
+  const canImport = Boolean(resolvedEntidadId && file && !pending);
   const hasErrores = (result?.errores.length ?? 0) > 0;
 
   return (
     <Dialog open={open} onClose={onClose} title="Importar activos" className={panelModalClass}>
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Importe activos de una entidad desde Excel. El correlativo y código de barras se asignan
-          automáticamente. Use las columnas Sucursal y Ambiente para ubicar cada bien.
+          {fixedEntidad ? (
+            <>
+              Importe activos de <strong>{fixedEntidad.nombre}</strong> desde Excel. El correlativo
+              y código de barras se asignan automáticamente.
+            </>
+          ) : (
+            <>
+              Importe activos de una entidad desde Excel. El correlativo y código de barras se asignan
+              automáticamente. Use las columnas Sucursal y Ambiente para ubicar cada bien.
+            </>
+          )}
         </p>
 
-        <div className="space-y-2">
-          <Label htmlFor="import_entidad">Entidad</Label>
-          <Select
-            id="import_entidad"
-            value={entidadId}
-            onChange={setEntidadId}
-            options={[
-              { value: "", label: "Seleccione entidad…" },
-              ...entidades.map((e) => ({ value: e.id, label: e.nombre })),
-            ]}
-          />
-        </div>
+        {!fixedEntidad && (
+          <div className="space-y-2">
+            <Label htmlFor="import_entidad">Entidad</Label>
+            <Select
+              id="import_entidad"
+              value={entidadId}
+              onChange={setEntidadId}
+              options={[
+                { value: "", label: "Seleccione entidad…" },
+                ...entidades.map((e) => ({ value: e.id, label: e.nombre })),
+              ]}
+            />
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={!entidadId || templatePending}
+            disabled={!resolvedEntidadId || templatePending}
             onClick={() => void handleDownloadPlantilla()}
           >
             {templatePending ? "Generando…" : "Descargar plantilla"}
@@ -140,7 +165,11 @@ export function InventarioImportDialog({ open, onClose, entidades }: InventarioI
           <Label htmlFor="import_archivo">Archivo Excel (.xlsx)</Label>
           <FileInput
             id="import_archivo"
+            variant="dropzone"
             accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            buttonLabel="Seleccionar Excel"
+            dropzoneLabel="Arrastre el archivo Excel aquí"
+            dropzoneHint="Solo archivos .xlsx"
             file={file}
             onFileChange={(f) => {
               setFile(f);

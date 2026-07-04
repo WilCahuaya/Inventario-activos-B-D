@@ -6,6 +6,7 @@ import type {
   CatalogoCampoOpciones,
   CatalogoOpcionTipo,
   CreateCatalogoNacionalInput,
+  CuentaContable,
 } from "@inventario/types";
 import { Button } from "./components";
 import { CatalogoNacionalForm } from "./catalogo-nacional-form";
@@ -20,6 +21,7 @@ export interface CatalogoAltaPanelProps {
   loadNextCodigo: () => Promise<string>;
   loadGrupos: () => Promise<CatalogoCampoOpciones>;
   loadClases: () => Promise<CatalogoCampoOpciones>;
+  searchCuentasContables: (query: string) => Promise<CuentaContable[]>;
   suggestGrupo: (denominacion: string) => Promise<string | null>;
   onRegisterOpcionPersonalizada?: (
     tipo: CatalogoOpcionTipo,
@@ -42,6 +44,7 @@ export function CatalogoAltaPanel({
   loadNextCodigo,
   loadGrupos,
   loadClases,
+  searchCuentasContables,
   suggestGrupo,
   onRegisterOpcionPersonalizada,
   onDeleteOpcionPersonalizada,
@@ -138,6 +141,7 @@ export function CatalogoAltaPanel({
           gruposLoading={gruposLoading}
           clasesLoading={clasesLoading}
           pending={pending}
+          searchCuentasContables={searchCuentasContables}
           onSuggestGrupo={suggestGrupo}
           onRegisterOpcionPersonalizada={onRegisterOpcionPersonalizada}
           onDeleteOpcionPersonalizada={onDeleteOpcionPersonalizada}
@@ -171,7 +175,8 @@ export function CatalogoAltaPanel({
               Código propio secuencial: <code>BD000001</code>, <code>BD000002</code>, etc.
             </li>
             <li>
-              Cuenta contable y contabilidad editables (por defecto contabilidad <strong>2524</strong>).
+              Código y nombre cuenta contable: seleccione de la lista o elija «Otros» para crear una
+              nueva (requiere código y nombre).
             </li>
             <li>Estado en catálogo: <strong>EXCLUIDO</strong> (cuenta de orden).</li>
             <li>Elija clase y grupo; puede agregar valores con «Otros» y eliminar los que creó.</li>

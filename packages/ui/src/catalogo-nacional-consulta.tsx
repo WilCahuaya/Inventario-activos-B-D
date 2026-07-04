@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   CatalogoNacional,
+  CuentaContable,
   UpdateCatalogoNacionalContabilidadInput,
 } from "@inventario/types";
 import { CATALOGO_ORIGEN_LABELS, minCatalogoQueryLength } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "./components";
+import { PorcentajeInput } from "./porcentaje-input";
+import { CuentaContableFields } from "./cuenta-contable-fields";
 import { PanelIconAction, ViewIcon } from "./panel-action-buttons";
 import {
   EditIcon,
@@ -24,6 +27,7 @@ import {
 } from "./panel-list-table";
 import { PanelTableColgroup } from "./panel-table-layout";
 import { panelCardClass } from "./panel";
+import { scrollbarThemedClass } from "./responsive-layout";
 import {
   CATALOGO_ITEM_TABLE_COLS,
   CatalogoItemDetalle,
@@ -33,6 +37,7 @@ import {
 
 export interface CatalogoNacionalConsultaProps {
   searchItems: (query: string) => Promise<CatalogoNacional[]>;
+  searchCuentasContables: (query: string) => Promise<CuentaContable[]>;
   offlineHint?: string;
   readOnlyContabilidad?: boolean;
   onUpdateContabilidad?: (
@@ -43,6 +48,7 @@ export interface CatalogoNacionalConsultaProps {
 
 export function CatalogoNacionalConsulta({
   searchItems,
+  searchCuentasContables,
   offlineHint,
   readOnlyContabilidad = false,
   onUpdateContabilidad,
@@ -55,6 +61,7 @@ export function CatalogoNacionalConsulta({
   const [editTarget, setEditTarget] = useState<CatalogoNacional | null>(null);
   const [editCuenta, setEditCuenta] = useState("");
   const [editContabilidad, setEditContabilidad] = useState("");
+  const [editDepreciacion, setEditDepreciacion] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -92,6 +99,7 @@ export function CatalogoNacionalConsulta({
     setEditTarget(item);
     setEditCuenta(item.cuenta_codigo ?? "");
     setEditContabilidad(item.contabilidad ?? "");
+    setEditDepreciacion(item.depreciacion ?? "");
     setError(null);
   }
 
@@ -111,6 +119,7 @@ export function CatalogoNacionalConsulta({
       const result = await onUpdateContabilidad(editTarget.codigo, {
         cuenta_codigo: editCuenta,
         contabilidad: editContabilidad,
+        depreciacion: editDepreciacion,
       });
       if (result.error) {
         setError(result.error);
@@ -119,7 +128,7 @@ export function CatalogoNacionalConsulta({
       if (result.data) {
         mergeUpdatedItem(result.data);
       }
-      setMessage(`Contabilidad del ítem ${editTarget.codigo} actualizada.`);
+      setMessage(`Datos contables del ítem ${editTarget.codigo} actualizados.`);
       setEditTarget(null);
     } finally {
       setPending(false);
@@ -130,11 +139,11 @@ export function CatalogoNacionalConsulta({
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Consulta del catálogo oficial SBN. Los datos SBN (código, denominación, grupo, clase, etc.)
-        son de solo lectura; puede completar o corregir la cuenta contable y la contabilidad
-        conforme las vaya identificando.
+        son de solo lectura; puede completar o corregir el código cuenta contable, el nombre cuenta contable
+        y la depreciación conforme los vaya identificando.
         {offlineHint ? ` ${offlineHint}` : ""}
         {readOnlyContabilidad
-          ? " Sin conexión no se puede editar la contabilidad del catálogo nacional."
+          ? " Sin conexión no se pueden editar los datos contables del catálogo nacional."
           : ""}
       </p>
 
@@ -170,7 +179,7 @@ export function CatalogoNacionalConsulta({
       )}
 
       {!loading && filtrados.length > 0 && (
-        <div className={`${panelCardClass} min-w-0 max-w-full overflow-x-auto`}>
+        <div className={`${panelCardClass} ${scrollbarThemedClass} min-w-0 max-w-full overflow-x-auto`}>
           <table className="w-full min-w-[1080px] table-auto text-left text-sm">
             <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
             <thead className={panelTableStickyHeadClass}>
@@ -197,7 +206,7 @@ export function CatalogoNacionalConsulta({
                         </PanelIconAction>
                         {canEditContabilidad && (
                           <PanelIconAction
-                            label="Editar cuenta y contabilidad"
+                            label="Editar datos contables"
                             onClick={() => openEdit(item)}
                           >
                             <EditIcon />
@@ -230,12 +239,13 @@ export function CatalogoNacionalConsulta({
       <Dialog
         open={Boolean(editTarget)}
         onClose={() => setEditTarget(null)}
-        title="Cuenta contable y contabilidad"
+        title="Datos contables del ítem"
       >
         {editTarget && (
           <form className="space-y-4" onSubmit={(e) => void handleEditSubmit(e)}>
             <p className="text-sm text-muted-foreground">
-              Complete los campos contables de este ítem SBN. El resto del registro no se modifica.
+              Complete los campos contables de este ítem SBN (cuenta contable y depreciación). El resto
+              del registro no se modifica.
             </p>
             <div className="space-y-2">
               <Label>Código</Label>
@@ -251,25 +261,25 @@ export function CatalogoNacionalConsulta({
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="edit_cuenta_codigo">Cuenta contable</Label>
-                <Input
-                  id="edit_cuenta_codigo"
-                  value={editCuenta}
+              <div className="space-y-2 sm:col-span-2">
+                <CuentaContableFields
+                  codigo={editCuenta}
+                  nombre={editContabilidad}
+                  onCodigoChange={setEditCuenta}
+                  onNombreChange={setEditContabilidad}
+                  searchCuentas={searchCuentasContables}
                   disabled={pending}
-                  placeholder="Ej. 3361"
-                  className="font-mono"
-                  onChange={(e) => setEditCuenta(e.target.value)}
+                  codigoId="edit_cuenta_codigo"
+                  nombreId="edit_contabilidad"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit_contabilidad">Contabilidad</Label>
-                <Input
-                  id="edit_contabilidad"
-                  value={editContabilidad}
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="edit_depreciacion">Depreciación anual</Label>
+                <PorcentajeInput
+                  id="edit_depreciacion"
+                  value={editDepreciacion}
                   disabled={pending}
-                  placeholder="Ej. 3361 Equipos diversos"
-                  onChange={(e) => setEditContabilidad(e.target.value)}
+                  onChange={setEditDepreciacion}
                 />
               </div>
             </div>

@@ -293,11 +293,6 @@ export function AdminAmbientesPanel({
         <>
       <VisitasCampoBanner
         visitas={initialVisitasActivas}
-        sedes={sedes.map((s) => ({
-          id: s.id,
-          nombre: s.nombre,
-          es_principal: s.es_principal,
-        }))}
         puedeGestionar={false}
       />
 

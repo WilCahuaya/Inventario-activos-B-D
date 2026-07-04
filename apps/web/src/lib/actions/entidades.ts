@@ -6,6 +6,7 @@ import { normalizeResponsableDni, validarAdminEntidadDni } from "@inventario/typ
 import { createClient } from "@/lib/supabase/server";
 import { inviteEntidadAdmin } from "@/lib/auth/entidad-admin";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
+import { syncSedePrincipalDireccionFromEntidad } from "@/lib/sede-principal-direccion";
 import { syncAdminResponsableForEntidad } from "@/lib/responsables-admin-sync";
 
 export interface CreateEntidadInput {
@@ -51,6 +52,8 @@ export async function createEntidad(input: CreateEntidadInput) {
     .single();
 
   if (error) return { error: error.message };
+
+  await syncSedePrincipalDireccionFromEntidad(supabase, data.id, data.direccion);
 
   await syncAdminResponsableForEntidad(
     supabase,
@@ -167,6 +170,8 @@ export async function updateEntidad(entidadId: string, input: CreateEntidadInput
     .single();
 
   if (error) return { error: error.message };
+
+  await syncSedePrincipalDireccionFromEntidad(supabase, data.id, data.direccion);
 
   await syncAdminResponsableForEntidad(
     supabase,

@@ -1,11 +1,10 @@
 import type { Activo } from "@inventario/types";
+import { inventarioTdComprobanteClass } from "@inventario/ui/panel";
 import { ComprobanteInline } from "./ComprobanteInline";
 
 interface ComprobanteCellProps {
   activo: Activo;
 }
-
-const cpTextClass = "text-[9px] leading-tight";
 
 export function ComprobanteCell({ activo }: ComprobanteCellProps) {
   const serie = activo.comprobante_serie?.trim();
@@ -13,17 +12,15 @@ export function ComprobanteCell({ activo }: ComprobanteCellProps) {
 
   if (!serie && !tienePdf) {
     return (
-      <td
-        className={`border-b border-r border-border/40 px-3 py-2 text-center ${cpTextClass} text-muted-foreground last:border-r-0`}
-      >
+      <td className={`${inventarioTdComprobanteClass} text-muted-foreground`}>
         SIN CP
       </td>
     );
   }
 
   return (
-    <td className="border-b border-r border-border/40 px-3 py-2 text-center last:border-r-0">
-      <ComprobanteInline activo={activo} className={cpTextClass} />
+    <td className={inventarioTdComprobanteClass} title={serie ?? "Comprobante PDF"}>
+      <ComprobanteInline activo={activo} className="text-xs leading-snug" />
     </td>
   );
 }

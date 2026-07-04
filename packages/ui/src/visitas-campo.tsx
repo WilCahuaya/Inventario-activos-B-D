@@ -55,6 +55,43 @@ export type IniciarVisitaSedeOption = {
   es_principal?: boolean;
 };
 
+export function puedeIniciarNuevaVisitaCampo(
+  visitas: VisitaCampoActiva[],
+  sedes: IniciarVisitaSedeOption[],
+): boolean {
+  const sedesEnVisita = visitas
+    .map((v) => v.sede_id)
+    .filter((id): id is string => Boolean(id));
+  const todasEnVisita = visitas.some((v) => !v.sede_id);
+  const sedesOcupadas = new Set(sedesEnVisita);
+  return (
+    !todasEnVisita &&
+    (sedes.length <= 1
+      ? visitas.length === 0
+      : sedesOcupadas.size === 0 || sedes.some((s) => !sedesOcupadas.has(s.id)))
+  );
+}
+
+export function IniciarVisitaCampoButton({
+  visitas,
+  sedes,
+  pending,
+  onClick,
+}: {
+  visitas: VisitaCampoActiva[];
+  sedes: IniciarVisitaSedeOption[];
+  pending?: boolean;
+  onClick: () => void;
+}) {
+  const puedeIniciar = puedeIniciarNuevaVisitaCampo(visitas, sedes);
+
+  return (
+    <Button type="button" size="sm" disabled={pending || !puedeIniciar} onClick={onClick}>
+      {pending ? "Iniciando…" : "Iniciar visita de campo"}
+    </Button>
+  );
+}
+
 export function IniciarVisitaCampoDialog({
   open,
   onClose,
@@ -214,11 +251,8 @@ export function IniciarVisitaCampoDialog({
 
 export function VisitasCampoBanner({
   visitas,
-  sedes = [],
   puedeGestionar,
   cerrarPendingId,
-  abrirPending,
-  onAbrir,
   onCerrar,
   error,
 }: {
@@ -226,23 +260,10 @@ export function VisitasCampoBanner({
   sedes?: IniciarVisitaSedeOption[];
   puedeGestionar: boolean;
   cerrarPendingId?: string | null;
-  abrirPending?: boolean;
-  onAbrir?: () => void;
   onCerrar?: (visitaId: string) => void;
   error?: string | null;
 }) {
   if (visitas.length === 0 && !puedeGestionar) return null;
-
-  const sedesEnVisita = visitas
-    .map((v) => v.sede_id)
-    .filter((id): id is string => Boolean(id));
-  const todasEnVisita = visitas.some((v) => !v.sede_id);
-  const sedesOcupadas = new Set(sedesEnVisita);
-  const puedeIniciarNueva =
-    !todasEnVisita &&
-    (sedes.length <= 1
-      ? visitas.length === 0
-      : sedesOcupadas.size === 0 || sedes.some((s) => !sedesOcupadas.has(s.id)));
 
   return (
     <div className="space-y-3">
@@ -297,22 +318,10 @@ export function VisitasCampoBanner({
         </div>
       )}
 
-      {puedeGestionar && onAbrir && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            {visitas.length > 0
-              ? "Puede abrir visitas en otras sucursales de forma independiente."
-              : null}
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            disabled={abrirPending || !puedeIniciarNueva}
-            onClick={onAbrir}
-          >
-            {abrirPending ? "Iniciando…" : "Iniciar visita de campo"}
-          </Button>
-        </div>
+      {puedeGestionar && visitas.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Puede abrir visitas en otras sucursales de forma independiente.
+        </p>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -335,11 +344,10 @@ export function VisitaCampoBanner({
   return (
     <VisitasCampoBanner
       visitas={visita ? [visita] : []}
-      abrirPending={props.pending}
       cerrarPendingId={props.pending ? visita?.id : null}
-      onAbrir={props.onAbrir}
       onCerrar={props.onCerrar && visita ? () => props.onCerrar!() : undefined}
-      {...props}
+      puedeGestionar={props.puedeGestionar}
+      error={props.error}
     />
   );
 }

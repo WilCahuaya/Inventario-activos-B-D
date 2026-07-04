@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CatalogoNacional, CatalogoCampoOpciones, CatalogoOpcionTipo, UpdateCatalogoPropioInput } from "@inventario/types";
+import type { CatalogoNacional, CatalogoCampoOpciones, CatalogoOpcionTipo, CuentaContable, UpdateCatalogoPropioInput } from "@inventario/types";
 import {
   CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
   CATALOGO_ORIGEN_LABELS,
+  validarCuentaContableParaCatalogo,
 } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "./components";
 import { ClaseCatalogoCombobox } from "./clase-catalogo-combobox";
+import { CuentaContableFields } from "./cuenta-contable-fields";
 import { GrupoCatalogoCombobox } from "./grupo-catalogo-combobox";
 import { ConfirmDialog } from "./confirm-dialog";
 import {
@@ -36,6 +38,7 @@ import {
   CatalogoItemTableHead,
 } from "./catalogo-item-display";
 import { panelCardClass } from "./panel";
+import { scrollbarThemedClass } from "./responsive-layout";
 
 import { PanelTableColgroup } from "./panel-table-layout";
 
@@ -45,6 +48,7 @@ export interface CatalogoPropioPanelProps {
   listItems: () => Promise<CatalogoNacional[]>;
   loadGrupos: () => Promise<CatalogoCampoOpciones>;
   loadClases: () => Promise<CatalogoCampoOpciones>;
+  searchCuentasContables: (query: string) => Promise<CuentaContable[]>;
   onRegisterOpcionPersonalizada?: (
     tipo: CatalogoOpcionTipo,
     valor: string,
@@ -67,6 +71,7 @@ export function CatalogoPropioPanel({
   listItems,
   loadGrupos,
   loadClases,
+  searchCuentasContables,
   onRegisterOpcionPersonalizada,
   onDeleteOpcionPersonalizada,
   onUpdate,
@@ -90,6 +95,7 @@ export function CatalogoPropioPanel({
   const [editClase, setEditClase] = useState("");
   const [editCuentaCodigo, setEditCuentaCodigo] = useState("");
   const [editContabilidad, setEditContabilidad] = useState("");
+  const [codigosCuentaMaestra, setCodigosCuentaMaestra] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
@@ -161,14 +167,21 @@ export function CatalogoPropioPanel({
     setEditDenominacion(item.denominacion);
     setEditGrupo(item.grupo ?? "");
     setEditClase(item.clase ?? "");
-    setEditCuentaCodigo(item.cuenta_codigo ?? "");
-    setEditContabilidad(item.contabilidad ?? CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+    setEditCuentaCodigo(item.cuenta_codigo ?? CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+    setEditContabilidad(item.contabilidad ?? "");
     setError(null);
   }
 
   async function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!editTarget) return;
+    const cuentaError = validarCuentaContableParaCatalogo(editCuentaCodigo, editContabilidad, {
+      codigosEnMaestra: codigosCuentaMaestra,
+    });
+    if (cuentaError) {
+      setError(cuentaError);
+      return;
+    }
     setPending(true);
     setError(null);
     setMessage(null);
@@ -254,7 +267,7 @@ export function CatalogoPropioPanel({
           }
         />
       ) : (
-        <div className={`${panelCardClass} min-w-0 max-w-full overflow-x-auto`}>
+        <div className={`${panelCardClass} ${scrollbarThemedClass} min-w-0 max-w-full overflow-x-auto`}>
           <table className="w-full min-w-[1080px] table-auto text-left text-sm">
             <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
             <thead className={panelTableStickyHeadClass}>
@@ -353,29 +366,18 @@ export function CatalogoPropioPanel({
               onRegisterPersonalizada={(valor) => handleRegister("clase", valor)}
               onDeletePersonalizada={(valor) => handleDeleteOpcion("clase", valor)}
             />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="edit_cuenta_codigo">Cuenta contable</Label>
-                <Input
-                  id="edit_cuenta_codigo"
-                  value={editCuentaCodigo}
-                  disabled={pending}
-                  placeholder="Ej. 2524"
-                  className="font-mono"
-                  onChange={(e) => setEditCuentaCodigo(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit_contabilidad">Contabilidad</Label>
-                <Input
-                  id="edit_contabilidad"
-                  value={editContabilidad}
-                  disabled={pending}
-                  placeholder="Ej. 2524 Bienes de cuenta de orden"
-                  onChange={(e) => setEditContabilidad(e.target.value)}
-                />
-              </div>
-            </div>
+            <CuentaContableFields
+              codigo={editCuentaCodigo}
+              nombre={editContabilidad}
+              onCodigoChange={setEditCuentaCodigo}
+              onNombreChange={setEditContabilidad}
+              searchCuentas={searchCuentasContables}
+              disabled={pending}
+              codigoId="edit_cuenta_codigo"
+              nombreId="edit_contabilidad"
+              allowCreateNew
+              onCodigosMaestraLoaded={setCodigosCuentaMaestra}
+            />
             {error && <PanelFlashMessage variant="error">{error}</PanelFlashMessage>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>

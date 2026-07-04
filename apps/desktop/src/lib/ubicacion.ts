@@ -1,5 +1,6 @@
 import type { Ambiente, Sede, SedeConConteo } from "@inventario/types";
 import { getSupabaseClient } from "./supabase";
+import { loadSedesForEntidad } from "./sede-principal-direccion";
 
 export { listEntidades } from "./entidades";
 
@@ -38,15 +39,7 @@ export interface CreateAmbienteInput {
 
 export async function listSedes(entidadId: string): Promise<Sede[]> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("sedes")
-    .select("*")
-    .eq("entidad_id", entidadId)
-    .eq("activo", true)
-    .order("nombre");
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Sede[];
+  return loadSedesForEntidad(supabase, entidadId);
 }
 
 export async function listAmbientes(sedeId: string): Promise<Ambiente[]> {
@@ -80,14 +73,23 @@ export async function getAmbientePreregistro(entidadId: string): Promise<Ambient
   return (data as Ambiente) ?? null;
 }
 
-export async function listAmbientesPorEntidad(entidadId: string): Promise<AmbienteConSede[]> {
+export async function listAmbientesPorEntidad(
+  entidadId: string,
+  sedeId?: string,
+): Promise<AmbienteConSede[]> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("ambientes")
     .select("*, sedes!inner(nombre, es_principal, entidad_id)")
-    .eq("activo", true)
-    .eq("sedes.entidad_id", entidadId)
-    .order("nombre");
+    .eq("activo", true);
+
+  if (sedeId) {
+    query = query.eq("sede_id", sedeId);
+  } else {
+    query = query.eq("sedes.entidad_id", entidadId);
+  }
+
+  const { data, error } = await query.order("nombre");
 
   if (error) throw new Error(error.message);
 

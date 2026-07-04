@@ -13,6 +13,7 @@ import {
   formatActivoCodigoDisplay,
   formatCuentaContableDisplay,
   formatFechaISOToCortoES,
+  formatFechaISOToDDMMYYYY,
   formatMonedaPE,
 } from "@inventario/types";
 
@@ -20,13 +21,13 @@ export const INVENTARIO_TABLA_LEYENDA =
   "A = Activo · C = Cuenta de orden · PA = Precio adquisición · VM = Valor mercado";
 
 const tdBase =
-  "max-w-0 overflow-hidden border-b border-r border-border/40 px-3 py-1.5 text-xs text-foreground last:border-r-0";
+  "max-w-0 overflow-hidden border-b border-r border-border/40 px-2.5 py-2 text-xs leading-snug text-foreground last:border-r-0";
 
 export const inventarioThStd =
-  "max-w-0 overflow-hidden border-b border-r border-border/50 bg-muted/50 px-3 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-foreground/80 last:border-r-0 sm:text-xs";
+  "max-w-0 overflow-hidden border-b border-r border-border/50 bg-muted/50 px-2.5 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-foreground/80 last:border-r-0";
 
 export const inventarioThAccent =
-  "max-w-0 overflow-hidden border-b border-r border-border/50 bg-primary/10 px-3 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-primary last:border-r-0 sm:text-xs";
+  "max-w-0 overflow-hidden border-b border-r border-border/50 bg-primary/10 px-2.5 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-primary last:border-r-0";
 
 export function InventarioTablaLeyenda({ className }: { className?: string }) {
   return (
@@ -105,7 +106,7 @@ export function InventarioCodigoCellContent({ activo }: { activo: Activo }) {
     );
   }
   return (
-    <span className="block truncate font-mono text-[10px] leading-tight">
+    <span className="block font-mono text-xs leading-snug">
       {formatActivoCodigoDisplay(activo)}
     </span>
   );
@@ -217,8 +218,8 @@ export function ObservacionCell({
       <span
         className={
           lineClamp2
-            ? "line-clamp-2 text-[10px] leading-snug sm:text-xs"
-            : "block truncate text-[10px] sm:text-xs"
+            ? "line-clamp-2 text-xs leading-snug"
+            : "block truncate text-xs leading-snug"
         }
       >
         {texto}
@@ -227,11 +228,38 @@ export function ObservacionCell({
   );
 }
 
-export function InventarioFechaCell({ fecha }: { fecha?: string | null }) {
-  const texto = formatFechaISOToCortoES(fecha) || "—";
+export const inventarioTdFechaClass = `${tdBase} text-center text-xs whitespace-nowrap tabular-nums`;
+
+export const inventarioTdComprobanteClass =
+  "overflow-visible border-b border-r border-border/40 px-2.5 py-2 text-center align-top text-xs leading-snug text-foreground last:border-r-0";
+
+export const inventarioTdAccionesClass =
+  "inventario-td-acciones overflow-visible whitespace-nowrap border-b border-r border-border/40 px-1.5 py-2 text-xs text-foreground last:border-r-0";
+
+export function InventarioValorPaVmCell({ activo }: { activo: Activo }) {
+  const esMercado = activo.valor_es_mercado;
+  const monto = activo.valor_adquisicion;
+  if (monto == null) {
+    return <InventarioTextCell className="text-right tabular-nums" />;
+  }
+  const texto = `S/ ${formatMonedaPE(monto)}`;
+  const etiqueta = esMercado ? "Valor mercado" : "Precio adquisición";
   return (
-    <td className={`${tdBase} text-center text-[11px] whitespace-nowrap`} title={texto}>
+    <InventarioTextCell
+      className="text-right tabular-nums"
+      title={`${etiqueta}: ${texto}`}
+    >
       {texto}
+    </InventarioTextCell>
+  );
+}
+
+export function InventarioFechaCell({ fecha }: { fecha?: string | null }) {
+  const corto = formatFechaISOToCortoES(fecha);
+  const tabla = formatFechaISOToDDMMYYYY(fecha) || "—";
+  return (
+    <td className={inventarioTdFechaClass} title={corto || undefined}>
+      {tabla}
     </td>
   );
 }
@@ -258,7 +286,7 @@ export function InventarioTextCell({
       {empty ? (
         <span className="text-muted-foreground">—</span>
       ) : (
-        <span className={lineClamp2 ? "line-clamp-2 text-[11px] leading-snug" : "block truncate"}>
+        <span className={lineClamp2 ? "line-clamp-2 text-xs leading-snug" : "block truncate text-xs leading-snug"}>
           {children}
         </span>
       )}

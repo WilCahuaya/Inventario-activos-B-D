@@ -38,9 +38,13 @@ import {
   VisitaCampoEstadoBadge,
   VisitasCampoHistorialPanel,
   IniciarVisitaCampoDialog,
+  IniciarVisitaCampoButton,
+  AmbientesDatosMenu,
 } from "@inventario/ui/panel";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
-import { ConfirmDialog } from "@inventario/ui";
+import { AmbientesImportDialog } from "./AmbientesImportDialog";
+import { InventarioImportDialog } from "./InventarioImportDialog";
+import { ConfirmDialog, EliminarActivosPorCodigosDialog } from "@inventario/ui";
 import { GestionarSucursales } from "./GestionarSucursales";
 import {
   createAmbiente,
@@ -67,6 +71,10 @@ import {
   setResponsableActivo,
   updateResponsable,
 } from "../lib/responsables";
+import {
+  deleteActivosPorCodigos,
+  previewDeleteActivosPorCodigos,
+} from "../lib/activos";
 
 type EntityTab = "ambientes" | "responsables" | "sucursales" | "visitas";
 
@@ -86,6 +94,7 @@ interface AmbientesViewProps {
   online: boolean;
   onViewActivos: (ambiente: AmbienteConSede) => void;
   initialTab?: EntityTab;
+  sedeFocus?: { id: string; nombre: string };
 }
 
 function AmbienteCard({
@@ -152,6 +161,7 @@ export function AmbientesView({
   online,
   onViewActivos,
   initialTab = "ambientes",
+  sedeFocus,
 }: AmbientesViewProps) {
   const [ambientes, setAmbientes] = useState<AmbienteConVisita[]>([]);
   const [sedes, setSedes] = useState<SedeConConteo[]>([]);
@@ -167,10 +177,13 @@ export function AmbientesView({
   const [detalleLoading, setDetalleLoading] = useState(false);
   const [abrirVisitaOpen, setAbrirVisitaOpen] = useState(false);
   const [abrirVisitaError, setAbrirVisitaError] = useState<string | null>(null);
+  const [importAmbientesOpen, setImportAmbientesOpen] = useState(false);
+  const [importActivosOpen, setImportActivosOpen] = useState(false);
+  const [eliminarOpen, setEliminarOpen] = useState(false);
   const [tab, setTab] = useState<EntityTab>(initialTab);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState("");
-  const [sedeFilterId, setSedeFilterId] = useState("");
+  const [sedeFilterId, setSedeFilterId] = useState(sedeFocus?.id ?? "");
   const [createOpen, setCreateOpen] = useState(false);
   const [editAmbiente, setEditAmbiente] = useState<AmbienteConVisita | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AmbienteConVisita | null>(null);
@@ -192,16 +205,16 @@ export function AmbientesView({
   }
 
   useEffect(() => {
-    setSedeFilterId("");
+    setSedeFilterId(sedeFocus?.id ?? "");
     setBusqueda("");
-  }, [entidadId]);
+  }, [entidadId, sedeFocus?.id]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [ambList, sedeList, respList, visitas, historial] = await Promise.all([
-        listAmbientesPorEntidad(entidad.id),
+        listAmbientesPorEntidad(entidad.id, sedeFocus?.id),
         listSedesConConteo(entidad.id),
         listResponsables(entidad.id),
         getVisitasCampoActivas(entidad.id),
@@ -219,7 +232,7 @@ export function AmbientesView({
     } finally {
       setLoading(false);
     }
-  }, [entidad.id]);
+  }, [entidad.id, sedeFocus?.id]);
 
   useEffect(() => {
     setTab(initialTab);
@@ -238,15 +251,17 @@ export function AmbientesView({
   }, [online, loadData]);
 
   async function syncVisitaYAmbientes() {
-    const [visitas, respResult, historial] = await Promise.all([
+    const [visitas, respResult, historial, sedeList] = await Promise.all([
       getVisitasCampoActivas(entidad.id),
       listResponsables(entidad.id),
       listVisitasCampoHistorial(entidad.id),
+      listSedesConConteo(entidad.id),
     ]);
-    const ambList = await listAmbientesPorEntidad(entidad.id);
+    const ambList = await listAmbientesPorEntidad(entidad.id, sedeFocus?.id);
     const enriched = await attachVisitaEstadoToAmbientes(ambList, entidad.id);
     setAmbientes(enriched);
     if (!respResult.error) setResponsables(respResult.data ?? []);
+    setSedes(sedeList);
     setVisitasActivas(visitas);
     setVisitasHistorial(historial);
   }
@@ -513,9 +528,27 @@ export function AmbientesView({
 
       {online && (
         <>
-          <PanelTabs tabs={ENTITY_TABS} value={tab} onChange={setTab} />
+          {!sedeFocus && (
+            <PanelTabs
+              tabs={ENTITY_TABS}
+              value={tab}
+              onChange={setTab}
+              actions={
+                <IniciarVisitaCampoButton
+                  visitas={visitasActivas}
+                  sedes={sedes.map((s) => ({
+                    id: s.id,
+                    nombre: s.nombre,
+                    es_principal: s.es_principal,
+                  }))}
+                  pending={visitaPending}
+                  onClick={handleAbrirVisita}
+                />
+              }
+            />
+          )}
 
-          {tab === "visitas" ? (
+          {!sedeFocus && tab === "visitas" ? (
             <VisitasCampoHistorialPanel
               historial={visitasHistorial}
               loadingDetalle={detalleLoading}
@@ -527,7 +560,7 @@ export function AmbientesView({
                 setDetalleAmbientes(null);
               }}
             />
-          ) : tab === "responsables" ? (
+          ) : !sedeFocus && tab === "responsables" ? (
             <ResponsablesPanel
               responsables={responsables}
               onCreate={async (input) => {
@@ -547,7 +580,7 @@ export function AmbientesView({
               onDelete={deleteResponsable}
               onReload={syncAmbientesYResponsables}
             />
-          ) : tab === "sucursales" ? (
+          ) : !sedeFocus && tab === "sucursales" ? (
             <GestionarSucursales
               entidadId={entidad.id}
               sedes={sedes}
@@ -572,15 +605,8 @@ export function AmbientesView({
             <>
               <VisitasCampoBanner
                 visitas={visitasActivas}
-                sedes={sedes.map((s) => ({
-                  id: s.id,
-                  nombre: s.nombre,
-                  es_principal: s.es_principal,
-                }))}
                 puedeGestionar
-                abrirPending={visitaPending}
                 cerrarPendingId={cerrarPendingId}
-                onAbrir={handleAbrirVisita}
                 onCerrar={(id) => void handleCerrarVisita(id)}
                 error={visitaError}
               />
@@ -593,7 +619,7 @@ export function AmbientesView({
                       singular="ambiente"
                       plural="ambientes"
                     />
-                    {sedes.length > 0 && (
+                    {sedes.length > 0 && !sedeFocus && (
                       <SedeAmbienteFilterSelect
                         sedes={sedes}
                         value={sedeFilterId}
@@ -616,6 +642,24 @@ export function AmbientesView({
                       />
                     </div>
                     <PanelViewToggle value={viewMode} onChange={setViewMode} />
+                    {tab === "ambientes" && (
+                      <AmbientesDatosMenu
+                        disabled={loading || !online}
+                        onAction={(action) => {
+                          if (action === "import-ambientes") setImportAmbientesOpen(true);
+                          else if (action === "import-activos") setImportActivosOpen(true);
+                          else setEliminarOpen(true);
+                        }}
+                        importActivosDisabled={loading || ambientes.length === 0 || !online}
+                        importActivosDisabledReason={
+                          !online
+                            ? "Requiere conexión"
+                            : ambientes.length === 0
+                              ? "Primero importe o cree ambientes"
+                              : undefined
+                        }
+                      />
+                    )}
                     <Button
                       type="button"
                       size="sm"
@@ -920,6 +964,31 @@ export function AmbientesView({
         pending={visitaPending}
         error={abrirVisitaError}
         onConfirm={(sedeId) => void confirmarAbrirVisita(sedeId)}
+      />
+
+      <AmbientesImportDialog
+        open={importAmbientesOpen}
+        onClose={() => setImportAmbientesOpen(false)}
+        entidad={entidad}
+        online={online}
+        onImported={() => void syncAmbientesYResponsables()}
+      />
+      <InventarioImportDialog
+        open={importActivosOpen}
+        onClose={() => setImportActivosOpen(false)}
+        entidades={[entidad]}
+        fixedEntidad={entidad}
+        online={online}
+        onImported={() => void syncAmbientesYResponsables()}
+      />
+      <EliminarActivosPorCodigosDialog
+        open={eliminarOpen}
+        onClose={() => setEliminarOpen(false)}
+        entidades={[entidad]}
+        fixedEntidadId={entidad.id}
+        onPreview={previewDeleteActivosPorCodigos}
+        onDelete={deleteActivosPorCodigos}
+        onDeleted={() => void syncAmbientesYResponsables()}
       />
     </div>
   );

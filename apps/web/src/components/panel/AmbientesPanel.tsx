@@ -31,9 +31,11 @@ import {
   VisitasCampoBanner,
   VisitasCampoHistorialPanel,
   IniciarVisitaCampoDialog,
+  IniciarVisitaCampoButton,
+  AmbientesDatosMenu,
 } from "@inventario/ui/panel";
 import type { AmbienteConSede } from "@/lib/actions/ubicacion";
-import { createAmbiente, deleteAmbiente, listAmbientesPorEntidad, updateAmbiente } from "@/lib/actions/ubicacion";
+import { createAmbiente, deleteAmbiente, listAmbientesPorEntidad, listSedesConConteo, updateAmbiente } from "@/lib/actions/ubicacion";
 import type { AmbienteConVisita } from "@/lib/actions/visitas-campo";
 import {
   abrirVisitaCampo,
@@ -52,6 +54,13 @@ import {
   updateResponsable,
 } from "@/lib/actions/responsables";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
+import { AmbientesImportDialog } from "./AmbientesImportDialog";
+import { InventarioImportDialog } from "./InventarioImportDialog";
+import {
+  deleteActivosPorCodigos,
+  previewDeleteActivosPorCodigos,
+} from "@/lib/actions/activos";
+import { EliminarActivosPorCodigosDialog } from "@inventario/ui";
 import { GestionarSucursales } from "./GestionarSucursales";
 import {
   EditIcon,
@@ -186,6 +195,9 @@ export function AmbientesPanel({
   const [detalleLoading, setDetalleLoading] = useState(false);
   const [abrirVisitaOpen, setAbrirVisitaOpen] = useState(false);
   const [abrirVisitaError, setAbrirVisitaError] = useState<string | null>(null);
+  const [importAmbientesOpen, setImportAmbientesOpen] = useState(false);
+  const [importActivosOpen, setImportActivosOpen] = useState(false);
+  const [eliminarOpen, setEliminarOpen] = useState(false);
 
   const puedeGestionarVisita = panelMode === "contador";
   const visitaAbierta = visitasActivas.length > 0;
@@ -216,13 +228,15 @@ export function AmbientesPanel({
   }
 
   async function syncAmbientesYResponsables() {
-    const [ambList, respList] = await Promise.all([
+    const [ambList, respList, sedeList] = await Promise.all([
       listAmbientesPorEntidad(entidad.id, sedeFocus?.id),
       listResponsables(entidad.id),
+      listSedesConConteo(entidad.id),
     ]);
     const enriched = await attachVisitaEstadoToAmbientes(ambList, entidad.id);
     setAmbientes(enriched);
     setResponsables(respList);
+    setSedes(sedeList);
     router.refresh();
   }
 
@@ -457,7 +471,27 @@ export function AmbientesPanel({
         }
       />
 
-      {!sedeFocus && <PanelTabs tabs={ENTITY_TABS} value={tab} onChange={setTab} />}
+      {!sedeFocus && (
+        <PanelTabs
+          tabs={ENTITY_TABS}
+          value={tab}
+          onChange={setTab}
+          actions={
+            puedeGestionarVisita ? (
+              <IniciarVisitaCampoButton
+                visitas={visitasActivas}
+                sedes={sedes.map((s) => ({
+                  id: s.id,
+                  nombre: s.nombre,
+                  es_principal: s.es_principal,
+                }))}
+                pending={visitaPending}
+                onClick={handleAbrirVisita}
+              />
+            ) : undefined
+          }
+        />
+      )}
 
       {!sedeFocus && tab === "visitas" ? (
         <VisitasCampoHistorialPanel
@@ -508,15 +542,8 @@ export function AmbientesPanel({
       {!sedeFocus && (
         <VisitasCampoBanner
           visitas={visitasActivas}
-          sedes={sedes.map((s) => ({
-            id: s.id,
-            nombre: s.nombre,
-            es_principal: s.es_principal,
-          }))}
           puedeGestionar={puedeGestionarVisita}
-          abrirPending={visitaPending}
           cerrarPendingId={cerrarPendingId}
-          onAbrir={handleAbrirVisita}
           onCerrar={handleCerrarVisita}
           error={visitaError}
         />
@@ -553,6 +580,17 @@ export function AmbientesPanel({
               />
             </div>
             <PanelViewToggle value={viewMode} onChange={setViewMode} />
+            {!isAdmin && tab === "ambientes" && (
+              <AmbientesDatosMenu
+                onAction={(action) => {
+                  if (action === "import-ambientes") setImportAmbientesOpen(true);
+                  else if (action === "import-activos") setImportActivosOpen(true);
+                  else setEliminarOpen(true);
+                }}
+                importActivosDisabled={ambientes.length === 0}
+                importActivosDisabledReason="Primero importe o cree ambientes"
+              />
+            )}
             <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
               + Crear ambiente
             </Button>
@@ -808,6 +846,36 @@ export function AmbientesPanel({
         error={abrirVisitaError}
         onConfirm={confirmarAbrirVisita}
       />
+
+      {!isAdmin && (
+        <>
+          <AmbientesImportDialog
+            open={importAmbientesOpen}
+            onClose={() => setImportAmbientesOpen(false)}
+            entidad={entidad}
+            onImported={() => void syncAmbientesYResponsables()}
+          />
+          <InventarioImportDialog
+            open={importActivosOpen}
+            onClose={() => setImportActivosOpen(false)}
+            entidades={[entidad]}
+            fixedEntidad={entidad}
+            onImported={() => void syncAmbientesYResponsables()}
+          />
+          <EliminarActivosPorCodigosDialog
+            open={eliminarOpen}
+            onClose={() => setEliminarOpen(false)}
+            entidades={[entidad]}
+            fixedEntidadId={entidad.id}
+            onPreview={previewDeleteActivosPorCodigos}
+            onDelete={deleteActivosPorCodigos}
+            onDeleted={() => {
+              void syncAmbientesYResponsables();
+              router.refresh();
+            }}
+          />
+        </>
+      )}
 
     </div>
   );

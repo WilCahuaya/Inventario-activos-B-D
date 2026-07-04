@@ -3,6 +3,8 @@ import { CODIGO_BARRAS_CATALOGO_DIGITS } from "./codigo-barras";
 type CategoriaBien = "ACTIVO" | "CUENTA_ORDEN";
 type EstadoBien = "BUENO" | "REGULAR" | "MALO";
 
+const IMPORT_CUENTA_CODIGO_RE = /^\d{1,6}$/;
+
 function parseFechaDDMMYYYY(text: string): string | null {
   const trimmed = text.trim();
   const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -22,7 +24,7 @@ function validarFechaDDMMYYYY(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   if (!parseFechaDDMMYYYY(trimmed)) {
-    return "Fecha adq. inválida (use DD/MM/AAAA).";
+    return "Fecha de adquisición inválida (use DD/MM/AAAA).";
   }
   return null;
 }
@@ -40,27 +42,43 @@ function vidaUtilMesesFromPorcentaje(porcentajeAnual: number): number {
   return Math.round(1200 / porcentajeAnual);
 }
 
+function normalizeImportCuentaCodigo(value: string): string | null {
+  const digits = value.trim().replace(/\D/g, "");
+  return IMPORT_CUENTA_CODIGO_RE.test(digits) ? digits : null;
+}
+
+function normalizeImportNombreCuenta(cuentaCodigo: string, nombre: string): string | null {
+  let texto = nombre.trim().replace(/\s+/g, " ");
+  if (!texto) return null;
+  if (texto === cuentaCodigo || texto.startsWith(`${cuentaCodigo} `)) {
+    texto = texto.slice(cuentaCodigo.length).trim();
+  }
+  return texto.length >= 2 ? texto : null;
+}
+
 export const MAX_IMPORT_ACTIVOS_FILAS = 500;
 
 export const IMPORT_ACTIVOS_COLUMN_ERROR = "Error" as const;
 
 export const IMPORT_ACTIVOS_HEADERS = [
-  "Sucursal",
-  "Ambiente",
-  "Código catálogo",
-  "Nombre del bien",
   "Categoría",
-  "Estado",
+  "Código catálogo",
   "Marca",
   "Modelo",
   "Serie",
   "Color",
   "Medidas",
-  "Descripción",
-  "Fecha adq.",
-  "Precio adq.",
+  "Detalle",
+  "Estado",
+  "Fecha de adquisición",
+  "Precio de adquisición (S/)",
+  "Valor de mercado (S/)",
   "% Deprec.",
-  "Observación",
+  "Observaciones",
+  "Código cuenta contable",
+  "Nombre cuenta contable",
+  "Sucursal",
+  "Ambiente",
 ] as const;
 
 export type ImportActivoHeader = (typeof IMPORT_ACTIVOS_HEADERS)[number];
@@ -79,13 +97,27 @@ export interface ImportUbicacionRef {
   responsable?: string | null;
 }
 
+export interface ImportActivoCatalogoItem {
+  denominacion: string;
+  cuenta_codigo: string | null;
+  contabilidad: string | null;
+  depreciacion: string | null;
+}
+
+export interface ImportActivoCatalogoContabilidadUpdate {
+  codigo_catalogo: string;
+  cuenta_codigo: string;
+  contabilidad: string;
+  depreciacion: string | null;
+}
+
 export interface ImportActivoInsertPayload {
   entidad_id: string;
   codigo_catalogo: string;
   nombre: string;
   categoria: CategoriaBien;
   estado_bien: EstadoBien;
-  descripcion: string | null;
+  caracteristicas: string | null;
   marca: string | null;
   modelo: string | null;
   serie: string | null;
@@ -93,11 +125,13 @@ export interface ImportActivoInsertPayload {
   medidas: string | null;
   fecha_adquisicion: string | null;
   valor_adquisicion: number | null;
+  valor_es_mercado: boolean;
   depreciacion: string | null;
   vida_util_meses: number | null;
   observacion: string | null;
   sede_id: string;
   ambiente_id: string;
+  catalogo_contabilidad?: ImportActivoCatalogoContabilidadUpdate | null;
 }
 
 export interface ImportActivoErrorItem {
@@ -121,8 +155,6 @@ const HEADER_ALIASES: Record<string, ImportActivoHeader> = {
   "codigo catálogo": "Código catálogo",
   catalogo: "Código catálogo",
   cat: "Código catálogo",
-  "nombre del bien": "Nombre del bien",
-  nombre: "Nombre del bien",
   categoria: "Categoría",
   categoría: "Categoría",
   estado: "Estado",
@@ -132,20 +164,34 @@ const HEADER_ALIASES: Record<string, ImportActivoHeader> = {
   serie: "Serie",
   color: "Color",
   medidas: "Medidas",
-  descripcion: "Descripción",
-  descripción: "Descripción",
-  "fecha adq": "Fecha adq.",
-  "fecha adq.": "Fecha adq.",
-  "fecha adquisicion": "Fecha adq.",
-  "precio adq": "Precio adq.",
-  "precio adq.": "Precio adq.",
-  "valor adquisicion": "Precio adq.",
+  detalle: "Detalle",
+  descripcion: "Detalle",
+  descripción: "Detalle",
+  "fecha adq": "Fecha de adquisición",
+  "fecha adq.": "Fecha de adquisición",
+  "fecha de adquisicion": "Fecha de adquisición",
+  "fecha de adquisición": "Fecha de adquisición",
+  "precio adq": "Precio de adquisición (S/)",
+  "precio adq.": "Precio de adquisición (S/)",
+  "precio de adquisicion": "Precio de adquisición (S/)",
+  "precio de adquisición": "Precio de adquisición (S/)",
+  "valor mercado": "Valor de mercado (S/)",
+  "valor de mercado": "Valor de mercado (S/)",
+  "valor mercado (s/)": "Valor de mercado (S/)",
   "% deprec": "% Deprec.",
   "% deprec.": "% Deprec.",
   depreciacion: "% Deprec.",
   depreciación: "% Deprec.",
-  observacion: "Observación",
-  observación: "Observación",
+  observacion: "Observaciones",
+  observación: "Observaciones",
+  observaciones: "Observaciones",
+  "codigo cuenta contable": "Código cuenta contable",
+  "código cuenta contable": "Código cuenta contable",
+  "cuenta contable": "Código cuenta contable",
+  "codigo cuenta": "Código cuenta contable",
+  "nombre cuenta contable": "Nombre cuenta contable",
+  "nombre de cuenta contable": "Nombre cuenta contable",
+  contabilidad: "Nombre cuenta contable",
 };
 
 export function normalizeImportKey(text: string): string {
@@ -184,6 +230,27 @@ export function buildUbicacionLookup(
   return map;
 }
 
+export function buildCuentaContableLookup(
+  rows: Array<{ cuenta_codigo: string | null; contabilidad: string | null }>,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    const codigo = row.cuenta_codigo?.trim();
+    if (!codigo || !IMPORT_CUENTA_CODIGO_RE.test(codigo)) continue;
+    const nombre = normalizeImportNombreCuenta(codigo, row.contabilidad ?? "");
+    if (!nombre) continue;
+    const existing = map.get(codigo);
+    if (!existing) {
+      map.set(codigo, nombre);
+      continue;
+    }
+    if (normalizeImportKey(existing) !== normalizeImportKey(nombre)) {
+      map.set(codigo, existing);
+    }
+  }
+  return map;
+}
+
 function parseCategoria(text: string): CategoriaBien | null {
   const key = normalizeImportKey(text);
   if (!key) return "ACTIVO";
@@ -218,12 +285,178 @@ function normalizeCodigoCatalogo(text: string): string {
   return digits.padStart(CODIGO_BARRAS_CATALOGO_DIGITS, "0");
 }
 
+function resolveImportCuentaContable(
+  codigoRaw: string,
+  nombreRaw: string,
+  cuentaLookup: Map<string, string>,
+):
+  | { ok: true; cuenta_codigo: string; contabilidad: string; lookup: Map<string, string> }
+  | { ok: false; motivo: string } {
+  const codigoInput = codigoRaw.trim();
+  const nombreInput = nombreRaw.trim();
+
+  if (!codigoInput && !nombreInput) {
+    return { ok: false, motivo: "SKIP" };
+  }
+
+  if (!codigoInput && nombreInput) {
+    return { ok: false, motivo: "Indique el código de cuenta contable." };
+  }
+
+  const codigo = normalizeImportCuentaCodigo(codigoInput);
+  if (!codigo) {
+    return { ok: false, motivo: "Código cuenta contable inválido (1 a 6 dígitos)." };
+  }
+
+  const nombreExplicito = nombreInput ? normalizeImportNombreCuenta(codigo, nombreInput) : null;
+  if (nombreInput && !nombreExplicito) {
+    return { ok: false, motivo: "Nombre cuenta contable inválido." };
+  }
+
+  const nombreCatalogo = cuentaLookup.get(codigo) ?? null;
+
+  if (!nombreExplicito) {
+    if (!nombreCatalogo) {
+      return {
+        ok: false,
+        motivo: `Cuenta contable "${codigo}" no registrada. Indique el nombre.`,
+      };
+    }
+    return { ok: true, cuenta_codigo: codigo, contabilidad: nombreCatalogo, lookup: cuentaLookup };
+  }
+
+  if (
+    nombreCatalogo &&
+    normalizeImportKey(nombreCatalogo) !== normalizeImportKey(nombreExplicito)
+  ) {
+    return {
+      ok: false,
+      motivo: `La cuenta "${codigo}" ya está registrada como "${nombreCatalogo}".`,
+    };
+  }
+
+  const nextLookup = new Map(cuentaLookup);
+  nextLookup.set(codigo, nombreExplicito);
+  return { ok: true, cuenta_codigo: codigo, contabilidad: nombreExplicito, lookup: nextLookup };
+}
+
 export function validateImportActivoFila(
   fila: ImportActivoFila,
   entidadId: string,
   ubicacionLookup: Map<string, { sede_id: string; ambiente_id: string }>,
-  catalogoCodigos: Set<string>,
-): { ok: true; payload: ImportActivoInsertPayload } | { ok: false; motivo: string } {
+  catalogoByCodigo: Map<string, ImportActivoCatalogoItem>,
+  cuentaLookup: Map<string, string>,
+): { ok: true; payload: ImportActivoInsertPayload; cuentaLookup: Map<string, string> } | { ok: false; motivo: string } {
+  const codigoCatalogo = normalizeCodigoCatalogo(fila["Código catálogo"]);
+  if (!codigoCatalogo || codigoCatalogo.length !== CODIGO_BARRAS_CATALOGO_DIGITS) {
+    return { ok: false, motivo: "Código catálogo inválido (8 dígitos)." };
+  }
+
+  const catalogoItem = catalogoByCodigo.get(codigoCatalogo);
+  if (!catalogoItem) {
+    return { ok: false, motivo: `Código catálogo "${codigoCatalogo}" no existe en el catálogo nacional.` };
+  }
+
+  const categoria = parseCategoria(fila.Categoría);
+  if (!categoria) {
+    return { ok: false, motivo: 'Categoría inválida. Use "Activo" o "Cuenta de orden".' };
+  }
+
+  const estadoBien = parseEstadoBien(fila.Estado);
+  if (!estadoBien) {
+    return { ok: false, motivo: 'Estado inválido. Use "Bueno", "Regular" o "Malo".' };
+  }
+
+  const precioRaw = fila["Precio de adquisición (S/)"].trim();
+  const mercadoRaw = fila["Valor de mercado (S/)"].trim();
+  const tienePrecio = Boolean(precioRaw);
+  const tieneMercado = Boolean(mercadoRaw);
+
+  if (tienePrecio && tieneMercado) {
+    return {
+      ok: false,
+      motivo: "Indique solo precio de adquisición o valor de mercado, no ambos.",
+    };
+  }
+
+  let valorAdquisicion: number | null = null;
+  let valorEsMercado = false;
+
+  if (tienePrecio) {
+    valorAdquisicion = parsePrecio(precioRaw);
+    if (valorAdquisicion == null) {
+      return { ok: false, motivo: "Precio de adquisición inválido." };
+    }
+  } else if (tieneMercado) {
+    valorAdquisicion = parsePrecio(mercadoRaw);
+    if (valorAdquisicion == null) {
+      return { ok: false, motivo: "Valor de mercado inválido." };
+    }
+    valorEsMercado = true;
+  }
+
+  const fechaRaw = fila["Fecha de adquisición"].trim();
+  let fechaAdquisicion: string | null = null;
+  if (fechaRaw) {
+    const fechaError = validarFechaDDMMYYYY(fechaRaw);
+    if (fechaError) {
+      return { ok: false, motivo: fechaError };
+    }
+    fechaAdquisicion = parseFechaDDMMYYYY(fechaRaw);
+  }
+
+  if (tienePrecio && !fechaAdquisicion) {
+    return { ok: false, motivo: "Fecha de adquisición es obligatoria con precio de adquisición." };
+  }
+
+  const deprecRaw = fila["% Deprec."].trim();
+  let depreciacion: string | null = null;
+  let vidaUtilMeses: number | null = null;
+
+  if (deprecRaw) {
+    if (categoria === "CUENTA_ORDEN") {
+      return { ok: false, motivo: "Cuenta de orden no admite depreciación." };
+    }
+    if (valorEsMercado) {
+      return { ok: false, motivo: "Valor de mercado no admite depreciación." };
+    }
+    const pct = parsePorcentajeDepreciacion(deprecRaw.includes("%") ? deprecRaw : `${deprecRaw} %`);
+    if (pct == null) {
+      return { ok: false, motivo: "% Deprec. inválido (ej. 10 %)." };
+    }
+    depreciacion = `${pct} %`;
+    vidaUtilMeses = vidaUtilMesesFromPorcentaje(pct);
+  }
+
+  let nextCuentaLookup = cuentaLookup;
+  let catalogoContabilidad: ImportActivoCatalogoContabilidadUpdate | null = null;
+  const cuentaResolved = resolveImportCuentaContable(
+    fila["Código cuenta contable"],
+    fila["Nombre cuenta contable"],
+    cuentaLookup,
+  );
+
+  if (!cuentaResolved.ok) {
+    if (cuentaResolved.motivo !== "SKIP") {
+      return { ok: false, motivo: cuentaResolved.motivo };
+    }
+  } else {
+    nextCuentaLookup = cuentaResolved.lookup;
+    const cuentaActual = catalogoItem.cuenta_codigo?.trim() || null;
+    const nombreActual = catalogoItem.contabilidad?.trim() || null;
+    const cuentaCambia =
+      cuentaActual !== cuentaResolved.cuenta_codigo ||
+      normalizeImportKey(nombreActual ?? "") !== normalizeImportKey(cuentaResolved.contabilidad);
+    if (cuentaCambia) {
+      catalogoContabilidad = {
+        codigo_catalogo: codigoCatalogo,
+        cuenta_codigo: cuentaResolved.cuenta_codigo,
+        contabilidad: cuentaResolved.contabilidad,
+        depreciacion: catalogoItem.depreciacion,
+      };
+    }
+  }
+
   const sucursal = fila.Sucursal.trim();
   const ambiente = fila.Ambiente.trim();
 
@@ -243,69 +476,16 @@ export function validateImportActivoFila(
     };
   }
 
-  const codigoCatalogo = normalizeCodigoCatalogo(fila["Código catálogo"]);
-  if (!codigoCatalogo || codigoCatalogo.length !== CODIGO_BARRAS_CATALOGO_DIGITS) {
-    return { ok: false, motivo: "Código catálogo inválido (8 dígitos)." };
-  }
-  if (!catalogoCodigos.has(codigoCatalogo)) {
-    return { ok: false, motivo: `Código catálogo "${codigoCatalogo}" no existe en el catálogo nacional.` };
-  }
-
-  const nombre = fila["Nombre del bien"].trim();
-  if (!nombre) {
-    return { ok: false, motivo: "Nombre del bien es obligatorio." };
-  }
-
-  const categoria = parseCategoria(fila.Categoría);
-  if (!categoria) {
-    return { ok: false, motivo: 'Categoría inválida. Use "Activo" o "Cuenta de orden".' };
-  }
-
-  const estadoBien = parseEstadoBien(fila.Estado);
-  if (!estadoBien) {
-    return { ok: false, motivo: 'Estado inválido. Use "Bueno", "Regular" o "Malo".' };
-  }
-
-  const fechaRaw = fila["Fecha adq."].trim();
-  let fechaAdquisicion: string | null = null;
-  if (fechaRaw) {
-    const fechaError = validarFechaDDMMYYYY(fechaRaw);
-    if (fechaError) {
-      return { ok: false, motivo: fechaError };
-    }
-    fechaAdquisicion = parseFechaDDMMYYYY(fechaRaw);
-  }
-
-  const precioRaw = fila["Precio adq."].trim();
-  let valorAdquisicion: number | null = null;
-  if (precioRaw) {
-    valorAdquisicion = parsePrecio(precioRaw);
-    if (valorAdquisicion == null) {
-      return { ok: false, motivo: "Precio adq. inválido." };
-    }
-  }
-
-  const deprecRaw = fila["% Deprec."].trim();
-  let depreciacion: string | null = null;
-  let vidaUtilMeses: number | null = null;
-  if (deprecRaw) {
-    const pct = parsePorcentajeDepreciacion(deprecRaw.includes("%") ? deprecRaw : `${deprecRaw} %`);
-    if (pct == null) {
-      return { ok: false, motivo: "% Deprec. inválido (ej. 10 %)." };
-    }
-    depreciacion = `${pct} %`;
-    vidaUtilMeses = vidaUtilMesesFromPorcentaje(pct);
-  }
-
   return {
     ok: true,
+    cuentaLookup: nextCuentaLookup,
     payload: {
       entidad_id: entidadId,
       codigo_catalogo: codigoCatalogo,
-      nombre,
+      nombre: catalogoItem.denominacion.trim(),
       categoria,
       estado_bien: estadoBien,
-      descripcion: fila.Descripción.trim() || null,
+      caracteristicas: fila.Detalle.trim() || null,
       marca: fila.Marca.trim() || null,
       modelo: fila.Modelo.trim() || null,
       serie: fila.Serie.trim() || null,
@@ -313,11 +493,13 @@ export function validateImportActivoFila(
       medidas: fila.Medidas.trim() || null,
       fecha_adquisicion: fechaAdquisicion,
       valor_adquisicion: valorAdquisicion,
+      valor_es_mercado: valorEsMercado,
       depreciacion,
       vida_util_meses: vidaUtilMeses,
-      observacion: fila.Observación.trim() || null,
+      observacion: fila.Observaciones.trim() || null,
       sede_id: ubicacion.sede_id,
       ambiente_id: ubicacion.ambiente_id,
+      catalogo_contabilidad: catalogoContabilidad,
     },
   };
 }

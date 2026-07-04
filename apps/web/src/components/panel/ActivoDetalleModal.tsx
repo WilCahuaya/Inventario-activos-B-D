@@ -41,37 +41,44 @@ function HistorialSection({
   historial: HistorialConUsuario[];
 }) {
   return (
-    <section className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-4">
-      <h3 className="text-sm font-semibold text-foreground">Historial de cambios</h3>
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Cargando historial…</p>
-      ) : historial.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Sin cambios registrados.</p>
-      ) : (
-        <ul className="max-h-48 space-y-2 overflow-y-auto text-sm">
-          {historial.map((item) => (
-            <li
-              key={item.id}
-              className="rounded-md border border-border/40 bg-background px-3 py-2"
-            >
-              <p className="font-medium text-foreground">
-                {item.accion}
-                {item.campo ? ` · ${item.campo}` : ""}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatHistorialFecha(item.created_at)}
-                {item.usuario_nombre ? ` · ${item.usuario_nombre}` : ""}
-              </p>
-              {(item.valor_anterior || item.valor_nuevo) && (
-                <p className="mt-1 text-xs text-foreground/80">
-                  {item.valor_anterior ? `${item.valor_anterior} → ` : ""}
-                  {item.valor_nuevo ?? "—"}
+    <section className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+      <div className="border-b border-border/50 bg-muted/20 px-4 py-2.5">
+        <h3 className="text-sm font-semibold text-foreground">Historial de cambios</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">Últimas modificaciones del bien</p>
+      </div>
+      <div className="p-4">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Cargando historial…</p>
+        ) : historial.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sin cambios registrados.</p>
+        ) : (
+          <ul className="max-h-52 space-y-2 overflow-y-auto">
+            {historial.map((item) => (
+              <li
+                key={item.id}
+                className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  {item.accion}
+                  {item.campo ? (
+                    <span className="font-normal text-muted-foreground"> · {item.campo}</span>
+                  ) : null}
                 </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatHistorialFecha(item.created_at)}
+                  {item.usuario_nombre ? ` · ${item.usuario_nombre}` : ""}
+                </p>
+                {(item.valor_anterior || item.valor_nuevo) && (
+                  <p className="mt-1.5 rounded-md bg-background/80 px-2 py-1 font-mono text-[11px] text-foreground/90">
+                    {item.valor_anterior ? `${item.valor_anterior} → ` : ""}
+                    {item.valor_nuevo ?? "—"}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

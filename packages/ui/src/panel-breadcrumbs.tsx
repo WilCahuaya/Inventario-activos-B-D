@@ -4,6 +4,8 @@ export interface PanelBreadcrumbItem {
   label: string;
   href?: string;
   onClick?: () => void;
+  /** Reemplaza el texto del segmento (p. ej. selector de ambiente). */
+  slot?: ReactNode;
 }
 
 /** Inserta la sede en la ruta justo antes del segmento en `beforeIndex`. */
@@ -11,11 +13,12 @@ export function withSedeBreadcrumb(
   items: PanelBreadcrumbItem[],
   sedeNombre: string | null | undefined,
   beforeIndex: number,
+  sedeLink?: Pick<PanelBreadcrumbItem, "href" | "onClick">,
 ): PanelBreadcrumbItem[] {
   const sede = sedeNombre?.trim();
   if (!sede || beforeIndex < 0 || beforeIndex > items.length) return items;
   const out = [...items];
-  out.splice(beforeIndex, 0, { label: sede });
+  out.splice(beforeIndex, 0, { label: sede, ...sedeLink });
   return out;
 }
 
@@ -58,7 +61,7 @@ export function PanelBreadcrumbs({
     >
       {items.map((item, index) => {
         const isLast = index === items.length - 1;
-        const clickable = !isLast && Boolean(item.href || item.onClick);
+        const clickable = !isLast && !item.slot && Boolean(item.href || item.onClick);
 
         return (
           <span key={`${item.label}-${index}`} className="inline-flex max-w-full items-center gap-1.5">
@@ -67,7 +70,9 @@ export function PanelBreadcrumbs({
                 |
               </span>
             )}
-            {clickable && item.href ? (
+            {item.slot ? (
+              <span className="inline-flex min-w-0 max-w-full items-center">{item.slot}</span>
+            ) : clickable && item.href ? (
               <LinkImpl href={item.href} className={crumbLinkClass} title={item.label}>
                 {item.label}
               </LinkImpl>
