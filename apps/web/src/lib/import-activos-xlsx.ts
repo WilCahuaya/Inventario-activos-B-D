@@ -5,6 +5,7 @@ import {
   emptyImportActivoFila,
   importErrorFilaFromItem,
   mapImportHeaders,
+  normalizeImportDepreciacionRaw,
   type ImportActivoErrorFila,
   type ImportActivoErrorItem,
   type ImportActivoFila,
@@ -87,7 +88,9 @@ export async function parseImportActivosWorkbook(
     const row = matrix[i] ?? [];
     const fila = emptyImportActivoFila();
     headerMap.forEach((header, colIndex) => {
-      fila[header] = cellToString(row[colIndex]);
+      const cell = cellToString(row[colIndex]);
+      fila[header] =
+        header === "% Deprec." ? normalizeImportDepreciacionRaw(cell) : cell;
     });
     if (filaVacia(fila)) continue;
     filas.push(fila);

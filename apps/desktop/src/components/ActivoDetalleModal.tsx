@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatEjemplaresEnAmbienteTexto } from "@inventario/types";
 import { ActivoDetalleSheet } from "@inventario/ui/panel";
+import { EliminarPreregistroDialog, useToast, mensajeEliminacionPreregistros, ActivoHistorialPanel } from "@inventario/ui";
+import type { HistorialActivoItem, HistorialLookupMaps } from "@inventario/types";
+import { listHistorialActivo } from "../lib/historial";
 import {
+  deleteActivoPreregistrado,
   getActivoById,
   getEjemplaresSimilaresResumen,
   listActivosSimilaresParaEtiquetas,
@@ -17,6 +21,7 @@ import {
   ActivoIconButton,
   IconAmbiente,
   IconEditar,
+  IconEliminar,
   IconEtiqueta,
   IconInactivo,
   IconRecuperar,
@@ -34,6 +39,8 @@ interface ActivoDetalleModalProps {
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
   onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onActivoUpdated?: (activo: ActivoConUbicacion) => void;
+  onActivoDeleted?: () => void;
+  onActivoEliminado?: (activoId: string) => void;
   onPrintLabel?: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
 }
@@ -48,9 +55,12 @@ export function ActivoDetalleModal({
   onIrAmbiente,
   onAbrirAmbienteDestino,
   onActivoUpdated,
+  onActivoDeleted,
+  onActivoEliminado,
   onPrintLabel,
   onPrintBatch,
 }: ActivoDetalleModalProps) {
+  const { pushToast } = useToast();
   const [fotoOpen, setFotoOpen] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [validarOpen, setValidarOpen] = useState(false);
@@ -58,6 +68,7 @@ export function ActivoDetalleModal({
   const [recuperarOpen, setRecuperarOpen] = useState(false);
   const [cambiarAmbienteOpen, setCambiarAmbienteOpen] = useState(false);
   const [similaresOpen, setSimilaresOpen] = useState(false);
+  const [eliminarOpen, setEliminarOpen] = useState(false);
   const [ejemplaresLoading, setEjemplaresLoading] = useState(false);
   const [printEjemplaresPending, setPrintEjemplaresPending] = useState(false);
   const [ejemplares, setEjemplares] = useState<{
@@ -65,6 +76,13 @@ export function ActivoDetalleModal({
     registrados: number;
     preregistrados: number;
   } | null>(null);
+  const [historial, setHistorial] = useState<HistorialActivoItem[]>([]);
+  const [historialLookups, setHistorialLookups] = useState<HistorialLookupMaps>({
+    sedes: {},
+    ambientes: {},
+  });
+  const [historialLoading, setHistorialLoading] = useState(false);
+  const [historialError, setHistorialError] = useState<string | null>(null);
 
   const esPendiente = activo.id.startsWith("pending-");
   const esPreregistrado = activo.estado_registro === "PREREGISTRADO";
@@ -77,13 +95,37 @@ export function ActivoDetalleModal({
       .finally(() => setEjemplaresLoading(false));
   }, [activo.id]);
 
+  function loadHistorial() {
+    if (!online) {
+      setHistorial([]);
+      setHistorialLookups({ sedes: {}, ambientes: {} });
+      setHistorialError(null);
+      setHistorialLoading(false);
+      return;
+    }
+    setHistorialLoading(true);
+    setHistorialError(null);
+    void listHistorialActivo(activo.id)
+      .then((result) => {
+        if (result.error) {
+          setHistorialError(result.error);
+          return;
+        }
+        setHistorial(result.data?.items ?? []);
+        setHistorialLookups(result.data?.lookups ?? { sedes: {}, ambientes: {} });
+      })
+      .finally(() => setHistorialLoading(false));
+  }
+
   useEffect(() => {
     if (!open) return;
     reloadEjemplares();
-  }, [open, reloadEjemplares]);
+    loadHistorial();
+  }, [open, reloadEjemplares, online, activo.id]);
 
   async function refreshActivo() {
     reloadEjemplares();
+    loadHistorial();
     const updated = await getActivoById(activo.id);
     if (updated && onActivoUpdated) onActivoUpdated(updated);
   }
@@ -156,6 +198,15 @@ export function ActivoDetalleModal({
           onClick={() => setValidarOpen(true)}
         >
           <IconValidar />
+        </ActivoIconButton>
+      )}
+      {esPreregistrado && online && !esPendiente && (
+        <ActivoIconButton
+          label="Eliminar preregistro"
+          variant="danger"
+          onClick={() => setEliminarOpen(true)}
+        >
+          <IconEliminar />
         </ActivoIconButton>
       )}
       {!inactivo && onEdit && (
@@ -238,6 +289,15 @@ export function ActivoDetalleModal({
         footer={footer}
         banner={banner}
         ejemplaresHint={ejemplaresHint}
+        extraSections={
+          <ActivoHistorialPanel
+            loading={historialLoading}
+            offline={!online}
+            error={historialError}
+            items={historial}
+            lookups={historialLookups}
+          />
+        }
         onVerFoto={activo.foto_path ? () => setFotoOpen(true) : undefined}
         onVerComprobante={activo.comprobante_path ? () => setPdfOpen(true) : undefined}
       />
@@ -282,6 +342,26 @@ export function ActivoDetalleModal({
         activoId={activo.id}
         nombre={activo.nombre}
         onSuccess={() => void refreshActivo()}
+      />
+
+      <EliminarPreregistroDialog
+        open={eliminarOpen}
+        onClose={() => setEliminarOpen(false)}
+        activoId={activo.id}
+        nombre={activo.nombre}
+        onDelete={async (activoId) => {
+          const result = await deleteActivoPreregistrado(activoId);
+          if (result.error) {
+            pushToast(result.error, "error");
+          }
+          return result;
+        }}
+        onSuccess={() => {
+          pushToast(mensajeEliminacionPreregistros(1), "success");
+          onActivoEliminado?.(activo.id);
+          onClose();
+          onActivoDeleted?.();
+        }}
       />
 
       <RecuperarActivoDialog

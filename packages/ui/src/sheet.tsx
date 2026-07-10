@@ -38,14 +38,14 @@ export function Sheet({
 
   useEffect(() => {
     if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
     document.documentElement.classList.add("dialog-open");
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
       document.documentElement.classList.remove("dialog-open");
+      document.removeEventListener("keydown", onKeyDown);
     };
   }, [open, onClose]);
 
@@ -56,7 +56,7 @@ export function Sheet({
       <button
         type="button"
         className="absolute inset-0 bg-black/45 backdrop-blur-[1px]"
-        aria-label="Cerrar panel"
+        aria-label="Cerrar"
         onClick={onClose}
       />
       <aside
@@ -67,7 +67,6 @@ export function Sheet({
           "relative flex h-full w-full max-w-md flex-col border-l border-border/70 bg-card shadow-2xl sm:max-w-lg",
           className,
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="shrink-0 border-b border-border/60 px-5 py-4">
           <div className="flex items-start justify-between gap-3">

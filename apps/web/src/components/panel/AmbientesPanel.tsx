@@ -1,15 +1,15 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
-import { Button, Dialog, ResponsablesPanel } from "@inventario/ui";
+import type { Activo, CreateResponsableInput, Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
+import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
+import { Button, CrearResponsableDialog, Dialog, ResponsablesPanel } from "@inventario/ui";
 import {
-  ActivosIcon,
   DeleteIcon,
   PanelDataTable,
   PanelIconAction,
-  PanelNavActionLink,
   PanelTableActions,
   PanelTableColgroup,
   PanelTableTd,
@@ -20,7 +20,7 @@ import {
   AMBIENTES_TABLE_COLS_SIN_SUCURSAL,
   AMBIENTES_TABLE_COLS_VISITA,
   AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA,
-  panelTableBodyRowClass,
+  panelTableClickableRowClass,
   panelTableHeadRowClass,
   panelTableShrinkCellClass,
   panelTableStickyHeadClass,
@@ -62,6 +62,7 @@ import {
 } from "@/lib/actions/activos";
 import { EliminarActivosPorCodigosDialog } from "@inventario/ui";
 import { GestionarSucursales } from "./GestionarSucursales";
+import { InventarioGlobalPanel } from "./InventarioGlobalPanel";
 import {
   EditIcon,
   PanelCountLabel,
@@ -73,9 +74,10 @@ import {
   panelCardClass,
 } from "./panel-ui";
 
-type EntityTab = "ambientes" | "responsables" | "sucursales" | "visitas";
+type EntityTab = "inventario" | "ambientes" | "responsables" | "sucursales" | "visitas";
 
 const ENTITY_TABS: { id: EntityTab; label: string }[] = [
+  { id: "inventario", label: "Inventario" },
   { id: "ambientes", label: "Ambientes" },
   { id: "responsables", label: "Responsables" },
   { id: "sucursales", label: "Sucursales" },
@@ -83,8 +85,15 @@ const ENTITY_TABS: { id: EntityTab; label: string }[] = [
 ];
 
 function parseInitialTab(value?: string): EntityTab {
-  if (value === "responsables" || value === "sucursales" || value === "visitas") return value;
-  return "ambientes";
+  if (
+    value === "ambientes" ||
+    value === "responsables" ||
+    value === "sucursales" ||
+    value === "visitas"
+  ) {
+    return value;
+  }
+  return "inventario";
 }
 
 type AmbienteRow = AmbienteConVisita;
@@ -94,6 +103,7 @@ interface AmbientesPanelProps {
   ambientes: AmbienteRow[];
   sedes: SedeConConteo[];
   responsables: ResponsableConConteo[];
+  activos?: Activo[];
   visitasActivas?: VisitaCampoActiva[];
   visitasHistorial?: VisitaCampoHistorial[];
   initialTab?: EntityTab;
@@ -112,28 +122,33 @@ interface AmbienteCardProps {
 
 function AmbienteCard({ ambiente, entidadNombre, activosHref, onEdit, onDelete }: AmbienteCardProps) {
   return (
-    <article className={`${panelCardClass} flex flex-col`}>
-      <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
-        <h3 className="font-semibold leading-snug text-primary">{ambiente.nombre}</h3>
-        <StatusBadge variant="active">Activo</StatusBadge>
-      </div>
+    <article className={`${panelCardClass} flex flex-col overflow-hidden`}>
+      <Link
+        href={activosHref}
+        className="flex flex-1 flex-col outline-none transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      >
+        <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
+          <h3 className="font-semibold leading-snug text-primary">{ambiente.nombre}</h3>
+          <StatusBadge variant="active">Activo</StatusBadge>
+        </div>
 
-      <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
-        <p className="font-medium text-foreground">
-          {ambiente.responsable ?? "Sin responsable asignado"}
-        </p>
-        {ambiente.descripcion ? (
-          <p className="text-muted-foreground">{ambiente.descripcion}</p>
-        ) : (
-          <p className="italic text-muted-foreground">Sin descripción</p>
-        )}
-        <p className="text-sm text-muted-foreground">
-          {ambiente.activo_count} {ambiente.activo_count === 1 ? "activo" : "activos"}
-        </p>
-        <p className="mt-auto pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Entidad: {entidadNombre}
-        </p>
-      </div>
+        <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">
+            {ambiente.responsable ?? "Sin responsable asignado"}
+          </p>
+          {ambiente.descripcion ? (
+            <p className="text-muted-foreground">{ambiente.descripcion}</p>
+          ) : (
+            <p className="italic text-muted-foreground">Sin descripción</p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            {ambiente.activo_count} {ambiente.activo_count === 1 ? "activo" : "activos"}
+          </p>
+          <p className="mt-auto pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Entidad: {entidadNombre}
+          </p>
+        </div>
+      </Link>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
         <PanelIconAction label="Editar" onClick={onEdit}>
@@ -142,12 +157,6 @@ function AmbienteCard({ ambiente, entidadNombre, activosHref, onEdit, onDelete }
         <PanelIconAction label="Eliminar" variant="danger" onClick={onDelete}>
           <DeleteIcon />
         </PanelIconAction>
-        <PanelNavActionLink
-          href={activosHref}
-          label="Activos"
-          icon={<ActivosIcon />}
-          className="ml-auto"
-        />
       </div>
     </article>
   );
@@ -158,9 +167,10 @@ export function AmbientesPanel({
   ambientes: initial,
   sedes: initialSedes,
   responsables: initialResponsables,
+  activos = [],
   visitasActivas: initialVisitasActivas = [],
   visitasHistorial: initialVisitasHistorial = [],
-  initialTab = "ambientes",
+  initialTab = "inventario",
   sedeFocus = null,
   panelMode = "contador",
 }: AmbientesPanelProps) {
@@ -174,12 +184,24 @@ export function AmbientesPanel({
     isAdmin ? `/admin/ambientes/${ambienteId}` : `/contador/entidades/${entidad.id}/ambientes/${ambienteId}`;
   const router = useRouter();
   const [tab, setTab] = useState<EntityTab>(parseInitialTab(initialTab));
+
+  function handleTabChange(next: EntityTab) {
+    setTab(next);
+    if (sedeFocus) return;
+    const path = entidadHref;
+    router.replace(next === "inventario" ? path : `${path}?tab=${next}`, { scroll: false });
+  }
+
   const [ambientes, setAmbientes] = useState(initial);
   const [sedes, setSedes] = useState(initialSedes);
   const [responsables, setResponsables] = useState(initialResponsables);
   const [busqueda, setBusqueda] = useState("");
   const [sedeFilterId, setSedeFilterId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createResponsableOpen, setCreateResponsableOpen] = useState(false);
+  const [createResponsableId, setCreateResponsableId] = useState("");
+  const [editResponsableOpen, setEditResponsableOpen] = useState(false);
+  const [editResponsableId, setEditResponsableId] = useState("");
   const [editAmbiente, setEditAmbiente] = useState<AmbienteRow | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -207,12 +229,49 @@ export function AmbientesPanel({
   const todasEnVisita = visitasActivas.some((v) => !v.sede_id);
 
   const sedeActivaId = sedeFocus?.id ?? sedeFilterId;
-  const soloUnaSede = Boolean(sedeActivaId);
+  const sedeFiltrada = Boolean(sedeActivaId);
+  const entidadMultiplesSedes = entidadMuestraSelectorSede(sedes);
+  const ocultarSucursalEnLista = !entidadMultiplesSedes || sedeFiltrada;
+
+  const entityTabs = useMemo(
+    () =>
+      entidadMultiplesSedes
+        ? ENTITY_TABS
+        : ENTITY_TABS.filter((t) => t.id !== "sucursales"),
+    [entidadMultiplesSedes],
+  );
+
+  useEffect(() => {
+    if (!entidadMultiplesSedes && tab === "sucursales") {
+      handleTabChange("inventario");
+    }
+  }, [entidadMultiplesSedes, tab]);
 
   useEffect(() => {
     setSedeFilterId("");
     setBusqueda("");
   }, [entidad.id, sedeFocus?.id]);
+
+  useEffect(() => {
+    if (editAmbiente) {
+      setEditResponsableId(editAmbiente.responsable_id ?? "");
+      setEditResponsableOpen(false);
+    }
+  }, [editAmbiente]);
+
+  function closeCreateAmbiente() {
+    setCreateOpen(false);
+    setCreateResponsableOpen(false);
+    setCreateResponsableId("");
+    setError(null);
+  }
+
+  function closeEditAmbiente() {
+    setEditAmbiente(null);
+    setEditResponsableOpen(false);
+    setEditResponsableId("");
+    setError(null);
+  }
 
   async function syncVisitaYAmbientes() {
     const [visitas, historial, ambList] = await Promise.all([
@@ -298,6 +357,16 @@ export function AmbientesPanel({
     return responsables.find((r) => r.id === id)?.nombre ?? null;
   }
 
+  async function createResponsableDesdeAmbiente(input: CreateResponsableInput) {
+    const result = await createResponsable(entidad.id, input);
+    if (result.data) {
+      const nuevo: ResponsableConConteo = { ...result.data, ambiente_count: 0 };
+      setResponsables((prev) => [...prev, nuevo]);
+      return { data: nuevo };
+    }
+    return { error: result.error };
+  }
+
   const ambientesBase = useMemo(() => {
     if (!sedeActivaId) return ambientes;
     return ambientes.filter((a) => a.sede_id === sedeActivaId);
@@ -311,9 +380,9 @@ export function AmbientesPanel({
         a.nombre.toLowerCase().includes(q) ||
         (a.descripcion?.toLowerCase().includes(q) ?? false) ||
         (a.responsable?.toLowerCase().includes(q) ?? false) ||
-        (!soloUnaSede && a.sede_nombre.toLowerCase().includes(q)),
+        (entidadMultiplesSedes && !sedeFiltrada && a.sede_nombre.toLowerCase().includes(q)),
     );
-  }, [ambientesBase, busqueda, soloUnaSede]);
+  }, [ambientesBase, busqueda, entidadMultiplesSedes, sedeFiltrada]);
 
   const gruposPorSede = useMemo(() => {
     const porSede = new Map<string, AmbienteRow[]>();
@@ -459,23 +528,29 @@ export function AmbientesPanel({
         ];
 
   return (
-    <div className="space-y-4">
+    <div
+      className={
+        !sedeFocus && tab === "inventario"
+          ? "flex min-h-0 flex-1 flex-col gap-1"
+          : "space-y-4"
+      }
+    >
       <PanelPageHeader
         breadcrumbs={breadcrumbs}
         subtitle={
           sedeFocus
             ? `Ambientes de la sucursal · ${sedeFocus.nombre}`
             : entidad.ruc
-              ? `RUC ${entidad.ruc} · Ambientes, responsables y sucursales`
-              : "Ambientes, responsables y sucursales"
+              ? `RUC ${entidad.ruc} · Inventario, ambientes${entidadMultiplesSedes ? " y sucursales" : ""}`
+              : `Inventario, ambientes${entidadMultiplesSedes ? " y sucursales" : ""}`
         }
       />
 
       {!sedeFocus && (
         <PanelTabs
-          tabs={ENTITY_TABS}
+          tabs={entityTabs}
           value={tab}
-          onChange={setTab}
+          onChange={handleTabChange}
           actions={
             puedeGestionarVisita ? (
               <IniciarVisitaCampoButton
@@ -493,7 +568,18 @@ export function AmbientesPanel({
         />
       )}
 
-      {!sedeFocus && tab === "visitas" ? (
+      {!sedeFocus && tab === "inventario" ? (
+        <InventarioGlobalPanel
+          mode={isAdmin ? "admin" : "contador"}
+          entidades={[entidad]}
+          activos={activos}
+          fixedEntidadId={entidad.id}
+          fixedEntidadNombre={entidad.nombre}
+          embeddedInEntityPage
+          entityPageHref={entidadHref}
+          onOpenEliminarPorCodigos={!isAdmin ? () => setEliminarOpen(true) : undefined}
+        />
+      ) : !sedeFocus && tab === "visitas" ? (
         <VisitasCampoHistorialPanel
           historial={visitasHistorial}
           loadingDetalle={detalleLoading}
@@ -557,7 +643,7 @@ export function AmbientesPanel({
               singular="ambiente"
               plural="ambientes"
             />
-            {!sedeFocus && sedes.length > 0 && (
+            {!sedeFocus && entidadMultiplesSedes && (
               <SedeAmbienteFilterSelect
                 sedes={sedes}
                 value={sedeFilterId}
@@ -573,7 +659,7 @@ export function AmbientesPanel({
                 value={busqueda}
                 onChange={setBusqueda}
                 placeholder={
-                  soloUnaSede
+                  ocultarSucursalEnLista
                     ? "Buscar ambiente o responsable…"
                     : "Buscar ambiente, responsable o sucursal…"
                 }
@@ -584,8 +670,7 @@ export function AmbientesPanel({
               <AmbientesDatosMenu
                 onAction={(action) => {
                   if (action === "import-ambientes") setImportAmbientesOpen(true);
-                  else if (action === "import-activos") setImportActivosOpen(true);
-                  else setEliminarOpen(true);
+                  else setImportActivosOpen(true);
                 }}
                 importActivosDisabled={ambientes.length === 0}
                 importActivosDisabledReason="Primero importe o cree ambientes"
@@ -621,7 +706,7 @@ export function AmbientesPanel({
         <PanelDataTable layout="auto">
           <PanelTableColgroup
             cols={
-              soloUnaSede
+              ocultarSucursalEnLista
                 ? visitaAbierta
                   ? AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA
                   : AMBIENTES_TABLE_COLS_SIN_SUCURSAL
@@ -635,7 +720,7 @@ export function AmbientesPanel({
               <PanelTableTh>Ambiente</PanelTableTh>
               <PanelTableTh>Responsable</PanelTableTh>
               <PanelTableTh>Descripción</PanelTableTh>
-              {!soloUnaSede && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
+              {!ocultarSucursalEnLista && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
               <PanelTableTh align="center" className={panelTableShrinkCellClass}>
                 Activos
               </PanelTableTh>
@@ -650,7 +735,19 @@ export function AmbientesPanel({
           </thead>
           <tbody>
             {ambientesFiltrados.map((amb) => (
-              <tr key={amb.id} className={panelTableBodyRowClass}>
+              <tr
+                key={amb.id}
+                className={panelTableClickableRowClass}
+                onClick={() => router.push(activoHref(amb.id))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    router.push(activoHref(amb.id));
+                  }
+                }}
+                tabIndex={0}
+                role="link"
+              >
                 <PanelTableTd className="font-medium text-primary" title={amb.nombre}>
                   {amb.nombre}
                 </PanelTableTd>
@@ -660,16 +757,18 @@ export function AmbientesPanel({
                 <PanelTableTd className="text-muted-foreground" title={amb.descripcion ?? undefined}>
                   {amb.descripcion ?? "—"}
                 </PanelTableTd>
-                {!soloUnaSede && (
+                {!ocultarSucursalEnLista && (
                   <PanelTableTd className={panelTableShrinkCellClass} title={amb.sede_nombre}>
-                    <button
-                      type="button"
-                      className="truncate font-medium text-primary hover:underline"
-                      title="Ver ambientes de esta sucursal"
-                      onClick={() => setSedeFilterId(amb.sede_id)}
-                    >
-                      {amb.sede_nombre}
-                    </button>
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="truncate font-medium text-primary hover:underline"
+                        title="Ver ambientes de esta sucursal"
+                        onClick={() => setSedeFilterId(amb.sede_id)}
+                      >
+                        {amb.sede_nombre}
+                      </button>
+                    </div>
                   </PanelTableTd>
                 )}
                 <PanelTableTd align="center" className={panelTableShrinkCellClass}>
@@ -677,7 +776,10 @@ export function AmbientesPanel({
                 </PanelTableTd>
                 {visitaAbierta && (
                   <PanelTableTd className={panelTableNowrapCellClass}>
-                    <div className="flex flex-col items-start gap-1">
+                    <div
+                      className="flex flex-col items-start gap-1"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <VisitaCampoEstadoBadge estado={amb.visita_estado} />
                       {puedeGestionarVisita &&
                         !amb.es_preregistro &&
@@ -700,24 +802,21 @@ export function AmbientesPanel({
                   <StatusBadge variant="active">Activo</StatusBadge>
                 </PanelTableTd>
                 <PanelTableTd align="right" className={`overflow-visible ${panelTableNowrapCellClass}`}>
-                  <PanelTableActions
-                    onEdit={() => {
-                      setError(null);
-                      setEditAmbiente(amb);
-                    }}
-                    onDelete={() => handleDeleteAmbiente(amb)}
-                    nav={{
-                      label: "Activos",
-                      kind: "activos",
-                      href: activoHref(amb.id),
-                    }}
-                  />
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <PanelTableActions
+                      onEdit={() => {
+                        setError(null);
+                        setEditAmbiente(amb);
+                      }}
+                      onDelete={() => handleDeleteAmbiente(amb)}
+                    />
+                  </div>
                 </PanelTableTd>
               </tr>
             ))}
           </tbody>
         </PanelDataTable>
-      ) : soloUnaSede ? (
+      ) : ocultarSucursalEnLista ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {ambientesFiltrados.map((amb) => (
             <AmbienteCard
@@ -774,27 +873,29 @@ export function AmbientesPanel({
 
       <Dialog
         open={createOpen}
-        onClose={() => {
-          setCreateOpen(false);
-          setError(null);
-        }}
+        onClose={closeCreateAmbiente}
         title="Nuevo ambiente"
         description={
           sedeFocus
             ? `Registre un ambiente en ${sedeFocus.nombre}.`
-            : "Registre un ambiente en la sucursal que corresponda."
+            : !entidadMultiplesSedes
+              ? `Registre un ambiente en ${sedes[0]?.nombre ?? "la sucursal principal"}.`
+              : "Registre un ambiente en la sucursal que corresponda."
         }
       >
         <form onSubmit={handleCreate} className="space-y-4">
           <AmbienteFormFields
             sedes={sedes}
             responsables={responsables}
-            defaultSedeId={sedeActivaId || undefined}
-            showSedeSelect={!soloUnaSede}
+            defaultSedeId={sedeActivaId || sedeIdSinSelector(sedes) || undefined}
+            showSedeSelect={entidadMultiplesSedes}
+            responsableId={createResponsableId}
+            onResponsableIdChange={setCreateResponsableId}
+            onRequestCreateResponsable={() => setCreateResponsableOpen(true)}
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button type="button" variant="outline" onClick={closeCreateAmbiente}>
               Cancelar
             </Button>
             <Button type="submit" disabled={pending}>
@@ -804,21 +905,35 @@ export function AmbientesPanel({
         </form>
       </Dialog>
 
+      <CrearResponsableDialog
+        open={createOpen && createResponsableOpen}
+        onClose={() => setCreateResponsableOpen(false)}
+        onCreate={createResponsableDesdeAmbiente}
+        onCreated={(nuevo) => {
+          setCreateResponsableId(nuevo.id);
+          setCreateResponsableOpen(false);
+        }}
+      />
+
       <Dialog
         open={!!editAmbiente}
-        onClose={() => {
-          setEditAmbiente(null);
-          setError(null);
-        }}
+        onClose={closeEditAmbiente}
         title="Editar ambiente"
         description={editAmbiente?.nombre}
       >
         {editAmbiente && (
           <form onSubmit={handleEditAmbiente} className="space-y-4">
-            <AmbienteFormFields ambiente={editAmbiente} sedes={sedes} responsables={responsables} />
+            <AmbienteFormFields
+              ambiente={editAmbiente}
+              sedes={sedes}
+              responsables={responsables}
+              responsableId={editResponsableId}
+              onResponsableIdChange={setEditResponsableId}
+              onRequestCreateResponsable={() => setEditResponsableOpen(true)}
+            />
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditAmbiente(null)}>
+              <Button type="button" variant="outline" onClick={closeEditAmbiente}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={pending}>
@@ -828,6 +943,16 @@ export function AmbientesPanel({
           </form>
         )}
       </Dialog>
+
+      <CrearResponsableDialog
+        open={Boolean(editAmbiente) && editResponsableOpen}
+        onClose={() => setEditResponsableOpen(false)}
+        onCreate={createResponsableDesdeAmbiente}
+        onCreated={(nuevo) => {
+          setEditResponsableId(nuevo.id);
+          setEditResponsableOpen(false);
+        }}
+      />
 
       <IniciarVisitaCampoDialog
         open={abrirVisitaOpen}

@@ -8,16 +8,23 @@ import {
   type CatalogoOpcionTipo,
   type CreateCatalogoNacionalInput,
   type CuentaContable,
+  type UpsertCuentaContableInput,
   validarCuentaContableParaCatalogo,
 } from "@inventario/types";
 import { Button, Input, Label } from "./components";
 import { ClaseCatalogoCombobox } from "./clase-catalogo-combobox";
 import { CuentaContableFields } from "./cuenta-contable-fields";
 import { GrupoCatalogoCombobox } from "./grupo-catalogo-combobox";
+import { PorcentajeInput } from "./porcentaje-input";
+
+export type CatalogoNacionalFormVariant = "propio" | "nacional";
 
 export interface CatalogoNacionalFormProps {
+  variant?: CatalogoNacionalFormVariant;
   initialDenominacion?: string;
+  initialCodigo?: string;
   codigo: string;
+  codigoEditable?: boolean;
   codigoLoading?: boolean;
   grupos?: CatalogoCampoOpciones;
   clases?: CatalogoCampoOpciones;
@@ -36,11 +43,17 @@ export interface CatalogoNacionalFormProps {
   ) => void | Promise<{ error?: string } | void>;
   onOpcionesChanged?: () => void | Promise<void>;
   onSubmit: (input: CreateCatalogoNacionalInput) => void | Promise<void>;
+  onCreateCuentaContable?: (
+    input: UpsertCuentaContableInput,
+  ) => Promise<{ data?: CuentaContable; error?: string }>;
 }
 
 export function CatalogoNacionalForm({
+  variant = "propio",
   initialDenominacion = "",
-  codigo,
+  initialCodigo = "",
+  codigo: codigoProp,
+  codigoEditable = false,
   codigoLoading = false,
   grupos = { opciones: [], personalizadas: [] },
   clases = { opciones: [], personalizadas: [] },
@@ -53,12 +66,19 @@ export function CatalogoNacionalForm({
   onDeleteOpcionPersonalizada,
   onOpcionesChanged,
   onSubmit,
+  onCreateCuentaContable,
 }: CatalogoNacionalFormProps) {
+  const esNacional = variant === "nacional";
   const [denominacion, setDenominacion] = useState(initialDenominacion);
+  const [codigoEditableValue, setCodigoEditableValue] = useState(initialCodigo || codigoProp);
   const [grupo, setGrupo] = useState("");
   const [clase, setClase] = useState("");
-  const [cuentaCodigo, setCuentaCodigo] = useState(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+  const [cuentaCodigo, setCuentaCodigo] = useState(
+    esNacional ? "" : CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+  );
   const [contabilidad, setContabilidad] = useState("");
+  const [depreciacion, setDepreciacion] = useState("");
+  const [resolucion, setResolucion] = useState("");
   const [cuentaError, setCuentaError] = useState<string | null>(null);
   const [codigosCuentaMaestra, setCodigosCuentaMaestra] = useState<string[]>([]);
   const [grupoSugerido, setGrupoSugerido] = useState<string | null>(null);
@@ -90,12 +110,14 @@ export function CatalogoNacionalForm({
     setDenominacion(initialDenominacion);
     setGrupo("");
     setClase("");
-    setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+    setCuentaCodigo(esNacional ? "" : CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
     setContabilidad("");
+    setDepreciacion("");
+    setResolucion("");
     setCuentaError(null);
     setGrupoSugerido(null);
     setGrupoManualState(false);
-  }, [initialDenominacion, codigo]);
+  }, [initialDenominacion, codigoProp, esNacional]);
 
   useEffect(() => {
     const texto = denominacion.trim();
@@ -150,7 +172,13 @@ export function CatalogoNacionalForm({
     return result;
   }
 
-  const camposDeshabilitados = pending || codigoLoading;
+  const camposDeshabilitados = pending || (!esNacional && codigoLoading);
+  const codigo = esNacional || codigoEditable ? codigoEditableValue : codigoProp;
+
+  useEffect(() => {
+    if (!esNacional && !codigoEditable) return;
+    if (initialCodigo) setCodigoEditableValue(initialCodigo);
+  }, [initialCodigo, esNacional, codigoEditable]);
 
   return (
     <form
@@ -172,21 +200,40 @@ export function CatalogoNacionalForm({
           clase,
           cuenta_codigo: cuentaCodigo,
           contabilidad,
-          estado: CATALOGO_CUENTA_ORDEN_ESTADO,
+          depreciacion: esNacional ? depreciacion : undefined,
+          resolucion: esNacional ? resolucion : undefined,
+          estado: esNacional ? "ACTIVO" : CATALOGO_CUENTA_ORDEN_ESTADO,
         });
       }}
     >
       <div className="space-y-2">
         <Label htmlFor="catalogo_codigo">Código</Label>
-        <Input
-          id="catalogo_codigo"
-          readOnly
-          disabled
-          value={codigoLoading ? "Generando…" : codigo}
-          className="bg-muted font-mono"
-        />
+        {esNacional || codigoEditable ? (
+          <Input
+            id="catalogo_codigo"
+            required
+            inputMode="numeric"
+            pattern="\d{8}"
+            maxLength={8}
+            value={codigoEditableValue}
+            disabled={camposDeshabilitados}
+            className="font-mono"
+            placeholder="12345678"
+            onChange={(e) => setCodigoEditableValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
+          />
+        ) : (
+          <Input
+            id="catalogo_codigo"
+            readOnly
+            disabled
+            value={codigoLoading ? "Generando…" : codigoProp}
+            className="bg-muted font-mono"
+          />
+        )}
         <p className="text-xs text-muted-foreground">
-          Secuencia automática para bienes de cuenta de orden (BD000001, BD000002…).
+          {esNacional
+            ? "Código de 8 dígitos del catálogo nacional SBN."
+            : "Secuencia automática para bienes de cuenta de orden (BD000001, BD000002…)."}
         </p>
       </div>
 
@@ -217,11 +264,25 @@ export function CatalogoNacionalForm({
         disabled={camposDeshabilitados}
         codigoId="catalogo_cuenta_codigo"
         nombreId="catalogo_contabilidad"
-        allowCreateNew
+        allowCreateNew={Boolean(onCreateCuentaContable)}
+        onCreateCuenta={onCreateCuentaContable}
         onCodigosMaestraLoaded={setCodigosCuentaMaestra}
       />
       {cuentaError && (
         <p className="text-sm text-destructive sm:col-span-2">{cuentaError}</p>
+      )}
+
+      {esNacional && (
+        <div className="space-y-2">
+          <Label htmlFor="catalogo_depreciacion">% Depreciación</Label>
+          <PorcentajeInput
+            id="catalogo_depreciacion"
+            value={depreciacion}
+            onChange={setDepreciacion}
+            disabled={camposDeshabilitados}
+            placeholder="Ej. 10 %"
+          />
+        </div>
       )}
 
       <div>
@@ -257,6 +318,19 @@ export function CatalogoNacionalForm({
           }
         />
       </div>
+
+      {esNacional && (
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="catalogo_resolucion">Resolución</Label>
+          <Input
+            id="catalogo_resolucion"
+            value={resolucion}
+            disabled={camposDeshabilitados}
+            placeholder="Ej. R.D. N.º 123-2020-EF"
+            onChange={(e) => setResolucion(e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="sm:col-span-2">
         <Button

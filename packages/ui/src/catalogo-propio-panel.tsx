@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CatalogoNacional, CatalogoCampoOpciones, CatalogoOpcionTipo, CuentaContable, UpdateCatalogoPropioInput } from "@inventario/types";
+import type { CatalogoNacional, CatalogoCampoOpciones, CatalogoOpcionTipo, CuentaContable, UpdateCatalogoPropioInput, UpsertCuentaContableInput } from "@inventario/types";
 import {
   CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
   CATALOGO_ORIGEN_LABELS,
@@ -65,6 +65,9 @@ export interface CatalogoPropioPanelProps {
   reloadKey?: number;
   readOnly?: boolean;
   onAddNew?: () => void;
+  onCreateCuentaContable?: (
+    input: UpsertCuentaContableInput,
+  ) => Promise<{ data?: CuentaContable; error?: string }>;
 }
 
 export function CatalogoPropioPanel({
@@ -79,6 +82,7 @@ export function CatalogoPropioPanel({
   reloadKey = 0,
   readOnly = false,
   onAddNew,
+  onCreateCuentaContable,
 }: CatalogoPropioPanelProps) {
   const [items, setItems] = useState<CatalogoNacional[]>([]);
   const [loading, setLoading] = useState(true);
@@ -375,7 +379,8 @@ export function CatalogoPropioPanel({
               disabled={pending}
               codigoId="edit_cuenta_codigo"
               nombreId="edit_contabilidad"
-              allowCreateNew
+              allowCreateNew={Boolean(onCreateCuentaContable)}
+              onCreateCuenta={onCreateCuentaContable}
               onCodigosMaestraLoaded={setCodigosCuentaMaestra}
             />
             {error && <PanelFlashMessage variant="error">{error}</PanelFlashMessage>}

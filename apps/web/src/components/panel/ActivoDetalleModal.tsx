@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import type { Activo } from "@inventario/types";
 import { formatEjemplaresEnAmbienteTexto } from "@inventario/types";
 import { ActivoDetalleSheet, type ActivoDetalle } from "@inventario/ui/panel";
-import { listHistorialActivo, type HistorialConUsuario } from "@/lib/actions/historial";
-import { getEjemplaresSimilaresResumen } from "@/lib/actions/activos";
+import { EliminarPreregistroDialog, useToast, mensajeEliminacionPreregistros, ActivoHistorialPanel } from "@inventario/ui";
+import type { HistorialActivoItem, HistorialLookupMaps } from "@inventario/types";
+import { listHistorialActivo } from "@/lib/actions/historial";
+import { deleteActivoPreregistrado, getEjemplaresSimilaresResumen } from "@/lib/actions/activos";
 import { FotoPreviewDialog, PdfPreviewDialog } from "./ActivoMediaDialogs";
 import { CambiarAmbienteDialog } from "./CambiarAmbienteDialog";
 import { DarDeBajaDialog } from "./DarDeBajaDialog";
@@ -17,71 +19,12 @@ import {
   ActivoIconButton,
   IconAmbiente,
   IconEditar,
+  IconEliminar,
   IconInactivo,
   IconRecuperar,
   IconSimilares,
   IconValidar,
 } from "./activo-icons";
-
-function formatHistorialFecha(iso: string) {
-  return new Date(iso).toLocaleString("es-PE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function HistorialSection({
-  loading,
-  historial,
-}: {
-  loading: boolean;
-  historial: HistorialConUsuario[];
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-      <div className="border-b border-border/50 bg-muted/20 px-4 py-2.5">
-        <h3 className="text-sm font-semibold text-foreground">Historial de cambios</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">Últimas modificaciones del bien</p>
-      </div>
-      <div className="p-4">
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Cargando historial…</p>
-        ) : historial.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin cambios registrados.</p>
-        ) : (
-          <ul className="max-h-52 space-y-2 overflow-y-auto">
-            {historial.map((item) => (
-              <li
-                key={item.id}
-                className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5"
-              >
-                <p className="text-sm font-medium text-foreground">
-                  {item.accion}
-                  {item.campo ? (
-                    <span className="font-normal text-muted-foreground"> · {item.campo}</span>
-                  ) : null}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {formatHistorialFecha(item.created_at)}
-                  {item.usuario_nombre ? ` · ${item.usuario_nombre}` : ""}
-                </p>
-                {(item.valor_anterior || item.valor_nuevo) && (
-                  <p className="mt-1.5 rounded-md bg-background/80 px-2 py-1 font-mono text-[11px] text-foreground/90">
-                    {item.valor_anterior ? `${item.valor_anterior} → ` : ""}
-                    {item.valor_nuevo ?? "—"}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
-  );
-}
 
 interface ActivoDetalleModalProps {
   activo: ActivoDetalle;
@@ -91,9 +34,11 @@ interface ActivoDetalleModalProps {
   onIrAmbiente?: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
+  puedeEliminarPreregistro?: boolean;
   editarLabel?: string;
   soloUbicacion?: boolean;
   asignaCodigoInmediato?: boolean;
+  onActivoEliminado?: (activoId: string) => void;
 }
 
 export function ActivoDetalleModal({
@@ -104,11 +49,14 @@ export function ActivoDetalleModal({
   onIrAmbiente,
   puedeDarDeBaja = true,
   puedeValidarPreregistro = false,
+  puedeEliminarPreregistro = false,
   editarLabel = "Editar activo",
   soloUbicacion = false,
   asignaCodigoInmediato = true,
+  onActivoEliminado,
 }: ActivoDetalleModalProps) {
   const router = useRouter();
+  const { pushToast } = useToast();
   const [fotoOpen, setFotoOpen] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [bajaOpen, setBajaOpen] = useState(false);
@@ -116,14 +64,20 @@ export function ActivoDetalleModal({
   const [validarOpen, setValidarOpen] = useState(false);
   const [cambiarAmbienteOpen, setCambiarAmbienteOpen] = useState(false);
   const [similaresOpen, setSimilaresOpen] = useState(false);
+  const [eliminarOpen, setEliminarOpen] = useState(false);
   const [ejemplaresLoading, setEjemplaresLoading] = useState(false);
   const [ejemplares, setEjemplares] = useState<{
     total: number;
     registrados: number;
     preregistrados: number;
   } | null>(null);
-  const [historial, setHistorial] = useState<HistorialConUsuario[]>([]);
+  const [historial, setHistorial] = useState<HistorialActivoItem[]>([]);
+  const [historialLookups, setHistorialLookups] = useState<HistorialLookupMaps>({
+    sedes: {},
+    ambientes: {},
+  });
   const [historialLoading, setHistorialLoading] = useState(false);
+  const [historialError, setHistorialError] = useState<string | null>(null);
 
   const esPreregistrado = activo.estado_registro === "PREREGISTRADO";
   const inactivo = activo.estado_registro === "DADO_DE_BAJA";
@@ -135,22 +89,28 @@ export function ActivoDetalleModal({
       .finally(() => setEjemplaresLoading(false));
   }, [activo.id]);
 
+  function loadHistorial() {
+    setHistorialLoading(true);
+    setHistorialError(null);
+    void listHistorialActivo(activo.id)
+      .then(({ items, lookups }) => {
+        setHistorial(items);
+        setHistorialLookups(lookups);
+      })
+      .catch(() => setHistorialError("No se pudo cargar el historial."))
+      .finally(() => setHistorialLoading(false));
+  }
+
   useEffect(() => {
     if (!open) return;
     reloadEjemplares();
-    setHistorialLoading(true);
-    void listHistorialActivo(activo.id)
-      .then(setHistorial)
-      .finally(() => setHistorialLoading(false));
+    loadHistorial();
   }, [open, activo.id, reloadEjemplares]);
 
   function handleRefresh() {
     router.refresh();
     reloadEjemplares();
-    setHistorialLoading(true);
-    void listHistorialActivo(activo.id)
-      .then(setHistorial)
-      .finally(() => setHistorialLoading(false));
+    loadHistorial();
   }
 
   const banner = (
@@ -228,7 +188,16 @@ export function ActivoDetalleModal({
           <IconAmbiente />
         </ActivoIconButton>
       )}
-      {!inactivo && puedeDarDeBaja && (
+      {esPreregistrado && puedeEliminarPreregistro && (
+        <ActivoIconButton
+          label="Eliminar preregistro"
+          variant="danger"
+          onClick={() => setEliminarOpen(true)}
+        >
+          <IconEliminar />
+        </ActivoIconButton>
+      )}
+      {!inactivo && !esPreregistrado && puedeDarDeBaja && (
         <ActivoIconButton label="Dar de baja" variant="danger" onClick={() => setBajaOpen(true)}>
           <IconInactivo />
         </ActivoIconButton>
@@ -254,7 +223,14 @@ export function ActivoDetalleModal({
         footer={footer}
         banner={banner}
         ejemplaresHint={ejemplaresHint}
-        extraSections={<HistorialSection loading={historialLoading} historial={historial} />}
+        extraSections={
+          <ActivoHistorialPanel
+            loading={historialLoading}
+            error={historialError}
+            items={historial}
+            lookups={historialLookups}
+          />
+        }
         onVerFoto={activo.foto_path ? () => setFotoOpen(true) : undefined}
         onVerComprobante={activo.comprobante_path ? () => setPdfOpen(true) : undefined}
       />
@@ -283,6 +259,26 @@ export function ActivoDetalleModal({
         activoId={activo.id}
         nombre={activo.nombre}
         onSuccess={handleRefresh}
+      />
+
+      <EliminarPreregistroDialog
+        open={eliminarOpen}
+        onClose={() => setEliminarOpen(false)}
+        activoId={activo.id}
+        nombre={activo.nombre}
+        onDelete={async (activoId) => {
+          const result = await deleteActivoPreregistrado(activoId);
+          if (result.error) {
+            pushToast(result.error, "error");
+          }
+          return result;
+        }}
+        onSuccess={() => {
+          pushToast(mensajeEliminacionPreregistros(1), "success");
+          onActivoEliminado?.(activo.id);
+          onClose();
+          void router.refresh();
+        }}
       />
 
       <RecuperarActivoDialog

@@ -80,6 +80,44 @@ export const INVENTARIO_TABLE_FULL_PREREGISTRO_COL_WIDTHS_PCT = [
 export const INVENTARIO_TABLE_FULL_PREREGISTRO_COL_COUNT =
   INVENTARIO_TABLE_FULL_PREREGISTRO_COL_WIDTHS_PCT.length;
 
+/** Vista administrador: sin cuenta contable ni depreciación detallada (% / periodo / acum.). */
+export const INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX = [
+  44, // N°
+  52, // Cat.
+  120, // Código
+  220, // Nombre del bien
+  240, // Descripción
+  88, // Fecha adq.
+  84, // Estado
+  100, // PA / VM
+  100, // Valor neto
+  180, // Observación
+  140, // CP / Comprobante
+  136, // Acciones
+] as const;
+
+export const INVENTARIO_TABLE_ADMIN_COL_COUNT = INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX.length;
+
+/** Admin + posible ambiente (preregistro). */
+export const INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX = [
+  44, // N°
+  52, // Cat.
+  120, // Código
+  200, // Nombre del bien
+  180, // Posible ambiente
+  220, // Descripción
+  88, // Fecha adq.
+  84, // Estado
+  100, // PA / VM
+  100, // Valor neto
+  160, // Observación
+  140, // CP
+  136, // Acciones
+] as const;
+
+export const INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_COUNT =
+  INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX.length;
+
 /** Anchos mínimos por columna (px) — lectura cómoda con scroll horizontal. */
 export const INVENTARIO_TABLE_SELECTION_COL_WIDTH_PX = 44;
 
@@ -101,6 +139,29 @@ export const INVENTARIO_TABLE_COL_WIDTHS_PX = [
   140, // CP / Comprobante
   136, // Acciones
 ] as const;
+
+const INVENTARIO_UBICACION_COL_WIDTH_PX = 150;
+
+function withUbicacionColumn(widths: readonly number[]): number[] {
+  const next = [...widths];
+  next.splice(next.length - 1, 0, INVENTARIO_UBICACION_COL_WIDTH_PX);
+  return next;
+}
+
+/** Inventario de entidad: columna Ubicación antes de Acciones. */
+export const INVENTARIO_TABLE_ENTITY_UBICACION_COL_WIDTHS_PX = withUbicacionColumn(
+  INVENTARIO_TABLE_COL_WIDTHS_PX,
+);
+
+export const INVENTARIO_TABLE_ENTITY_UBICACION_COL_COUNT =
+  INVENTARIO_TABLE_ENTITY_UBICACION_COL_WIDTHS_PX.length;
+
+export const INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_WIDTHS_PX = withUbicacionColumn(
+  INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX,
+);
+
+export const INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_COUNT =
+  INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_WIDTHS_PX.length;
 
 export const INVENTARIO_TABLE_COMPACT_COL_WIDTHS_PX = [
   44, // N°
@@ -233,13 +294,57 @@ export function inventarioTableColWidthsFullPreregistro(options?: {
   ).css;
 }
 
+export function inventarioTableColWidthsAdmin(options?: { withSelection?: boolean }): string[] {
+  return colWidthsPx(INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX, options?.withSelection ?? false).css;
+}
+
+export function inventarioTableColWidthsAdminPreregistro(options?: {
+  withSelection?: boolean;
+}): string[] {
+  return colWidthsPx(
+    INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX,
+    options?.withSelection ?? false,
+  ).css;
+}
+
+export function inventarioTableColWidthsEntityUbicacion(options?: {
+  withSelection?: boolean;
+}): string[] {
+  return colWidthsPx(
+    INVENTARIO_TABLE_ENTITY_UBICACION_COL_WIDTHS_PX,
+    options?.withSelection ?? false,
+  ).css;
+}
+
+export function inventarioTableColWidthsAdminEntityUbicacion(options?: {
+  withSelection?: boolean;
+}): string[] {
+  return colWidthsPx(
+    INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_WIDTHS_PX,
+    options?.withSelection ?? false,
+  ).css;
+}
+
 export function inventarioTableMinWidthPx(options?: {
   modoPreregistro?: boolean;
+  modoAdmin?: boolean;
+  mostrarUbicacion?: boolean;
   withSelection?: boolean;
 }): number {
   const withSelection = options?.withSelection ?? false;
+  if (options?.modoAdmin) {
+    const widths = options.mostrarUbicacion
+      ? INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_WIDTHS_PX
+      : options.modoPreregistro
+        ? INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX
+        : INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX;
+    return colWidthsPx(widths, withSelection).total;
+  }
   if (options?.modoPreregistro) {
     return colWidthsPx(INVENTARIO_TABLE_FULL_PREREGISTRO_COL_WIDTHS_PX, withSelection).total;
   }
-  return colWidthsPx(INVENTARIO_TABLE_COL_WIDTHS_PX, withSelection).total;
+  const widths = options?.mostrarUbicacion
+    ? INVENTARIO_TABLE_ENTITY_UBICACION_COL_WIDTHS_PX
+    : INVENTARIO_TABLE_COL_WIDTHS_PX;
+  return colWidthsPx(widths, withSelection).total;
 }

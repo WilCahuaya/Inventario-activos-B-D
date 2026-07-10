@@ -1,4 +1,4 @@
-import { formatFechaISOToDDMMYYYY } from "@inventario/types";
+import { labelFechaCorte, labelFechaEmision } from "@inventario/types";
 import type { ReporteContexto, ReporteId } from "./types";
 
 export const FICHA_ASIGNACION_TITULO = "FICHA DE ASIGNACION DE BIENES AL USUARIO";
@@ -39,8 +39,7 @@ export function reporteAmbienteIncluyeFirmas(reporteId: ReporteId): boolean {
 }
 
 export function buildFichaActualizacionLabel(fechaCorte: string): string {
-  const fecha = formatFechaISOToDDMMYYYY(fechaCorte) || fechaCorte;
-  return `ACTUALIZACION - ${fecha}`;
+  return labelFechaCorte(fechaCorte);
 }
 
 export function ambienteDisenoExportFilename(ctx: ReporteContexto): string {
@@ -76,7 +75,8 @@ function textoFicha(value: string | null | undefined): string {
 export function measureAmbienteDisenoHeaderEndY(ctx: ReporteContexto, startY = 10): number {
   let y = startY;
   y += 6;
-  y += 7;
+  y += 4;
+  y += 4;
   y += 4;
   y += 4;
   y += 4;
@@ -107,7 +107,9 @@ export function addAmbienteDisenoHeaderPdf(
   y += 6;
 
   doc.setFontSize(9);
-  doc.text(buildFichaActualizacionLabel(ctx.fechaCorte), pageW / 2, y, { align: "center" });
+  doc.text(labelFechaEmision(ctx.fechaGeneracion), pageW / 2, y, { align: "center" });
+  y += 4;
+  doc.text(buildFichaActualizacionLabel(ctx.fechaCorte!), pageW / 2, y, { align: "center" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.text(`Registros: ${totalRegistros}`, pageW - margin, y, { align: "right" });

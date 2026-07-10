@@ -1,10 +1,21 @@
 "use server";
 
 import type { EstadoRegistro } from "@inventario/types";
+import { resolveCuentaContableActivo } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
 import type { ActivoReporte } from "@/lib/reportes/types";
 import { REPORTES, reportePermitidoParaRol, type ReporteId } from "@/lib/reportes/types";
+import {
+  anioEjercicioAdquisicion,
+  esReporteAdquiridosEjercicio,
+  rangoFechasEjercicio,
+} from "@/lib/reportes/ejercicio";
+import {
+  aplicaFiltroAdquisicionFechaCorte,
+  filtrarActivosPorFechaCorte,
+  resolverFechaCorteISO,
+} from "@/lib/reportes/fecha-corte";
 
 function esReportePorAmbiente(reporteId: string): boolean {
   const def = REPORTES.find((r) => r.id === reporteId);
@@ -22,13 +33,15 @@ function mapActivoReporteRows(data: Record<string, unknown>[] | null): ActivoRep
       | Array<{ cuenta_codigo: string | null; contabilidad: string | null; grupo: string | null }>;
     const cat = Array.isArray(catalogo) ? catalogo[0] : catalogo;
     const { entidades: _e, sedes: _s, ambientes: _a, catalogo_nacional: _c, ...activo } = row;
+    const activoBase = activo as unknown as ActivoReporte;
+    const cuenta = resolveCuentaContableActivo(activoBase, cat);
     return {
-      ...(activo as unknown as ActivoReporte),
+      ...activoBase,
       entidad_nombre: entidades?.nombre,
       sede_nombre: sedes?.nombre,
       ambiente_nombre: ambientes?.nombre,
-      cuenta_contable: cat?.cuenta_codigo ?? null,
-      contabilidad: cat?.contabilidad ?? null,
+      cuenta_contable: cuenta.cuenta_codigo,
+      contabilidad: cuenta.contabilidad,
       grupo_contable: cat?.grupo ?? null,
     };
   });
@@ -39,6 +52,8 @@ export interface CargarActivosReporteInput {
   entidadId: string;
   ambienteId?: string;
   sedeId?: string;
+  /** AAAA-MM-DD o DD/MM/AAAA; usada en reportes por ejercicio de adquisición. */
+  fechaCorte?: string;
 }
 
 export async function cargarActivosReporte(
@@ -74,14 +89,44 @@ export async function cargarActivosReporte(
 
   if (input.reporteId === "reporte_bajas") {
     query = query.eq("estado_registro", "DADO_DE_BAJA" as EstadoRegistro);
+  } else if (input.reporteId === "reporte_activos_estado_malo") {
+    query = query
+      .eq("estado_registro", "REGISTRADO" as EstadoRegistro)
+      .eq("estado_bien", "MALO");
+  } else if (esReporteAdquiridosEjercicio(input.reporteId as ReporteId)) {
+    const anio = anioEjercicioAdquisicion(
+      input.reporteId as ReporteId,
+      input.fechaCorte,
+    );
+    if (anio == null) {
+      return { error: "Reporte de ejercicio no válido." };
+    }
+    const { desde, hasta } = rangoFechasEjercicio(anio);
+    query = query
+      .eq("estado_registro", "REGISTRADO" as EstadoRegistro)
+      .not("fecha_adquisicion", "is", null)
+      .gte("fecha_adquisicion", desde)
+      .lte("fecha_adquisicion", hasta);
   } else {
     query = query.eq("estado_registro", "REGISTRADO" as EstadoRegistro);
+  }
+
+  const corteISO = resolverFechaCorteISO(input.fechaCorte);
+  if (corteISO && aplicaFiltroAdquisicionFechaCorte(input.reporteId as ReporteId, input.fechaCorte)) {
+    query = query.or(`fecha_adquisicion.is.null,fecha_adquisicion.lte.${corteISO}`);
   }
 
   const { data, error } = await query;
   if (error) return { error: error.message };
 
-  return { data: mapActivoReporteRows(data as Record<string, unknown>[]) };
+  let activos = mapActivoReporteRows(data as Record<string, unknown>[]);
+  activos = filtrarActivosPorFechaCorte(
+    activos,
+    input.reporteId as ReporteId,
+    input.fechaCorte,
+  );
+
+  return { data: activos };
 }
 
 export async function getEntidadesParaReportes() {

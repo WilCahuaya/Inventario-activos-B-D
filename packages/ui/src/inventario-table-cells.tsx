@@ -8,36 +8,95 @@ import {
   calcPeriodoMeses,
   calcValorNeto,
   categoriaBienLetra,
-  categoriaBienCorto,
   estadoBienLabel,
   formatActivoCodigoDisplay,
   formatCuentaContableDisplay,
   formatFechaISOToCortoES,
+  splitObservacionActivo,
   formatFechaISOToDDMMYYYY,
   formatMonedaPE,
 } from "@inventario/types";
+import { ObservacionActivoDisplay } from "./observacion-activo-display";
 
 export const INVENTARIO_TABLA_LEYENDA =
   "A = Activo · C = Cuenta de orden · PA = Precio adquisición · VM = Valor mercado";
+
+export type InventarioTablaBadgeKind = "A" | "C" | "PA" | "VM";
+
+export function inventarioTablaBadgeClass(kind: InventarioTablaBadgeKind): string {
+  switch (kind) {
+    case "A":
+      return "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300";
+    case "C":
+      return "bg-violet-500/15 text-violet-900 dark:text-violet-200";
+    case "PA":
+      return "bg-sky-500/15 text-sky-900 dark:text-sky-200";
+    case "VM":
+      return "bg-amber-500/15 text-amber-900 dark:text-amber-200";
+  }
+}
+
+const inventarioTablaBadgeBaseClass =
+  "inline-block shrink-0 rounded px-1 py-0.5 text-[9px] font-bold leading-none";
+
+export function InventarioTablaLeyendaBadge({ kind }: { kind: InventarioTablaBadgeKind }) {
+  return (
+    <span className={`${inventarioTablaBadgeBaseClass} ${inventarioTablaBadgeClass(kind)}`}>
+      {kind}
+    </span>
+  );
+}
+
+function InventarioTablaLeyendaItem({
+  kind,
+  label,
+}: {
+  kind: InventarioTablaBadgeKind;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <InventarioTablaLeyendaBadge kind={kind} />
+      <span>= {label}</span>
+    </span>
+  );
+}
+
+export function InventarioTablaLeyenda({
+  className,
+  inline = false,
+}: {
+  className?: string;
+  inline?: boolean;
+}) {
+  return (
+    <div
+      role="note"
+      aria-label={INVENTARIO_TABLA_LEYENDA}
+      className={
+        inline
+          ? `text-[10px] leading-relaxed text-muted-foreground sm:text-xs ${className ?? ""}`
+          : `border-t border-border/50 px-3 py-2 text-[10px] leading-relaxed text-muted-foreground sm:px-4 sm:text-xs ${className ?? ""}`
+      }
+    >
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-x-3">
+        <InventarioTablaLeyendaItem kind="A" label="Activo" />
+        <InventarioTablaLeyendaItem kind="C" label="Cuenta de orden" />
+        <InventarioTablaLeyendaItem kind="PA" label="Precio adquisición" />
+        <InventarioTablaLeyendaItem kind="VM" label="Valor mercado" />
+      </div>
+    </div>
+  );
+}
 
 const tdBase =
   "max-w-0 overflow-hidden border-b border-r border-border/40 px-2.5 py-2 text-xs leading-snug text-foreground last:border-r-0";
 
 export const inventarioThStd =
-  "max-w-0 overflow-hidden border-b border-r border-border/50 bg-muted/50 px-2.5 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-foreground/80 last:border-r-0";
+  "inventario-th-std max-w-0 border-b border-r border-border/50 px-2.5 py-2 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-foreground/80 last:border-r-0";
 
 export const inventarioThAccent =
-  "max-w-0 overflow-hidden border-b border-r border-border/50 bg-primary/10 px-2.5 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-primary last:border-r-0";
-
-export function InventarioTablaLeyenda({ className }: { className?: string }) {
-  return (
-    <p
-      className={`border-t border-border/50 px-3 py-2 text-[10px] leading-relaxed text-muted-foreground sm:px-4 sm:text-xs ${className ?? ""}`}
-    >
-      {INVENTARIO_TABLA_LEYENDA}
-    </p>
-  );
-}
+  "inventario-th-accent max-w-0 border-b border-r border-border/50 px-2.5 py-2 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-primary last:border-r-0";
 
 export function EstadoBienBadge({ estado }: { estado: EstadoBien }) {
   const label = estadoBienLabel(estado);
@@ -81,6 +140,36 @@ export function InventarioEstadoRegistroFilaHint({
   return null;
 }
 
+export type ActivoConUbicacionLista = Activo & {
+  sede_nombre?: string | null;
+  ambiente_nombre?: string | null;
+};
+
+export function InventarioUbicacionCell({
+  activo,
+  mostrarSede,
+}: {
+  activo: ActivoConUbicacionLista;
+  mostrarSede: boolean;
+}) {
+  const ambiente = activo.ambiente_nombre?.trim() || "—";
+  const sede = activo.sede_nombre?.trim();
+  const title = mostrarSede && sede ? `${sede} · ${ambiente}` : ambiente;
+
+  return (
+    <InventarioTextCell title={title} lineClamp2>
+      {mostrarSede && sede ? (
+        <>
+          <span className="block truncate">{ambiente}</span>
+          <span className="block truncate text-[10px] leading-tight text-muted-foreground">{sede}</span>
+        </>
+      ) : (
+        ambiente
+      )}
+    </InventarioTextCell>
+  );
+}
+
 export type ActivoConContabilidad = Activo & {
   cuenta_codigo?: string | null;
   contabilidad?: string | null;
@@ -117,28 +206,31 @@ export function InventarioCorrelativoCellContent({ activo }: { activo: Activo })
   return <InventarioCodigoCellContent activo={activo} />;
 }
 
+export function CategoriaBienCell({ categoria }: { categoria: CategoriaBien }) {
+  const letra = categoriaBienLetra(categoria);
+  const titulo = categoria === "CUENTA_ORDEN" ? "Cuenta de orden" : "Activo";
+  const badgeKind: InventarioTablaBadgeKind = letra === "C" ? "C" : "A";
+
+  return (
+    <td className={`${tdBase} text-center`} title={titulo}>
+      <InventarioTablaLeyendaBadge kind={badgeKind} />
+    </td>
+  );
+}
+
+/** @deprecated Use CategoriaBienCell */
 export function CategoriaLetraCell({
   categoria,
-  fullOnWide,
+  fullOnWide: _fullOnWide,
 }: {
   categoria: CategoriaBien;
   fullOnWide?: boolean;
 }) {
-  const letra = categoriaBienLetra(categoria);
-  const titulo = categoria === "CUENTA_ORDEN" ? "Cuenta de orden" : "Activo";
+  return <CategoriaBienCell categoria={categoria} />;
+}
 
-  return (
-    <td className={`${tdBase} text-center`} title={titulo}>
-      {fullOnWide ? (
-        <>
-          <span className="hidden 3xl:inline">{categoriaBienCorto(categoria)}</span>
-          <span className="3xl:hidden font-semibold">{letra}</span>
-        </>
-      ) : (
-        <span className="font-semibold">{letra}</span>
-      )}
-    </td>
-  );
+export function InventarioCategoriaCell({ activo }: { activo: Activo }) {
+  return <CategoriaBienCell categoria={activo.categoria} />;
 }
 
 export function ValorBienCell({ activo }: { activo: Activo }) {
@@ -155,16 +247,12 @@ export function ValorBienCell({ activo }: { activo: Activo }) {
 
   const etiqueta = esMercado ? "VM" : "PA";
   const titulo = esMercado ? "Valor mercado" : "Precio adquisición";
-  const badgeClass = esMercado
-    ? "bg-amber-500/15 text-amber-900 dark:text-amber-200"
-    : "bg-sky-500/15 text-sky-900 dark:text-sky-200";
+  const badgeKind: InventarioTablaBadgeKind = esMercado ? "VM" : "PA";
 
   return (
     <td className={`${tdBase} text-right tabular-nums`} title={`${titulo}: S/ ${formatMonedaPE(monto)}`}>
       <span className="inline-flex max-w-full items-center justify-end gap-1">
-        <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${badgeClass}`}>
-          {etiqueta}
-        </span>
+        <InventarioTablaLeyendaBadge kind={badgeKind} />
         <span className="truncate text-[11px] sm:text-xs">{formatMonedaPE(monto)}</span>
       </span>
     </td>
@@ -203,9 +291,10 @@ export function ObservacionCell({
   observacion?: string | null;
   lineClamp2?: boolean;
 }) {
-  const texto = formatInventarioListaTexto(observacion);
+  const { contador, admin } = splitObservacionActivo(observacion);
+  const tieneTexto = Boolean(contador || admin);
 
-  if (!texto) {
+  if (!tieneTexto) {
     return (
       <td className={`${tdBase} text-muted-foreground`}>
         —
@@ -213,17 +302,11 @@ export function ObservacionCell({
     );
   }
 
+  const title = [contador, admin].filter(Boolean).join("\n");
+
   return (
-    <td className={tdBase} title={texto}>
-      <span
-        className={
-          lineClamp2
-            ? "line-clamp-2 text-xs leading-snug"
-            : "block truncate text-xs leading-snug"
-        }
-      >
-        {texto}
-      </span>
+    <td className={tdBase} title={title}>
+      <ObservacionActivoDisplay observacion={observacion} lineClamp2={lineClamp2} />
     </td>
   );
 }
@@ -237,21 +320,7 @@ export const inventarioTdAccionesClass =
   "inventario-td-acciones overflow-visible whitespace-nowrap border-b border-r border-border/40 px-1.5 py-2 text-xs text-foreground last:border-r-0";
 
 export function InventarioValorPaVmCell({ activo }: { activo: Activo }) {
-  const esMercado = activo.valor_es_mercado;
-  const monto = activo.valor_adquisicion;
-  if (monto == null) {
-    return <InventarioTextCell className="text-right tabular-nums" />;
-  }
-  const texto = `S/ ${formatMonedaPE(monto)}`;
-  const etiqueta = esMercado ? "Valor mercado" : "Precio adquisición";
-  return (
-    <InventarioTextCell
-      className="text-right tabular-nums"
-      title={`${etiqueta}: ${texto}`}
-    >
-      {texto}
-    </InventarioTextCell>
-  );
+  return <ValorBienCell activo={activo} />;
 }
 
 export function InventarioFechaCell({ fecha }: { fecha?: string | null }) {

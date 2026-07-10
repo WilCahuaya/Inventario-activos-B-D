@@ -37,6 +37,30 @@ function parsePorcentajeDepreciacion(text: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+/** Normaliza % Deprec. desde Excel (0.2 → "20 %") o texto ("10", "10 %"). */
+export function normalizeImportDepreciacionRaw(raw: string): string {
+  const trimmed = raw.replace(/\u00a0/g, " ").trim();
+  if (!trimmed) return "";
+
+  const hasPct = trimmed.includes("%");
+  const numMatch = trimmed.match(/^(\d+(?:[.,]\d+)?)\s*%?$/);
+  if (!numMatch) return trimmed;
+
+  let value = Number(numMatch[1]!.replace(",", "."));
+  if (!Number.isFinite(value) || value <= 0) return trimmed;
+
+  // Excel almacena 20 % como 0.2 cuando la celda tiene formato Porcentaje.
+  if (!hasPct && value > 0 && value <= 1) {
+    value = value * 100;
+  }
+
+  const rounded = Math.round(value * 100) / 100;
+  const texto = Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(2).replace(/\.?0+$/, "");
+  return `${texto} %`;
+}
+
 function vidaUtilMesesFromPorcentaje(porcentajeAnual: number): number {
   if (porcentajeAnual <= 0) return 0;
   return Math.round(1200 / porcentajeAnual);
@@ -131,6 +155,9 @@ export interface ImportActivoInsertPayload {
   observacion: string | null;
   sede_id: string;
   ambiente_id: string;
+  cuenta_contable_codigo: string | null;
+  cuenta_contable_nombre: string | null;
+  /** @deprecated Ya no actualiza catálogo; conservado por compatibilidad interna. */
   catalogo_contabilidad?: ImportActivoCatalogoContabilidadUpdate | null;
 }
 
@@ -252,10 +279,21 @@ export function buildCuentaContableLookup(
 }
 
 function parseCategoria(text: string): CategoriaBien | null {
-  const key = normalizeImportKey(text);
+  const key = normalizeImportKey(text)
+    .replace(/\./g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!key) return "ACTIVO";
-  if (key === "activo") return "ACTIVO";
-  if (key === "cuenta de orden" || key === "cuenta_orden" || key === "orden") return "CUENTA_ORDEN";
+  if (key === "activo" || key === "act") return "ACTIVO";
+  if (
+    key === "cuenta de orden" ||
+    key === "cuenta orden" ||
+    key === "cuenta_orden" ||
+    key === "orden" ||
+    key === "cta orden"
+  ) {
+    return "CUENTA_ORDEN";
+  }
   return null;
 }
 
@@ -329,10 +367,7 @@ function resolveImportCuentaContable(
     nombreCatalogo &&
     normalizeImportKey(nombreCatalogo) !== normalizeImportKey(nombreExplicito)
   ) {
-    return {
-      ok: false,
-      motivo: `La cuenta "${codigo}" ya está registrada como "${nombreCatalogo}".`,
-    };
+    return { ok: true, cuenta_codigo: codigo, contabilidad: nombreCatalogo, lookup: cuentaLookup };
   }
 
   const nextLookup = new Map(cuentaLookup);
@@ -359,7 +394,7 @@ export function validateImportActivoFila(
 
   const categoria = parseCategoria(fila.Categoría);
   if (!categoria) {
-    return { ok: false, motivo: 'Categoría inválida. Use "Activo" o "Cuenta de orden".' };
+    return { ok: false, motivo: 'Categoría inválida. Use "Activo", "Act.", "Cuenta de orden" o "Cta. Orden".' };
   }
 
   const estadoBien = parseEstadoBien(fila.Estado);
@@ -409,17 +444,11 @@ export function validateImportActivoFila(
     return { ok: false, motivo: "Fecha de adquisición es obligatoria con precio de adquisición." };
   }
 
-  const deprecRaw = fila["% Deprec."].trim();
+  const deprecRaw = normalizeImportDepreciacionRaw(fila["% Deprec."].trim());
   let depreciacion: string | null = null;
   let vidaUtilMeses: number | null = null;
 
-  if (deprecRaw) {
-    if (categoria === "CUENTA_ORDEN") {
-      return { ok: false, motivo: "Cuenta de orden no admite depreciación." };
-    }
-    if (valorEsMercado) {
-      return { ok: false, motivo: "Valor de mercado no admite depreciación." };
-    }
+  if (deprecRaw && categoria !== "CUENTA_ORDEN") {
     const pct = parsePorcentajeDepreciacion(deprecRaw.includes("%") ? deprecRaw : `${deprecRaw} %`);
     if (pct == null) {
       return { ok: false, motivo: "% Deprec. inválido (ej. 10 %)." };
@@ -429,7 +458,8 @@ export function validateImportActivoFila(
   }
 
   let nextCuentaLookup = cuentaLookup;
-  let catalogoContabilidad: ImportActivoCatalogoContabilidadUpdate | null = null;
+  let cuentaActivoCodigo: string | null = null;
+  let cuentaActivoNombre: string | null = null;
   const cuentaResolved = resolveImportCuentaContable(
     fila["Código cuenta contable"],
     fila["Nombre cuenta contable"],
@@ -440,21 +470,18 @@ export function validateImportActivoFila(
     if (cuentaResolved.motivo !== "SKIP") {
       return { ok: false, motivo: cuentaResolved.motivo };
     }
+    if (categoria === "CUENTA_ORDEN") {
+      cuentaActivoCodigo = "2524";
+      cuentaActivoNombre =
+        catalogoItem.contabilidad?.trim() || cuentaLookup.get("2524") || null;
+    } else if (catalogoItem.cuenta_codigo?.trim()) {
+      cuentaActivoCodigo = catalogoItem.cuenta_codigo.trim();
+      cuentaActivoNombre = catalogoItem.contabilidad?.trim() || null;
+    }
   } else {
     nextCuentaLookup = cuentaResolved.lookup;
-    const cuentaActual = catalogoItem.cuenta_codigo?.trim() || null;
-    const nombreActual = catalogoItem.contabilidad?.trim() || null;
-    const cuentaCambia =
-      cuentaActual !== cuentaResolved.cuenta_codigo ||
-      normalizeImportKey(nombreActual ?? "") !== normalizeImportKey(cuentaResolved.contabilidad);
-    if (cuentaCambia) {
-      catalogoContabilidad = {
-        codigo_catalogo: codigoCatalogo,
-        cuenta_codigo: cuentaResolved.cuenta_codigo,
-        contabilidad: cuentaResolved.contabilidad,
-        depreciacion: catalogoItem.depreciacion,
-      };
-    }
+    cuentaActivoCodigo = cuentaResolved.cuenta_codigo;
+    cuentaActivoNombre = cuentaResolved.contabilidad;
   }
 
   const sucursal = fila.Sucursal.trim();
@@ -499,7 +526,8 @@ export function validateImportActivoFila(
       observacion: fila.Observaciones.trim() || null,
       sede_id: ubicacion.sede_id,
       ambiente_id: ubicacion.ambiente_id,
-      catalogo_contabilidad: catalogoContabilidad,
+      cuenta_contable_codigo: cuentaActivoCodigo,
+      cuenta_contable_nombre: cuentaActivoNombre,
     },
   };
 }

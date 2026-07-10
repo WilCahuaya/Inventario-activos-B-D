@@ -119,14 +119,46 @@
   }
 
   .panel-main-padding {
-    @apply px-3 pb-3 pt-1.5 sm:px-4 sm:pb-4 md:px-5 md:pb-5 lg:px-6 lg:pb-6 xl:px-8 xl:pb-8 2xl:px-10;
+    --panel-main-pb: 0.75rem;
+    padding-bottom: var(--panel-main-pb);
+    @apply px-3 pt-1.5 sm:px-4 md:px-5 lg:px-6 xl:px-8 2xl:px-10;
+  }
+
+  @media (min-width: 640px) {
+    .panel-main-padding {
+      --panel-main-pb: 1rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .panel-main-padding {
+      --panel-main-pb: 1.25rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .panel-main-padding {
+      --panel-main-pb: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .panel-main-padding {
+      --panel-main-pb: 2rem;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .panel-main-padding {
+      --panel-main-pb: 2.5rem;
+    }
   }
 
   @media (min-width: 1920px) {
     .panel-main-padding {
       padding-left: 3rem;
       padding-right: 3rem;
-      padding-bottom: 3rem;
+      --panel-main-pb: 3rem;
     }
   }
 
@@ -136,6 +168,102 @@
 
   .panel-sticky-toolbar {
     @apply sticky top-0 z-20 shrink-0 space-y-2 rounded-lg border border-border/60 bg-card/95 px-2 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/90 sm:space-y-2.5 sm:px-3 sm:py-2.5 md:px-4 lg:py-3;
+    transition:
+      max-height 0.22s ease,
+      opacity 0.18s ease,
+      padding 0.22s ease,
+      margin 0.22s ease,
+      border-width 0.18s ease;
+  }
+
+  .panel-sticky-toolbar--collapsed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-width: 0;
+    pointer-events: none;
+  }
+
+  .panel-toolbar-expand-trigger {
+    @apply flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border/60 bg-muted/25 px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground;
+  }
+
+  .panel-toolbar-expand-trigger--sticky {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    @apply mb-2 bg-card/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/90;
+  }
+
+  /* Inventario / ambiente: scroll solo dentro de la tabla; pie de paginación siempre visible */
+  main.panel-main-padding:has(.panel-inventario-page) {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 0%;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 1rem;
+  }
+
+  .panel-page:has(.panel-inventario-page) {
+    @apply flex min-h-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .panel-inventario-page {
+    @apply flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .panel-inventario-chrome {
+    @apply shrink-0 space-y-2;
+  }
+
+  .panel-inventario-list {
+    @apply flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm;
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+
+  .panel-inventario-page > .panel-inventario-list {
+    flex: 1 1 0%;
+    min-height: 0;
+    @apply rounded-b-none border-b-0 shadow-none;
+  }
+
+  .panel-inventario-page > .panel-inventario-pagination-footer {
+    @apply shrink-0 rounded-b-xl rounded-t-none border border-t border-border/60 bg-card shadow-sm;
+    flex: 0 0 auto;
+  }
+
+  .panel-inventario-scroll {
+    @apply flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .panel-inventario-page > .panel-toolbar-expand-trigger {
+    @apply shrink-0;
+  }
+
+  .panel-inventario-body-scroll {
+    @apply min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto;
+  }
+
+  .panel-inventario-pagination-footer {
+    @apply shrink-0 grow-0 border-t border-border/60 bg-card px-1 sm:px-2;
+    flex: 0 0 auto;
+  }
+
+  .panel-inventario-pagination-footer > div {
+    @apply min-h-11 border-t-0 bg-muted/30 py-2;
+  }
+
+  .panel-inventario-toolbar {
+    @apply mb-1.5 shrink-0 space-y-2 rounded-lg border border-border/60 bg-card px-2 py-2 shadow-sm sm:mb-2 sm:space-y-2.5 sm:px-3 sm:py-2.5 md:px-4 lg:py-3;
+  }
+
+  .panel-inventario-body-scroll > .panel-inventario-toolbar {
+    @apply rounded-none border-x-0 border-t-0 shadow-none;
   }
 
   .panel-filter-row {
@@ -155,9 +283,19 @@
     @apply hidden text-xs text-muted-foreground sm:block md:text-sm;
   }
 
-  /** Tabla inventario desde xl; el scroll horizontal lo maneja el contenedor padre. */
+  /** Tabla inventario desde xl; scroll y cabecera fija dentro del contenedor. */
   .panel-data-table-wrap {
-    @apply hidden min-w-0 w-full max-w-full xl:block;
+    @apply hidden min-w-0 w-full max-w-full overflow-auto xl:block;
+    max-height: min(72vh, calc(100dvh - 13rem));
+  }
+
+  .panel-data-table-wrap.panel-data-table-wrap--embedded {
+    max-height: none !important;
+    @apply w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible;
+  }
+
+  .panel-data-cards-wrap {
+    @apply xl:hidden;
   }
 
   .panel-data-table-compact {
@@ -165,11 +303,7 @@
   }
 
   .panel-data-table-full {
-    @apply block min-w-0;
-  }
-
-  .panel-data-cards-wrap {
-    @apply xl:hidden;
+    @apply block w-full min-w-0;
   }
 
   .inventario-activos-table tbody tr.inventario-table-row {
@@ -235,6 +369,31 @@
 
   .inventario-activos-table td.inventario-td-acciones {
     @apply px-1.5;
+  }
+
+  .inventario-activos-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background-color: hsl(var(--card));
+    box-shadow: 0 1px 0 hsl(var(--border) / 0.55);
+  }
+
+  .inventario-activos-table thead th {
+    overflow: visible;
+    vertical-align: middle;
+  }
+
+  .inventario-activos-table thead th.inventario-th-std {
+    background-color: hsl(var(--card));
+  }
+
+  .inventario-activos-table thead th.inventario-th-accent {
+    background-color: color-mix(in srgb, hsl(var(--primary)) 22%, hsl(var(--card)));
+  }
+
+  .dark .inventario-activos-table thead th.inventario-th-accent {
+    background-color: color-mix(in srgb, hsl(var(--primary)) 30%, hsl(var(--card)));
   }
 
   /* Sitio público (marketing) */
@@ -375,5 +534,25 @@
     overflow: hidden;
     width: 100%;
     max-width: 100%;
+  }
+}
+
+/* Inventario: debe vivir en utilities para anular overflow-y-auto del main (Tailwind utilities > components). */
+@layer utilities {
+  main.panel-main-padding:has(.panel-inventario-page) {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 1rem;
+  }
+
+  .panel-page:has(.panel-inventario-page) {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow: hidden;
   }
 }

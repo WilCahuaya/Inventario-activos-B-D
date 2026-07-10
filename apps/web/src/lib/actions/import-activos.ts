@@ -116,28 +116,6 @@ export async function importActivos(
     const payload = validated.payload;
     const responsable = responsableByAmbiente.get(payload.ambiente_id) ?? null;
 
-    if (payload.catalogo_contabilidad) {
-      const cuentaUpdate = payload.catalogo_contabilidad;
-      const { error: cuentaError } = await supabase.rpc("update_catalogo_nacional_contabilidad", {
-        p_codigo: cuentaUpdate.codigo_catalogo,
-        p_cuenta_codigo: cuentaUpdate.cuenta_codigo,
-        p_contabilidad: cuentaUpdate.contabilidad,
-        p_depreciacion: cuentaUpdate.depreciacion,
-      });
-      if (cuentaError) {
-        errores.push({ fila: filaExcel, datos: fila, motivo: cuentaError.message });
-        continue;
-      }
-      const existing = catalogoByCodigo.get(cuentaUpdate.codigo_catalogo);
-      if (existing) {
-        catalogoByCodigo.set(cuentaUpdate.codigo_catalogo, {
-          ...existing,
-          cuenta_codigo: cuentaUpdate.cuenta_codigo,
-          contabilidad: cuentaUpdate.contabilidad,
-        });
-      }
-    }
-
     const { error } = await supabase.from("activos").insert({
       entidad_id: payload.entidad_id,
       codigo_catalogo: payload.codigo_catalogo,
@@ -159,6 +137,9 @@ export async function importActivos(
       responsable,
       sede_id: payload.sede_id,
       ambiente_id: payload.ambiente_id,
+      cuenta_contable_codigo: payload.cuenta_contable_codigo,
+      cuenta_contable_nombre: payload.cuenta_contable_nombre,
+      estado_registro: "REGISTRADO",
     });
 
     if (error) {

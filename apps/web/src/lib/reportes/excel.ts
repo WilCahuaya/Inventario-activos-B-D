@@ -1,4 +1,4 @@
-import { formatMonedaPE } from "@inventario/types";
+import { formatMonedaPE, labelFechaEmision } from "@inventario/types";
 import type { Range, WorkSheet } from "xlsx-js-style";
 import {
   ambienteDisenoExportFilename,
@@ -14,7 +14,7 @@ import {
   writeEntidadDisenoHeader,
   writeEntidadInventarioFirmas,
 } from "./inventario-entidad-diseno";
-import { buildInstitutionalHeader } from "./header-meta";
+import { buildInstitutionalHeader, fechaCorteCalculo } from "./header-meta";
 import {
   STYLE_BODY,
   STYLE_HEADER_BOLD,
@@ -87,7 +87,14 @@ function writeAmbienteDisenoHeader(
   addMerge(merges, r, 0, lastCol);
   r++;
 
-  setCell(ws, r, 0, buildFichaActualizacionLabel(ctx.fechaCorte), {
+  setCell(ws, r, 0, labelFechaEmision(ctx.fechaGeneracion), {
+    ...STYLE_HEADER_NORMAL,
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+  });
+  addMerge(merges, r, 0, lastCol);
+  r++;
+
+  setCell(ws, r, 0, buildFichaActualizacionLabel(ctx.fechaCorte!), {
     ...STYLE_HEADER_NORMAL,
     alignment: { horizontal: "center", vertical: "center", wrapText: true },
   });
@@ -212,7 +219,7 @@ function writeInstitutionalHeader(
   let r = 0;
 
   setCell(ws, r, 0, header.razonSocial, STYLE_HEADER_BOLD);
-  setCell(ws, r, split + 1, header.generado, {
+  setCell(ws, r, split + 1, header.fechaEmision, {
     ...STYLE_HEADER_NORMAL,
     alignment: { horizontal: "right", vertical: "center", wrapText: true },
   });
@@ -221,12 +228,16 @@ function writeInstitutionalHeader(
   r++;
 
   setCell(ws, r, 0, header.productoRuc, STYLE_HEADER_NORMAL);
-  setCell(ws, r, split + 1, header.fechaCorte, {
-    ...STYLE_HEADER_NORMAL,
-    alignment: { horizontal: "right", vertical: "center", wrapText: true },
-  });
+  if (header.fechaCorte) {
+    setCell(ws, r, split + 1, header.fechaCorte, {
+      ...STYLE_HEADER_NORMAL,
+      alignment: { horizontal: "right", vertical: "center", wrapText: true },
+    });
+    if (split + 1 < lastCol) addMerge(merges, r, split + 1, lastCol);
+  } else {
+    addMerge(merges, r, 0, lastCol);
+  }
   addMerge(merges, r, 0, split);
-  if (split + 1 < lastCol) addMerge(merges, r, split + 1, lastCol);
   r++;
 
   setCell(ws, r, 0, header.titulo, STYLE_HEADER_TITLE);
@@ -351,7 +362,7 @@ export async function exportReporteExcel(
 ): Promise<void> {
   const XLSX = await import("xlsx-js-style");
   const def = REPORTES.find((r) => r.id === ctx.reporteId)!;
-  const fechaCorte = new Date(ctx.fechaCorte + "T12:00:00");
+  const fechaCorte = fechaCorteCalculo(ctx);
   const useAmbienteDiseno = esReporteAmbienteDiseno(ctx.reporteId);
   const useEntidadDiseno = esReporteEntidadDiseno(ctx.reporteId);
   const useDisenoExtendido = esReporteDisenoExtendido(ctx.reporteId);

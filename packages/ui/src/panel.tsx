@@ -272,7 +272,7 @@ export function PanelToolbar({
   );
 }
 
-export { TABLE_PAGE_SIZE, TablePagination, useTablePagination } from "./table-pagination";
+export { TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS, TablePagination, useTablePagination, type TablePageSize } from "./table-pagination";
 export {
   INVENTARIO_TABLE_COL_COUNT,
   INVENTARIO_TABLE_COMPACT_COL_COUNT,
@@ -315,7 +315,14 @@ export * from "./reportes-panel";
 export * from "./ambiente-reportes-export-menu";
 export * from "./ambientes-datos-menu";
 export * from "./activo-edit-scope-nav";
+export * from "./use-inventario-selection";
+export * from "./eliminar-preregistrados-bulk-dialog";
+export * from "./preregistro-gestion-toolbar";
+export type { PreregistroGestionToolbarState } from "./preregistro-gestion-toolbar";
 export * from "./responsive-layout";
+export { usePanelInventarioUnifiedScroll, usePanelToolbarCollapseOnVerticalScroll, usePanelToolbarCollapseOnHorizontalScroll } from "./use-panel-toolbar-collapse";
+export { PanelToolbarExpandTrigger } from "./panel-toolbar-collapse";
 export * from "./sede-nav-cards";
 export * from "./sede-ambiente-filter";
 export * from "./visitas-campo";
+export * from "./entidad-resumen-panel";

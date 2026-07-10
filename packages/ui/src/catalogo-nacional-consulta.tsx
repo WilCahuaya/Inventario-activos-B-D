@@ -5,6 +5,7 @@ import type {
   CatalogoNacional,
   CuentaContable,
   UpdateCatalogoNacionalContabilidadInput,
+  UpsertCuentaContableInput,
 } from "@inventario/types";
 import { CATALOGO_ORIGEN_LABELS, minCatalogoQueryLength } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "./components";
@@ -44,6 +45,10 @@ export interface CatalogoNacionalConsultaProps {
     codigo: string,
     input: UpdateCatalogoNacionalContabilidadInput,
   ) => Promise<{ data?: CatalogoNacional; error?: string }>;
+  onCreateCuentaContable?: (
+    input: UpsertCuentaContableInput,
+  ) => Promise<{ data?: CuentaContable; error?: string }>;
+  onBusquedaChange?: (query: string) => void;
 }
 
 export function CatalogoNacionalConsulta({
@@ -52,6 +57,8 @@ export function CatalogoNacionalConsulta({
   offlineHint,
   readOnlyContabilidad = false,
   onUpdateContabilidad,
+  onCreateCuentaContable,
+  onBusquedaChange,
 }: CatalogoNacionalConsultaProps) {
   const [busqueda, setBusqueda] = useState("");
   const [items, setItems] = useState<CatalogoNacional[]>([]);
@@ -67,6 +74,10 @@ export function CatalogoNacionalConsulta({
   const [message, setMessage] = useState<string | null>(null);
 
   const canEditContabilidad = Boolean(onUpdateContabilidad) && !readOnlyContabilidad;
+
+  useEffect(() => {
+    onBusquedaChange?.(busqueda);
+  }, [busqueda, onBusquedaChange]);
 
   useEffect(() => {
     const trimmed = busqueda.trim();
@@ -139,8 +150,7 @@ export function CatalogoNacionalConsulta({
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Consulta del catálogo oficial SBN. Los datos SBN (código, denominación, grupo, clase, etc.)
-        son de solo lectura; puede completar o corregir el código cuenta contable, el nombre cuenta contable
-        y la depreciación conforme los vaya identificando.
+        son de solo lectura; puede completar o corregir la cuenta contable y la depreciación conforme los vaya identificando.
         {offlineHint ? ` ${offlineHint}` : ""}
         {readOnlyContabilidad
           ? " Sin conexión no se pueden editar los datos contables del catálogo nacional."
@@ -175,7 +185,7 @@ export function CatalogoNacionalConsulta({
       {loading && <p className="text-sm text-muted-foreground">Buscando en catálogo nacional…</p>}
 
       {!loading && searched && filtrados.length === 0 && (
-        <PanelEmptyState message="No se encontraron ítems del catálogo nacional con ese criterio." />
+        <PanelEmptyState message="No se encontraron ítems del catálogo nacional con ese criterio. Use «Agregar uno nuevo» para registrar el ítem en el catálogo oficial." />
       )}
 
       {!loading && filtrados.length > 0 && (
@@ -270,7 +280,8 @@ export function CatalogoNacionalConsulta({
                   searchCuentas={searchCuentasContables}
                   disabled={pending}
                   codigoId="edit_cuenta_codigo"
-                  nombreId="edit_contabilidad"
+                  allowCreateNew={Boolean(onCreateCuentaContable)}
+                  onCreateCuenta={onCreateCuentaContable}
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">

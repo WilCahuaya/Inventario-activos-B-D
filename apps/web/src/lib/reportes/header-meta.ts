@@ -1,21 +1,23 @@
-import { formatFechaISOToDDMMYYYY } from "@inventario/types";
+import { labelFechaCorte, labelFechaEmision } from "@inventario/types";
 import { EMPRESA } from "./branding";
+import { esReporteAdquiridosEjercicio } from "./ejercicio";
 import { reporteTitulo } from "./rows";
 import type { ReporteContexto } from "./types";
 import { REPORTES } from "./types";
 
-export function fechaCortaHora(d: Date): string {
-  const fecha = formatFechaISOToDDMMYYYY(d.toISOString().slice(0, 10)) ?? "";
-  const hora = d.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
-  return `${fecha} ${hora}`;
+export function fechaCorteCalculo(ctx: ReporteContexto): Date {
+  if (ctx.fechaCorte) {
+    return new Date(`${ctx.fechaCorte}T12:00:00`);
+  }
+  return new Date(ctx.fechaGeneracion);
 }
 
 export interface ReporteInstitutionalHeader {
   titulo: string;
   razonSocial: string;
   productoRuc: string;
-  generado: string;
-  fechaCorte: string;
+  fechaEmision: string;
+  fechaCorte: string | null;
   metaLine: string;
   usuarioLine: string;
 }
@@ -34,12 +36,14 @@ export function buildInstitutionalHeader(
   }
   metaParts.push(`Registros: ${totalRegistros}`);
 
+  const mostrarCorte = Boolean(ctx.fechaCorte) && !esReporteAdquiridosEjercicio(ctx.reporteId);
+
   return {
-    titulo: reporteTitulo(ctx.reporteId, def.valorizado),
+    titulo: reporteTitulo(ctx.reporteId, def.valorizado, ctx.fechaCorte ?? undefined),
     razonSocial: EMPRESA.razonSocial,
     productoRuc: `${EMPRESA.producto}  ·  RUC ${EMPRESA.ruc}`,
-    generado: `Generado: ${fechaCortaHora(ctx.fechaGeneracion)}`,
-    fechaCorte: `Fecha de corte: ${formatFechaISOToDDMMYYYY(ctx.fechaCorte) || ctx.fechaCorte}`,
+    fechaEmision: labelFechaEmision(ctx.fechaGeneracion),
+    fechaCorte: mostrarCorte && ctx.fechaCorte ? labelFechaCorte(ctx.fechaCorte) : null,
     metaLine: metaParts.join("   |   "),
     usuarioLine: `${ctx.usuarioNombre} · ${ctx.usuarioEmail}`,
   };

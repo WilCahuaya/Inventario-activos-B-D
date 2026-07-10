@@ -22,8 +22,10 @@ import {
   INVENTARIO_ACTIVOS_FIJOS_GENERAL_TITULO,
   INVENTARIO_ACTIVOS_VALORIZADOS_GENERAL_TITULO,
   REPORTE_BAJAS_TITULO,
+  REPORTE_ACTIVOS_ESTADO_MALO_TITULO,
   esReporteEntidadDiseno,
 } from "./inventario-entidad-diseno";
+import { tituloReporteAdquiridosEjercicio, esReporteAdquiridosEjercicio } from "./ejercicio";
 import type { ActivoReporte, ReporteId, ValorizacionTotales } from "./types";
 
 export function esReporteDisenoExtendido(reporteId: ReporteId): boolean {
@@ -194,7 +196,10 @@ function esReporteScopeEntidad(reporteId: ReporteId): boolean {
     reporteId === "inventario_entidad_sin_valores" ||
     reporteId === "inventario_entidad_activos_fijos" ||
     reporteId === "inventario_entidad_valorizado" ||
-    reporteId === "reporte_bajas"
+    reporteId === "reporte_bajas" ||
+    reporteId === "reporte_activos_estado_malo" ||
+    reporteId === "reporte_adquiridos_ejercicio_actual" ||
+    reporteId === "reporte_adquiridos_ejercicio_anterior"
   );
 }
 
@@ -466,7 +471,10 @@ export function reporteDisenoPdfColumnStyles(
   }
   if (
     reporteId === "inventario_entidad_sin_valores" ||
-    reporteId === "inventario_entidad_activos_fijos"
+    reporteId === "inventario_entidad_activos_fijos" ||
+    reporteId === "reporte_activos_estado_malo" ||
+    reporteId === "reporte_adquiridos_ejercicio_actual" ||
+    reporteId === "reporte_adquiridos_ejercicio_anterior"
   ) {
     return pdfColumnStylesFromWeights(tableWidthMm, ENTIDAD_SIN_VALOR_COL_WEIGHTS, [6, 7, 10, 11]);
   }
@@ -496,7 +504,10 @@ export function reporteDisenoExcelColWidths(reporteId: ReporteId): number[] | un
           reporteId === "inventario_ambiente_activos_fijos"
         ? AMBIENTE_SIN_VALOR_COL_WEIGHTS
         : reporteId === "inventario_entidad_sin_valores" ||
-            reporteId === "inventario_entidad_activos_fijos"
+            reporteId === "inventario_entidad_activos_fijos" ||
+            reporteId === "reporte_activos_estado_malo" ||
+            reporteId === "reporte_adquiridos_ejercicio_actual" ||
+            reporteId === "reporte_adquiridos_ejercicio_anterior"
           ? ENTIDAD_SIN_VALOR_COL_WEIGHTS
           : reporteId === "inventario_entidad_valorizado"
             ? ENTIDAD_VALORIZADO_COL_WEIGHTS
@@ -598,7 +609,14 @@ export function buildReporteRows(
   });
 }
 
-export function reporteTitulo(reporteId: ReporteId, valorizado: boolean): string {
+export function reporteTitulo(
+  reporteId: ReporteId,
+  valorizado: boolean,
+  fechaCorte?: string,
+): string {
+  if (esReporteAdquiridosEjercicio(reporteId)) {
+    return tituloReporteAdquiridosEjercicio(reporteId, fechaCorte);
+  }
   const map: Record<ReporteId, string> = {
     inventario_ambiente_sin_valores: FICHA_ASIGNACION_TITULO,
     inventario_ambiente_activos_fijos: INVENTARIO_ACTIVOS_FIJOS_AMBIENTE_TITULO,
@@ -607,6 +625,15 @@ export function reporteTitulo(reporteId: ReporteId, valorizado: boolean): string
     inventario_ambiente_valorizado: INVENTARIO_ACTIVOS_VALORIZADOS_AMBIENTE_TITULO,
     inventario_entidad_valorizado: INVENTARIO_ACTIVOS_VALORIZADOS_GENERAL_TITULO,
     reporte_bajas: REPORTE_BAJAS_TITULO,
+    reporte_activos_estado_malo: REPORTE_ACTIVOS_ESTADO_MALO_TITULO,
+    reporte_adquiridos_ejercicio_actual: tituloReporteAdquiridosEjercicio(
+      "reporte_adquiridos_ejercicio_actual",
+      fechaCorte,
+    ),
+    reporte_adquiridos_ejercicio_anterior: tituloReporteAdquiridosEjercicio(
+      "reporte_adquiridos_ejercicio_anterior",
+      fechaCorte,
+    ),
   };
   void valorizado;
   return map[reporteId];

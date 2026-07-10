@@ -30,9 +30,9 @@ export function CambiarAmbienteDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Cambiar de ambiente"
-      description={`Mueva «${activo.nombre}» a otra sede o ambiente dentro de la entidad.`}
-      className="max-w-md"
+      title="Editar bien"
+      description={`Actualice ubicación, estado u observaciones de «${activo.nombre}».`}
+      className="max-w-2xl lg:max-w-3xl"
     >
       <ActivoForm
         entidades={[]}
@@ -40,7 +40,7 @@ export function CambiarAmbienteDialog({
         activo={activo}
         mode="edit"
         soloUbicacion
-        submitLabel="Guardar ubicación"
+        submitLabel="Guardar"
         variant="modal"
         onSuccess={handleSuccess}
       />

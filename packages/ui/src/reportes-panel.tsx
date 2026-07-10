@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { Button, Input, Select } from "./components";
+import { entidadMuestraSelectorSede } from "@inventario/types";
+import { Button, Select } from "./components";
+import { FechaDdMmYyyyInput } from "./fecha-dd-mm-yyyy-input";
 import { PanelBanner, PanelCountLabel, StatusBadge, panelCardClass } from "./panel";
 import { PanelTableTd, PanelTableTh } from "./panel-table-layout";
 import { panelStickyToolbarClass, scrollbarThemedClass } from "./responsive-layout";
@@ -46,6 +48,9 @@ export interface ReportesPanelContentProps {
   onAmbienteChange: (id: string) => void;
   fechaCorte: string;
   onFechaCorteChange: (value: string) => void;
+  ocultarFechaCorte?: boolean;
+  previewFechaEmision?: string | null;
+  previewFechaCorte?: string | null;
   loading: boolean;
   pending: "pdf" | "excel" | null;
   error: string | null;
@@ -60,45 +65,32 @@ export interface ReportesPanelContentProps {
   esAdmin?: boolean;
 }
 
+function FechaCorteInput({
+  id,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <FechaDdMmYyyyInput
+      id={id}
+      value={value}
+      disabled={disabled}
+      onChange={onChange}
+    />
+  );
+}
+
 function FormatoBadge({ formato }: { formato: "pdf" | "excel" }) {
   return (
     <StatusBadge variant={formato === "pdf" ? "default" : "pending"}>
       {formato === "pdf" ? "PDF" : "Excel"}
     </StatusBadge>
-  );
-}
-
-function ResumenGrupoList({
-  titulo,
-  items,
-  vacio,
-}: {
-  titulo: string;
-  items: ReporteResumenGrupoUI[];
-  vacio: string;
-}) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</p>
-      {items.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">{vacio}</p>
-      ) : (
-        <ul className="mt-2 space-y-1.5">
-          {items.map((item) => (
-            <li
-              key={item.label}
-              className="flex items-center justify-between gap-2 text-sm"
-              title={item.label}
-            >
-              <span className="min-w-0 truncate text-foreground">{item.label}</span>
-              <span className="shrink-0 font-medium tabular-nums text-muted-foreground">
-                {item.count}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
 
@@ -119,6 +111,9 @@ export function ReportesPanelContent({
   onAmbienteChange,
   fechaCorte,
   onFechaCorteChange,
+  ocultarFechaCorte = false,
+  previewFechaEmision,
+  previewFechaCorte,
   loading,
   pending,
   error,
@@ -129,10 +124,13 @@ export function ReportesPanelContent({
   previewHeaders,
   previewRows,
   previewTotal,
-  resumen,
+  resumen: _resumen,
   esAdmin = false,
 }: ReportesPanelContentProps) {
   const definicion = reportes.find((r) => r.id === reporteId) ?? reportes[0]!;
+  const mostrarSelectorSede = entidadMuestraSelectorSede(sedes);
+  const ambienteSelectDisabled =
+    !entidadId || disabled || (mostrarSelectorSede && !sedeId);
   const tieneVistaPrevia = previewTotal > 0 && previewRows.length > 0;
   const previewTruncado = previewTotal > previewRows.length;
 
@@ -180,7 +178,9 @@ export function ReportesPanelContent({
       <section className={`${panelStickyToolbarClass} space-y-3 sm:space-y-4`}>
         <div>
           <h2 className="text-sm font-semibold text-foreground">2. Filtros y exportación</h2>
-          <p className="text-xs text-muted-foreground">Configure alcance, fecha de corte y descargue el archivo</p>
+          <p className="text-xs text-muted-foreground">
+            Configure alcance{ocultarFechaCorte ? "" : ", fecha de corte"} y descargue el archivo
+          </p>
         </div>
 
         {hideEntidadSelector && entidadNombreFija ? (
@@ -205,6 +205,7 @@ export function ReportesPanelContent({
 
             {definicion.scope === "ambiente" && (
               <>
+                {mostrarSelectorSede && (
                 <div className="space-y-1">
                   <label htmlFor="reporte_sede" className="text-xs font-medium text-muted-foreground">
                     Sede
@@ -220,6 +221,7 @@ export function ReportesPanelContent({
                     ]}
                   />
                 </div>
+                )}
                 <div className="space-y-1">
                   <label
                     htmlFor="reporte_ambiente"
@@ -230,7 +232,7 @@ export function ReportesPanelContent({
                   <Select
                     id="reporte_ambiente"
                     value={ambienteId}
-                    disabled={!sedeId || disabled}
+                    disabled={ambienteSelectDisabled}
                     onChange={onAmbienteChange}
                     options={[
                       { value: "", label: "Seleccione…" },
@@ -241,23 +243,25 @@ export function ReportesPanelContent({
               </>
             )}
 
+            {!ocultarFechaCorte && (
             <div className="space-y-1">
               <label htmlFor="reporte_corte" className="text-xs font-medium text-muted-foreground">
                 Fecha de corte
               </label>
-              <Input
+              <FechaCorteInput
                 id="reporte_corte"
-                type="date"
                 value={fechaCorte}
                 disabled={disabled}
-                onChange={(e) => onFechaCorteChange(e.target.value)}
+                onChange={onFechaCorteChange}
               />
             </div>
+            )}
           </div>
         )}
 
         {hideEntidadSelector && definicion.scope === "ambiente" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {mostrarSelectorSede && (
             <div className="space-y-1">
               <label htmlFor="reporte_sede" className="text-xs font-medium text-muted-foreground">
                 Sede
@@ -273,6 +277,7 @@ export function ReportesPanelContent({
                 ]}
               />
             </div>
+            )}
             <div className="space-y-1">
               <label htmlFor="reporte_ambiente" className="text-xs font-medium text-muted-foreground">
                 Ambiente
@@ -280,7 +285,7 @@ export function ReportesPanelContent({
               <Select
                 id="reporte_ambiente"
                 value={ambienteId}
-                disabled={!sedeId || disabled}
+                disabled={ambienteSelectDisabled}
                 onChange={onAmbienteChange}
                 options={[
                   { value: "", label: "Seleccione…" },
@@ -288,32 +293,32 @@ export function ReportesPanelContent({
                 ]}
               />
             </div>
+            {!ocultarFechaCorte && (
             <div className="space-y-1">
               <label htmlFor="reporte_corte_admin" className="text-xs font-medium text-muted-foreground">
                 Fecha de corte
               </label>
-              <Input
+              <FechaCorteInput
                 id="reporte_corte_admin"
-                type="date"
                 value={fechaCorte}
                 disabled={disabled}
-                onChange={(e) => onFechaCorteChange(e.target.value)}
+                onChange={onFechaCorteChange}
               />
             </div>
+            )}
           </div>
         )}
 
-        {hideEntidadSelector && definicion.scope === "entidad" && (
+        {hideEntidadSelector && definicion.scope === "entidad" && !ocultarFechaCorte && (
           <div className="max-w-xs space-y-1">
             <label htmlFor="reporte_corte_ent" className="text-xs font-medium text-muted-foreground">
               Fecha de corte
             </label>
-            <Input
+            <FechaCorteInput
               id="reporte_corte_ent"
-              type="date"
               value={fechaCorte}
               disabled={disabled}
-              onChange={(e) => onFechaCorteChange(e.target.value)}
+              onChange={onFechaCorteChange}
             />
           </div>
         )}
@@ -350,55 +355,24 @@ export function ReportesPanelContent({
         )}
       </section>
 
-      {tieneVistaPrevia && resumen && (
-        <section className={`${panelCardClass} space-y-4 p-4 sm:p-5`}>
+      {tieneVistaPrevia && (
+        <section className={`${panelCardClass} space-y-3 p-4 sm:p-5`}>
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-foreground">3. Vista previa</h2>
               <p className="text-xs text-muted-foreground">
-                Resumen y primeras filas del reporte antes de exportar
+                Primeras filas del reporte antes de exportar
               </p>
             </div>
             <PanelCountLabel count={previewTotal} singular="registro" plural="registros" />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 2xl:gap-4">
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <p className="text-xs font-medium text-muted-foreground">Total en reporte</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-primary">{resumen.total}</p>
+          {(previewFechaEmision || previewFechaCorte) && (
+            <div className="space-y-0.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm text-foreground">
+              {previewFechaEmision && <p>{previewFechaEmision}</p>}
+              {previewFechaCorte && <p>{previewFechaCorte}</p>}
             </div>
-            {resumen.valorizacion && (
-              <>
-                <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">Valor adquisición</p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums">S/ {resumen.valorizacion.valorAdquisicion}</p>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">Dep. acumulada</p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums">
-                    S/ {resumen.valorizacion.depreciacionAcumulada}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">Valor neto</p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums">S/ {resumen.valorizacion.valorNeto}</p>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <ResumenGrupoList
-              titulo="Por estado del bien"
-              items={resumen.porEstado}
-              vacio="Sin datos de estado"
-            />
-            <ResumenGrupoList
-              titulo="Por ubicación"
-              items={resumen.porUbicacion}
-              vacio="Sin datos de ubicación"
-            />
-          </div>
+          )}
 
           <div className={`${scrollbarThemedClass} overflow-x-auto rounded-lg border border-border/60`}>
             <table className="w-full min-w-[48rem] border-collapse text-left">
@@ -437,7 +411,7 @@ export function ReportesPanelContent({
       <div className={`${panelCardClass} p-4 text-sm text-muted-foreground`}>
         <p className="font-medium text-foreground">Formato institucional B&amp;D</p>
         <ul className="mt-2 list-inside list-disc space-y-1">
-          <li>Membrete con razón social, RUC y fecha de corte</li>
+          <li>Membrete con razón social, RUC, fecha de emisión y fecha de corte (cuando aplica)</li>
           <li>Usuario generador y numeración de páginas en PDF</li>
           {esAdmin ? (
             <li>

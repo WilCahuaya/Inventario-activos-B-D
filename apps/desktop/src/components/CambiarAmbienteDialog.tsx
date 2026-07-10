@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Activo, Ambiente, Sede } from "@inventario/types";
+import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { Button, Dialog, Label, Select } from "@inventario/ui";
 import { cambiarUbicacionActivo } from "../lib/activos";
 import { listAmbientes, listSedes } from "../lib/ubicacion";
@@ -30,8 +31,18 @@ export function CambiarAmbienteDialog({
     setAmbienteId(activo.ambiente_id ?? "");
     setError(null);
     setPending(false);
-    void listSedes(activo.entidad_id).then(setSedes);
+    void listSedes(activo.entidad_id).then((data) => {
+      setSedes(data);
+      const implicitId = sedeIdSinSelector(data);
+      if (implicitId) {
+        setSedeId(implicitId);
+      } else {
+        setSedeId(activo.sede_id ?? "");
+      }
+    });
   }, [open, activo.entidad_id, activo.sede_id, activo.ambiente_id]);
+
+  const mostrarSelectorSede = entidadMuestraSelectorSede(sedes);
 
   useEffect(() => {
     if (!open || !sedeId) {
@@ -68,10 +79,11 @@ export function CambiarAmbienteDialog({
       open={open}
       onClose={onClose}
       title="Cambiar de ambiente"
-      description={`Mueva «${activo.nombre}» a otra sede o ambiente dentro de la entidad.`}
+      description={`Mueva «${activo.nombre}» a otro ambiente dentro de la entidad.`}
       className="max-w-md"
     >
       <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
+        {mostrarSelectorSede && (
         <div className="space-y-2">
           <Label htmlFor="cambiar_sede">Sede</Label>
           <Select
@@ -87,13 +99,14 @@ export function CambiarAmbienteDialog({
             ]}
           />
         </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="cambiar_ambiente">Ambiente</Label>
           <Select
             id="cambiar_ambiente"
             value={ambienteId}
-            disabled={!sedeId}
+            disabled={mostrarSelectorSede ? !sedeId : false}
             onChange={setAmbienteId}
             options={[
               { value: "", label: "Seleccione ambiente…" },

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Ambiente, Sede } from "@inventario/types";
+import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { MAX_ACTIVOS_SIMILARES_CANTIDAD } from "@inventario/types";
 import { ConfirmDialog, Input, Label, Select } from "@inventario/ui";
 import {
@@ -89,16 +90,27 @@ export function AgregarBienesSimilaresDialog({
       return;
     }
 
-    void listSedes(entidadId).then(setSedes);
+    void listSedes(entidadId).then((data) => {
+      setSedes(data);
+      const implicitId = sedeIdSinSelector(data);
+      if (implicitId) setOtraSedeId(implicitId);
+    });
   }, [open, entidadId]);
 
+  const mostrarSelectorSede = entidadMuestraSelectorSede(sedes);
+
   useEffect(() => {
-    if (!open || destinoUbicacion !== "otro" || !otraSedeId) {
+    if (!open || destinoUbicacion !== "otro") {
       if (!open || destinoUbicacion !== "otro") setAmbientes([]);
       return;
     }
-    void listAmbientes(otraSedeId).then(setAmbientes);
-  }, [open, destinoUbicacion, otraSedeId]);
+    const sedeCarga = otraSedeId || sedeIdSinSelector(sedes);
+    if (!sedeCarga) {
+      setAmbientes([]);
+      return;
+    }
+    void listAmbientes(sedeCarga).then(setAmbientes);
+  }, [open, destinoUbicacion, otraSedeId, sedes]);
 
   useEffect(() => {
     if (!open) return;
@@ -142,7 +154,7 @@ export function AgregarBienesSimilaresDialog({
       return;
     }
     if (destinoUbicacion === "otro" && (!otraSedeId || !otroAmbienteId)) {
-      setError("Seleccione sede y ambiente de destino.");
+      setError(mostrarSelectorSede ? "Seleccione sede y ambiente de destino." : "Seleccione ambiente de destino.");
       return;
     }
 
@@ -252,6 +264,7 @@ export function AgregarBienesSimilaresDialog({
               <span className="font-medium text-foreground">Otro ambiente</span>
               {destinoUbicacion === "otro" && (
                 <span className="mt-2 block space-y-3" onClick={(e) => e.preventDefault()}>
+                  {mostrarSelectorSede && (
                   <div className="space-y-1.5">
                     <Label htmlFor="similares_sede" className="text-xs">
                       Sede
@@ -270,6 +283,7 @@ export function AgregarBienesSimilaresDialog({
                       ]}
                     />
                   </div>
+                  )}
                   <div className="space-y-1.5">
                     <Label htmlFor="similares_ambiente" className="text-xs">
                       Ambiente
@@ -277,7 +291,7 @@ export function AgregarBienesSimilaresDialog({
                     <Select
                       id="similares_ambiente"
                       value={otroAmbienteId}
-                      disabled={!otraSedeId}
+                      disabled={mostrarSelectorSede ? !otraSedeId : false}
                       onChange={(value) => {
                         setOtroAmbienteId(value);
                         if (error) setError(null);

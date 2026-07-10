@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { AmbientesPanel } from "@/components/panel/AmbientesPanel";
+import { listActivos } from "@/lib/actions/activos";
 import { getEntidad } from "@/lib/actions/entidades";
 import { listAmbientesPorEntidad, listSedesConConteo } from "@/lib/actions/ubicacion";
 import {
@@ -28,12 +29,13 @@ export default async function EntidadAmbientesPage({
   const entidad = await getEntidad(entidadId);
   if (!entidad) notFound();
 
-  const [ambientesRaw, sedes, responsables, visitasActivas, visitasHistorial] = await Promise.all([
+  const [ambientesRaw, sedes, responsables, visitasActivas, visitasHistorial, activos] = await Promise.all([
     listAmbientesPorEntidad(entidadId),
     listSedesConConteo(entidadId),
     listResponsables(entidadId),
     getVisitasCampoActivas(entidadId),
     listVisitasCampoHistorial(entidadId),
+    listActivos(entidadId),
   ]);
   const ambientes = await attachVisitaEstadoToAmbientes(ambientesRaw, entidadId);
 
@@ -43,14 +45,19 @@ export default async function EntidadAmbientesPage({
       ambientes={ambientes}
       sedes={sedes}
       responsables={responsables}
+      activos={activos}
       visitasActivas={visitasActivas}
       visitasHistorial={visitasHistorial}
       initialTab={
-        tab === "responsables"
-          ? "responsables"
-          : tab === "visitas"
-            ? "visitas"
-            : undefined
+        tab === "ambientes"
+          ? "ambientes"
+          : tab === "responsables"
+            ? "responsables"
+            : tab === "visitas"
+              ? "visitas"
+              : tab === "sucursales"
+                ? "sucursales"
+                : undefined
       }
     />
   );

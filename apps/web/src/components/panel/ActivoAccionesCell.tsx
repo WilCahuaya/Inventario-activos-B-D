@@ -8,6 +8,7 @@ interface ActivoAccionesCellProps {
   onEdit: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
+  puedeEliminarPreregistro?: boolean;
   editarLabel?: string;
   modoAdmin?: boolean;
 }
@@ -17,6 +18,7 @@ export function ActivoAccionesCell({
   onEdit,
   puedeDarDeBaja,
   puedeValidarPreregistro,
+  puedeEliminarPreregistro,
   editarLabel,
   modoAdmin,
 }: ActivoAccionesCellProps) {
@@ -29,6 +31,7 @@ export function ActivoAccionesCell({
         className="justify-center"
         puedeDarDeBaja={puedeDarDeBaja}
         puedeValidarPreregistro={puedeValidarPreregistro}
+        puedeEliminarPreregistro={puedeEliminarPreregistro}
         editarLabel={editarLabel}
         modoAdmin={modoAdmin}
       />

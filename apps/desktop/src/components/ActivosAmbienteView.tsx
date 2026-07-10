@@ -29,6 +29,7 @@ interface ActivosAmbienteViewProps {
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onEditActivo?: (activo: ActivoConUbicacion) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
+  onActivoDeleted?: () => void;
   onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
 }
 
@@ -51,6 +52,7 @@ export function ActivosAmbienteView({
   onPrintBatch,
   onEditActivo,
   onActivoUpdated,
+  onActivoDeleted,
   onAbrirAmbienteDestino,
 }: ActivosAmbienteViewProps) {
   const activosAmbiente = useMemo(
@@ -145,6 +147,7 @@ export function ActivosAmbienteView({
       onPrintBatch={onPrintBatch}
       onEditActivo={onEditActivo}
       onActivoUpdated={onActivoUpdated}
+      onActivoDeleted={onActivoDeleted}
       onAbrirAmbienteDestino={onAbrirAmbienteDestino}
     />
   );

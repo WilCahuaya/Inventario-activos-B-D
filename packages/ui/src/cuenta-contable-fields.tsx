@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import type { CuentaContable } from "@inventario/types";
-import { Input, Label } from "./components";
+import { useCallback } from "react";
+import type { CuentaContable, UpsertCuentaContableInput } from "@inventario/types";
 import { CuentaContableCodigoCombobox } from "./cuenta-contable-codigo-combobox";
 
 export interface CuentaContableFieldsProps {
@@ -13,8 +12,12 @@ export interface CuentaContableFieldsProps {
   searchCuentas: (query: string, limit?: number) => Promise<CuentaContable[]>;
   disabled?: boolean;
   codigoId?: string;
+  /** @deprecated Ya no se muestra un campo aparte; se usa solo dentro del flujo «Crear nueva». */
   nombreId?: string;
   allowCreateNew?: boolean;
+  onCreateCuenta?: (
+    input: UpsertCuentaContableInput,
+  ) => Promise<{ data?: CuentaContable; error?: string }>;
   /** Códigos cargados desde la maestra (para validación en el formulario padre). */
   onCodigosMaestraLoaded?: (codigos: string[]) => void;
 }
@@ -27,12 +30,10 @@ export function CuentaContableFields({
   searchCuentas,
   disabled = false,
   codigoId = "cuenta_codigo",
-  nombreId = "cuenta_nombre",
-  allowCreateNew = false,
+  allowCreateNew = true,
+  onCreateCuenta,
   onCodigosMaestraLoaded,
 }: CuentaContableFieldsProps) {
-  const [customMode, setCustomMode] = useState(false);
-
   const handleCuentasLoaded = useCallback(
     (cuentas: CuentaContable[]) => {
       onCodigosMaestraLoaded?.(cuentas.map((c) => c.codigo));
@@ -41,42 +42,21 @@ export function CuentaContableFields({
   );
 
   return (
-    <div className="contents">
-      <div className="space-y-3">
-        <CuentaContableCodigoCombobox
-          id={codigoId}
-          value={codigo}
-          nombre={nombre}
-          disabled={disabled}
-          searchCuentas={searchCuentas}
-          allowCreateNew={allowCreateNew}
-          nombreId={`${codigoId}_nombre_custom`}
-          onChange={onCodigoChange}
-          onNombreChange={onNombreChange}
-          onCustomModeChange={setCustomMode}
-          onCuentasLoaded={handleCuentasLoaded}
-          onCuentaSelected={(cuenta) => {
-            if (cuenta?.nombre) onNombreChange(cuenta.nombre);
-          }}
-        />
-      </div>
-
-      {!customMode && (
-        <div className="space-y-2">
-          <Label htmlFor={nombreId}>Nombre cuenta contable</Label>
-          <Input
-            id={nombreId}
-            value={nombre}
-            disabled={disabled}
-            placeholder="Ej. Equipos diversos"
-            onChange={(e) => onNombreChange(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Al elegir una cuenta de la lista se completa automáticamente. Puede editarlo para
-            actualizar el nombre en todo el catálogo.
-          </p>
-        </div>
-      )}
-    </div>
+    <CuentaContableCodigoCombobox
+      id={codigoId}
+      value={codigo}
+      nombre={nombre}
+      disabled={disabled}
+      searchCuentas={searchCuentas}
+      allowCreateNew={allowCreateNew}
+      onCreateCuenta={onCreateCuenta}
+      nombreId={`${codigoId}_nombre_custom`}
+      onChange={onCodigoChange}
+      onNombreChange={onNombreChange}
+      onCuentasLoaded={handleCuentasLoaded}
+      onCuentaSelected={(cuenta) => {
+        if (cuenta?.nombre) onNombreChange(cuenta.nombre);
+      }}
+    />
   );
 }

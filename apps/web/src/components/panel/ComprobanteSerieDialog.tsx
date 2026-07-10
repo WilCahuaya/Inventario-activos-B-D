@@ -50,7 +50,7 @@ export function ComprobanteSerieDialog({
             id="comprobante_serie_dialog"
             value={serie}
             onChange={(e) => setSerie(formatComprobanteSerieInput(e.target.value))}
-            placeholder="Ej. E001 - 1"
+            placeholder="Ej. F/E001 - 0007"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Enter") {

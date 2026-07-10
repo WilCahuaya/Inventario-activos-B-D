@@ -24,6 +24,7 @@ interface RegistrarActivoPanelProps {
   esAmbientePreregistro?: boolean;
   /** Admin: sugerir posible ambiente al preregistrar desde un ambiente real */
   posibleAmbientePreset?: { sedeId: string; ambienteId: string };
+  initialCatalogoCodigo?: string;
 }
 
 export function RegistrarActivoPanel({
@@ -38,6 +39,7 @@ export function RegistrarActivoPanel({
   mode = "contador",
   esAmbientePreregistro = false,
   posibleAmbientePreset,
+  initialCatalogoCodigo,
 }: RegistrarActivoPanelProps) {
   const router = useRouter();
   const isAdmin = mode === "admin";
@@ -132,6 +134,7 @@ export function RegistrarActivoPanel({
         asignaCodigoInmediato={!esPreregistro}
         posibleAmbientePreset={isAdmin && !esAmbientePreregistro ? posibleAmbientePreset : undefined}
         variant="page"
+        initialCatalogoCodigo={initialCatalogoCodigo}
         onSuccess={handleDone}
         onCancel={handleDone}
       />

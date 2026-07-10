@@ -20,6 +20,21 @@ import { PanelTabs } from "./panel";
 
 type CatalogoTab = "propio" | "nacional" | "cuentas";
 
+export interface CatalogoNacionalAltaPrefill {
+  codigo?: string;
+  denominacion?: string;
+}
+
+function parseCatalogoNacionalAltaPrefill(query: string): CatalogoNacionalAltaPrefill {
+  const trimmed = query.trim();
+  if (!trimmed) return {};
+  if (/^\d[\d\s]*$/.test(trimmed)) {
+    const digits = trimmed.replace(/\D/g, "");
+    if (digits) return { codigo: digits.padStart(8, "0").slice(-8) };
+  }
+  return { denominacion: trimmed };
+}
+
 const CATALOGO_TABS: { id: CatalogoTab; label: string }[] = [
   { id: "propio", label: "Catálogo propio" },
   { id: "cuentas", label: "Cuentas contables" },
@@ -46,6 +61,10 @@ export interface CatalogoPageProps {
   onCreate: (
     input: CreateCatalogoNacionalInput,
   ) => Promise<{ data?: CatalogoNacional; error?: string }>;
+  onCreateNacional?: (
+    input: CreateCatalogoNacionalInput,
+  ) => Promise<{ data?: CatalogoNacional; error?: string }>;
+  readOnlyNacionalCreate?: boolean;
   listPropio: () => Promise<CatalogoNacional[]>;
   onUpdatePropio: (
     codigo: string,
@@ -79,6 +98,8 @@ export function CatalogoPage({
   onRegisterOpcionPersonalizada,
   onDeleteOpcionPersonalizada,
   onCreate,
+  onCreateNacional,
+  readOnlyNacionalCreate = false,
   listPropio,
   onUpdatePropio,
   onDeletePropio,
@@ -95,14 +116,40 @@ export function CatalogoPage({
   const [propioReloadKey, setPropioReloadKey] = useState(0);
   const [cuentasReloadKey, setCuentasReloadKey] = useState(0);
   const [showAltaForm, setShowAltaForm] = useState(false);
+  const [altaDenominacion, setAltaDenominacion] = useState(initialDenominacion);
+  const [showAltaNacionalForm, setShowAltaNacionalForm] = useState(false);
+  const [altaNacionalCodigo, setAltaNacionalCodigo] = useState("");
+  const [altaNacionalDenominacion, setAltaNacionalDenominacion] = useState("");
+  const [nacionalBusqueda, setNacionalBusqueda] = useState("");
 
   const listCuentas = listCuentasContables ?? ((query = "") => searchCuentasContables(query));
 
   useEffect(() => {
     if (initialDenominacion.trim()) {
+      setAltaDenominacion(initialDenominacion);
       setShowAltaForm(true);
     }
   }, [initialDenominacion]);
+
+  function openAltaPropio(prefill?: string) {
+    if (prefill?.trim()) {
+      setAltaDenominacion(prefill.trim());
+    }
+    setShowAltaForm(true);
+  }
+
+  function openAltaNacional(prefill?: CatalogoNacionalAltaPrefill) {
+    if (prefill?.codigo) setAltaNacionalCodigo(prefill.codigo);
+    if (prefill?.denominacion?.trim()) setAltaNacionalDenominacion(prefill.denominacion.trim());
+    setShowAltaNacionalForm(true);
+  }
+
+  function handleNacionalItemCreated() {
+    setCuentasReloadKey((k) => k + 1);
+    setShowAltaNacionalForm(false);
+    setAltaNacionalCodigo("");
+    setAltaNacionalDenominacion("");
+  }
 
   function handleItemCreated() {
     setPropioReloadKey((k) => k + 1);
@@ -147,7 +194,7 @@ export function CatalogoPage({
               </p>
             </div>
             {!readOnlyPropio && !showAltaForm && (
-              <Button type="button" size="sm" onClick={() => setShowAltaForm(true)}>
+              <Button type="button" size="sm" onClick={() => openAltaPropio()}>
                 + Agregar uno nuevo
               </Button>
             )}
@@ -156,7 +203,7 @@ export function CatalogoPage({
           {showAltaForm && !readOnlyPropio && (
             <div className="mb-6">
               <CatalogoAltaPanel
-                initialDenominacion={initialDenominacion}
+                initialDenominacion={altaDenominacion}
                 successSuffix={successSuffix}
                 loadNextCodigo={loadNextCodigo}
                 loadGrupos={loadGrupos}
@@ -168,6 +215,7 @@ export function CatalogoPage({
                 onSubmit={onCreate}
                 onItemCreated={handleItemCreated}
                 onClose={() => setShowAltaForm(false)}
+                onCreateCuentaContable={onUpsertCuentaContable ? handleUpsertCuenta : undefined}
               />
             </div>
           )}
@@ -183,7 +231,8 @@ export function CatalogoPage({
             onDelete={onDeletePropio}
             reloadKey={propioReloadKey}
             readOnly={readOnlyPropio}
-            onAddNew={readOnlyPropio || showAltaForm ? undefined : () => setShowAltaForm(true)}
+            onAddNew={readOnlyPropio || showAltaForm ? undefined : () => openAltaPropio()}
+            onCreateCuentaContable={onUpsertCuentaContable ? handleUpsertCuenta : undefined}
           />
         </div>
       ) : tab === "cuentas" ? (
@@ -205,15 +254,53 @@ export function CatalogoPage({
         </div>
       ) : (
         <div className="overflow-visible rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:p-6">
-          <div className="mb-4">
-            <h3 className="font-semibold">Consulta catálogo nacional</h3>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="font-semibold">Consulta catálogo nacional</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Busque ítems del catálogo oficial SBN. Si no encuentra uno, puede agregarlo al
+                catálogo nacional.
+              </p>
+            </div>
+            {onCreateNacional && !readOnlyNacionalCreate && !showAltaNacionalForm && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => openAltaNacional(parseCatalogoNacionalAltaPrefill(nacionalBusqueda))}
+              >
+                + Agregar uno nuevo
+              </Button>
+            )}
           </div>
+
+          {showAltaNacionalForm && onCreateNacional && !readOnlyNacionalCreate && (
+            <div className="mb-6">
+              <CatalogoAltaPanel
+                variant="nacional"
+                initialDenominacion={altaNacionalDenominacion}
+                initialCodigo={altaNacionalCodigo}
+                successSuffix={successSuffix}
+                loadGrupos={loadGrupos}
+                loadClases={loadClases}
+                searchCuentasContables={searchCuentasContables}
+                suggestGrupo={suggestGrupo}
+                onRegisterOpcionPersonalizada={onRegisterOpcionPersonalizada}
+                onDeleteOpcionPersonalizada={onDeleteOpcionPersonalizada}
+                onSubmit={onCreateNacional}
+                onItemCreated={handleNacionalItemCreated}
+                onClose={() => setShowAltaNacionalForm(false)}
+                onCreateCuentaContable={onUpsertCuentaContable ? handleUpsertCuenta : undefined}
+              />
+            </div>
+          )}
           <CatalogoNacionalConsulta
             searchItems={searchNacional}
             searchCuentasContables={searchCuentasContables}
             offlineHint={offlineHint}
             onUpdateContabilidad={onUpdateNacionalContabilidad}
             readOnlyContabilidad={readOnlyNacionalContabilidad}
+            onCreateCuentaContable={onUpsertCuentaContable ? handleUpsertCuenta : undefined}
+            onBusquedaChange={setNacionalBusqueda}
           />
         </div>
       )}

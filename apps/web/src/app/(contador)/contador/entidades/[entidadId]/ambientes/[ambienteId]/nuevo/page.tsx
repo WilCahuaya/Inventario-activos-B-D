@@ -6,8 +6,10 @@ import { requireProfile } from "@/lib/auth/profile";
 
 export default async function NuevoActivoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ entidadId: string; ambienteId: string }>;
+  searchParams: Promise<{ catalogo?: string }>;
 }) {
   try {
     await requireProfile("CONTADOR");
@@ -16,6 +18,8 @@ export default async function NuevoActivoPage({
   }
 
   const { entidadId, ambienteId } = await params;
+  const { catalogo: catalogoParam } = await searchParams;
+  const initialCatalogoCodigo = catalogoParam?.replace(/\D/g, "").padStart(8, "0").slice(-8) || undefined;
   const [entidad, ambienteData] = await Promise.all([
     getEntidad(entidadId),
     getAmbiente(ambienteId),
@@ -39,6 +43,7 @@ export default async function NuevoActivoPage({
       esAmbientePreregistro={ambienteData.ambiente.es_preregistro}
       listHref={listHref}
       entidadHref={entidadHref}
+      initialCatalogoCodigo={initialCatalogoCodigo}
     />
   );
 }

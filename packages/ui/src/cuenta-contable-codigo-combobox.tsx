@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { normalizeCuentaCodigo, type CuentaContable } from "@inventario/types";
+import {
+  normalizeCuentaCodigo,
+  type CuentaContable,
+  type UpsertCuentaContableInput,
+} from "@inventario/types";
 import { Button, Input, Label } from "./components";
 import { Select, type SelectOption } from "./select";
 
@@ -30,13 +34,16 @@ export interface CuentaContableCodigoComboboxProps {
   disabled?: boolean;
   loading?: boolean;
   allowCreateNew?: boolean;
+  onCreateCuenta?: (
+    input: UpsertCuentaContableInput,
+  ) => Promise<{ data?: CuentaContable; error?: string }>;
   helperText?: string;
   nombreId?: string;
 }
 
 export function CuentaContableCodigoCombobox({
   id = "cuenta_codigo",
-  label = "Código cuenta contable",
+  label = "Cuenta contable",
   value,
   nombre = "",
   onChange,
@@ -48,18 +55,21 @@ export function CuentaContableCodigoCombobox({
   disabled = false,
   loading: loadingExternal = false,
   allowCreateNew = true,
-  helperText = "Seleccione un código de la lista o elija «Otros» para registrar una cuenta nueva.",
+  onCreateCuenta,
+  helperText = "Seleccione una cuenta de la lista o elija «Crear nueva cuenta contable».",
   nombreId = "cuenta_nombre_custom",
 }: CuentaContableCodigoComboboxProps) {
   const [cuentas, setCuentas] = useState<CuentaContable[]>([]);
   const [loadingCuentas, setLoadingCuentas] = useState(false);
+  const [creatingCuenta, setCreatingCuenta] = useState(false);
   const [mode, setMode] = useState<"select" | "custom">("select");
   const [customCodigo, setCustomCodigo] = useState("");
   const [customNombre, setCustomNombre] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
   const enteringCustomRef = useRef(false);
 
-  const loading = loadingExternal || loadingCuentas;
+  const puedeCrearCuenta = allowCreateNew && Boolean(onCreateCuenta);
+  const loading = loadingExternal || loadingCuentas || creatingCuenta;
 
   useEffect(() => {
     onCustomModeChange?.(mode === "custom");
@@ -104,13 +114,12 @@ export function CuentaContableCodigoCombobox({
     [cuentasByCodigo],
   );
 
-  const esCodigoNuevo = Boolean(value) && !cuentas.some((c) => c.codigo === value.trim());
 
   const selectOptions = useMemo((): SelectOption[] => {
     const items: SelectOption[] = [
       {
         value: "",
-        label: loading ? "Cargando cuentas…" : "Seleccione código de cuenta",
+        label: loading ? "Cargando cuentas…" : "Seleccione cuenta contable",
         kind: "placeholder",
         disabled: true,
       },
@@ -133,16 +142,16 @@ export function CuentaContableCodigoCombobox({
       }
     }
 
-    if (allowCreateNew) {
+    if (puedeCrearCuenta) {
       items.push({
         value: OTROS_VALUE,
-        label: "Otros…",
+        label: "Crear nueva cuenta contable…",
         kind: "action",
       });
     }
 
     return items;
-  }, [codigos, cuentasByCodigo, cuentas, loading, allowCreateNew]);
+  }, [codigos, cuentasByCodigo, cuentas, loading, puedeCrearCuenta]);
 
   useEffect(() => {
     if (!value) {
@@ -158,6 +167,8 @@ export function CuentaContableCodigoCombobox({
     }
     if (loadingCuentas) return;
     if (cuentas.some((c) => c.codigo === value.trim())) {
+      setMode("select");
+    } else if (nombre.trim()) {
       setMode("select");
     } else {
       setMode("custom");
@@ -201,7 +212,7 @@ export function CuentaContableCodigoCombobox({
     onCuentaSelected?.(null);
   }
 
-  function confirmCustom() {
+  async function confirmCreateCuenta() {
     const normalizado = normalizeCuentaCodigo(customCodigo);
     const nombreTrim = customNombre.trim();
     if (!normalizado) {
@@ -212,15 +223,40 @@ export function CuentaContableCodigoCombobox({
       setCustomError("Indique el nombre de la cuenta contable.");
       return;
     }
+    if (!onCreateCuenta) {
+      setCustomError("No se puede crear la cuenta en este contexto.");
+      return;
+    }
+
+    setCreatingCuenta(true);
     setCustomError(null);
-    onChange(normalizado);
-    onNombreChange?.(nombreTrim);
-    setCustomCodigo(normalizado);
-    setCustomNombre(nombreTrim);
-    onCuentaSelected?.(null);
+    try {
+      const result = await onCreateCuenta({ codigo: normalizado, nombre: nombreTrim });
+      if (result.error) {
+        setCustomError(result.error);
+        return;
+      }
+
+      const cuenta: CuentaContable = result.data ?? {
+        codigo: normalizado,
+        nombre: nombreTrim,
+      };
+      const updatedCuentas = [...cuentas.filter((c) => c.codigo !== cuenta.codigo), cuenta].sort(
+        (a, b) => a.codigo.localeCompare(b.codigo),
+      );
+      setCuentas(updatedCuentas);
+      onCuentasLoaded?.(updatedCuentas);
+      setMode("select");
+      setCustomCodigo("");
+      setCustomNombre("");
+      onChange(cuenta.codigo);
+      onNombreChange?.(cuenta.nombre ?? nombreTrim);
+      onCuentaSelected?.(cuenta);
+    } finally {
+      setCreatingCuenta(false);
+    }
   }
 
-  const selectedCuenta = value ? cuentasByCodigo.get(value.trim()) : undefined;
   const codigoNormalizado = normalizeCuentaCodigo(customCodigo);
   const puedeConfirmarCustom = Boolean(codigoNormalizado && customNombre.trim());
 
@@ -232,7 +268,7 @@ export function CuentaContableCodigoCombobox({
         <Select
           id={id}
           value={selectValue}
-          disabled={disabled || loading || (codigos.length === 0 && !allowCreateNew)}
+          disabled={disabled || loading || (codigos.length === 0 && !puedeCrearCuenta)}
           onChange={handleSelectChange}
           options={selectOptions}
           className="font-mono"
@@ -271,7 +307,7 @@ export function CuentaContableCodigoCombobox({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  confirmCustom();
+                  void confirmCreateCuenta();
                 }
               }}
             />
@@ -284,32 +320,13 @@ export function CuentaContableCodigoCombobox({
             <Button
               type="button"
               size="sm"
-              disabled={disabled || !puedeConfirmarCustom}
-              onClick={confirmCustom}
+              disabled={disabled || creatingCuenta || !puedeConfirmarCustom || !onCreateCuenta}
+              onClick={() => void confirmCreateCuenta()}
             >
-              Usar esta cuenta
+              {creatingCuenta ? "Creando…" : "Crear cuenta"}
             </Button>
           </div>
         </div>
-      )}
-
-      {value && mode === "select" && (
-        <p className="text-xs text-muted-foreground">
-          Seleccionado:{" "}
-          <strong className="font-mono text-foreground">
-            {selectedCuenta ? formatCuentaLabel(selectedCuenta) : value}
-          </strong>
-        </p>
-      )}
-
-      {value && mode === "custom" && esCodigoNuevo && (
-        <p className="text-xs text-muted-foreground">
-          Cuenta nueva:{" "}
-          <strong className="text-foreground">
-            <span className="font-mono">{value}</span>
-            {nombre.trim() ? ` — ${nombre.trim()}` : ""}
-          </strong>
-        </p>
       )}
 
       {helperText && mode === "select" && (

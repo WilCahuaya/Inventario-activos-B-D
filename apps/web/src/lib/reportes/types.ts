@@ -7,7 +7,10 @@ export type ReporteId =
   | "inventario_entidad_activos_fijos"
   | "inventario_ambiente_valorizado"
   | "inventario_entidad_valorizado"
-  | "reporte_bajas";
+  | "reporte_bajas"
+  | "reporte_activos_estado_malo"
+  | "reporte_adquiridos_ejercicio_actual"
+  | "reporte_adquiridos_ejercicio_anterior";
 
 export type ReporteFormato = "pdf" | "excel";
 
@@ -83,6 +86,32 @@ export const REPORTES: ReporteDefinicion[] = [
     valorizado: false,
     formatos: ["pdf", "excel"],
   },
+  {
+    id: "reporte_activos_estado_malo",
+    label: "Reporte de activos en estado malo",
+    descripcion: "Activos registrados en estado malo con ubicación (sede y ambiente).",
+    scope: "entidad",
+    valorizado: false,
+    formatos: ["pdf", "excel"],
+  },
+  {
+    id: "reporte_adquiridos_ejercicio_actual",
+    label: "Adquiridos en el ejercicio actual",
+    descripcion:
+      "Activos registrados cuya fecha de adquisición corresponde al año en curso.",
+    scope: "entidad",
+    valorizado: false,
+    formatos: ["pdf", "excel"],
+  },
+  {
+    id: "reporte_adquiridos_ejercicio_anterior",
+    label: "Adquiridos en el ejercicio anterior",
+    descripcion:
+      "Activos registrados cuya fecha de adquisición corresponde al año anterior al actual.",
+    scope: "entidad",
+    valorizado: false,
+    formatos: ["pdf", "excel"],
+  },
 ];
 
 export function reportesDisponiblesParaRol(rol: RolUsuario): ReporteDefinicion[] {
@@ -121,21 +150,8 @@ export interface ReporteContexto {
   usuarioNombre: string;
   usuarioEmail: string;
   fechaGeneracion: Date;
-  fechaCorte: string;
+  /** AAAA-MM-DD; omitir en reportes por ejercicio de adquisición. */
+  fechaCorte?: string | null;
 }
 
-export interface ClasificacionResumen {
-  cuenta: string;
-  grupo: string;
-  cantidad: number;
-  valorAdquisicion: number;
-  depreciacionAcumulada: number;
-  valorNeto: number;
-}
-
-export interface ValorizacionTotales {
-  cantidad: number;
-  valorAdquisicion: number;
-  depreciacionAcumulada: number;
-  valorNeto: number;
-}
+export type { ClasificacionResumen, ValorizacionTotales } from "@inventario/types";

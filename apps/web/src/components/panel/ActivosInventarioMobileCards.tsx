@@ -24,10 +24,18 @@ interface ActivosInventarioMobileCardsProps {
   onIrAmbiente?: (activo: Activo) => void;
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
+  puedeEliminarPreregistro?: boolean;
   editarLabel?: string;
   mostrarEstadoRegistro?: boolean;
+  mostrarUbicacion?: boolean;
+  ubicacionMultiplesSedes?: boolean;
   emptyActionLabel?: string;
   modoAdmin?: boolean;
+  onActivoEliminado?: (activoId: string) => void;
+  withPreregistroSelection?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  puedeSeleccionar?: (activo: Activo) => boolean;
 }
 
 function InfoItem({ label, value }: { label: string; value?: string | null }) {
@@ -49,16 +57,36 @@ function ValorCardItem({ activo }: { activo: Activo }) {
   );
 }
 
+type ActivoConUbicacionCard = Activo & {
+  sede_nombre?: string | null;
+  ambiente_nombre?: string | null;
+};
+
+function ubicacionCardTexto(activo: ActivoConUbicacionCard, mostrarSede: boolean): string {
+  const ambiente = activo.ambiente_nombre?.trim() || "—";
+  const sede = activo.sede_nombre?.trim();
+  if (mostrarSede && sede) return `${ambiente} · ${sede}`;
+  return ambiente;
+}
+
 export function ActivosInventarioMobileCards({
   activos,
   onEditActivo,
   onIrAmbiente,
   puedeDarDeBaja = true,
   puedeValidarPreregistro = false,
+  puedeEliminarPreregistro = false,
   editarLabel,
   mostrarEstadoRegistro = false,
+  mostrarUbicacion = false,
+  ubicacionMultiplesSedes = false,
   emptyActionLabel = "+ Nuevo activo",
   modoAdmin = false,
+  onActivoEliminado,
+  withPreregistroSelection = false,
+  selectedIds,
+  onToggleSelect,
+  puedeSeleccionar,
 }: ActivosInventarioMobileCardsProps) {
   if (activos.length === 0) {
     return (
@@ -71,10 +99,16 @@ export function ActivosInventarioMobileCards({
   return (
     <div className="space-y-3 p-3 sm:p-4">
       {activos.map((activo, index) => {
+        const activoUbicacion = activo as ActivoConUbicacionCard;
         const descripcion = inventarioDescripcion(activo);
         const inactivo = activo.estado_registro === "DADO_DE_BAJA";
         const { valorNeto } = inventarioDepreciacionFila(activo, inactivo);
         const preregistrado = activo.estado_registro === "PREREGISTRADO";
+        const seleccionable =
+          withPreregistroSelection &&
+          puedeSeleccionar?.(activo) &&
+          selectedIds &&
+          onToggleSelect;
 
         return (
           <article
@@ -88,6 +122,15 @@ export function ActivosInventarioMobileCards({
             }`}
           >
             <div className="mb-3 flex items-start justify-between gap-3">
+              {seleccionable && (
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-input"
+                  checked={selectedIds.has(activo.id)}
+                  onChange={() => onToggleSelect(activo.id)}
+                  aria-label={`Seleccionar ${activo.nombre}`}
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-muted-foreground">
                   #{index + 1} · {categoriaBienLetra(activo.categoria)} ·{" "}
@@ -107,15 +150,38 @@ export function ActivosInventarioMobileCards({
                 <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                   {formatActivoCodigoDisplay(activo)}
                 </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {inventarioCuentaContable(activo)}
-                </p>
+                {!modoAdmin && (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {inventarioCuentaContable(activo)}
+                  </p>
+                )}
               </div>
               <EstadoBienBadge estado={activo.estado_bien} />
             </div>
 
             {descripcion && (
               <p className="mb-3 text-xs leading-snug text-muted-foreground">{descripcion}</p>
+            )}
+
+            {mostrarUbicacion && (
+              <p className="mb-3 text-xs text-foreground">
+                <span className="font-semibold uppercase tracking-wide text-muted-foreground">
+                  Ubicación:{" "}
+                </span>
+                {ubicacionMultiplesSedes ? (
+                  <>
+                    {activoUbicacion.ambiente_nombre?.trim() || "—"}
+                    {activoUbicacion.sede_nombre?.trim() ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        {" "}
+                        · {activoUbicacion.sede_nombre.trim()}
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  ubicacionCardTexto(activoUbicacion, false)
+                )}
+              </p>
             )}
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -152,8 +218,10 @@ export function ActivosInventarioMobileCards({
                 onIrAmbiente={onIrAmbiente}
                 puedeDarDeBaja={puedeDarDeBaja}
                 puedeValidarPreregistro={puedeValidarPreregistro}
+                puedeEliminarPreregistro={puedeEliminarPreregistro}
                 editarLabel={editarLabel}
                 modoAdmin={modoAdmin}
+                onActivoEliminado={onActivoEliminado}
               />
             </div>
           </article>

@@ -29,8 +29,10 @@ interface ActivoAccionesBarProps {
   variant?: "auto" | "menu" | "icons-and-menu" | "icons";
   puedeDarDeBaja?: boolean;
   puedeValidarPreregistro?: boolean;
+  puedeEliminarPreregistro?: boolean;
   editarLabel?: string;
   modoAdmin?: boolean;
+  onActivoEliminado?: (activoId: string) => void;
 }
 
 export function ActivoAccionesBar({
@@ -42,8 +44,10 @@ export function ActivoAccionesBar({
   variant = "auto",
   puedeDarDeBaja = true,
   puedeValidarPreregistro = false,
+  puedeEliminarPreregistro = false,
   editarLabel = "Editar activo",
   modoAdmin = false,
+  onActivoEliminado,
 }: ActivoAccionesBarProps) {
   const router = useRouter();
   const [fotoOpen, setFotoOpen] = useState(false);
@@ -153,9 +157,11 @@ export function ActivoAccionesBar({
         onIrAmbiente={onIrAmbiente}
         puedeDarDeBaja={puedeDarDeBaja}
         puedeValidarPreregistro={puedeValidarPreregistro}
+        puedeEliminarPreregistro={puedeEliminarPreregistro}
         editarLabel={editarLabel}
         soloUbicacion={modoAdmin && activo.estado_registro === "REGISTRADO"}
         asignaCodigoInmediato={activo.estado_registro === "REGISTRADO"}
+        onActivoEliminado={onActivoEliminado}
       />
 
       {activo.foto_path && (

@@ -7,6 +7,7 @@ import type {
   CatalogoOpcionTipo,
   CreateCatalogoNacionalInput,
   CuentaContable,
+  UpsertCuentaContableInput,
 } from "@inventario/types";
 import { Button } from "./components";
 import { CatalogoNacionalForm } from "./catalogo-nacional-form";
@@ -15,10 +16,12 @@ import { panelCardClass } from "./panel";
 const OPCIONES_VACIAS: CatalogoCampoOpciones = { opciones: [], personalizadas: [] };
 
 export interface CatalogoAltaPanelProps {
+  variant?: "propio" | "nacional";
   initialDenominacion?: string;
+  initialCodigo?: string;
   /** Texto adicional tras crear el ítem (ej. mensaje offline en desktop). */
   successSuffix?: string;
-  loadNextCodigo: () => Promise<string>;
+  loadNextCodigo?: () => Promise<string>;
   loadGrupos: () => Promise<CatalogoCampoOpciones>;
   loadClases: () => Promise<CatalogoCampoOpciones>;
   searchCuentasContables: (query: string) => Promise<CuentaContable[]>;
@@ -36,10 +39,15 @@ export interface CatalogoAltaPanelProps {
   ) => Promise<{ data?: CatalogoNacional; error?: string }>;
   onItemCreated?: () => void | Promise<void>;
   onClose?: () => void;
+  onCreateCuentaContable?: (
+    input: UpsertCuentaContableInput,
+  ) => Promise<{ data?: CuentaContable; error?: string }>;
 }
 
 export function CatalogoAltaPanel({
+  variant = "propio",
   initialDenominacion = "",
+  initialCodigo = "",
   successSuffix,
   loadNextCodigo,
   loadGrupos,
@@ -51,7 +59,9 @@ export function CatalogoAltaPanel({
   onSubmit,
   onItemCreated,
   onClose,
+  onCreateCuentaContable,
 }: CatalogoAltaPanelProps) {
+  const esNacional = variant === "nacional";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -65,6 +75,22 @@ export function CatalogoAltaPanel({
   const [formKey, setFormKey] = useState(0);
 
   const refreshMeta = useCallback(async () => {
+    if (esNacional) {
+      setGruposLoading(true);
+      setClasesLoading(true);
+      try {
+        const [listaGrupos, listaClases] = await Promise.all([loadGrupos(), loadClases()]);
+        setGrupos(listaGrupos);
+        setClases(listaClases);
+      } finally {
+        setGruposLoading(false);
+        setClasesLoading(false);
+      }
+      return;
+    }
+
+    if (!loadNextCodigo) return;
+
     setCodigoLoading(true);
     setGruposLoading(true);
     setClasesLoading(true);
@@ -82,7 +108,7 @@ export function CatalogoAltaPanel({
       setGruposLoading(false);
       setClasesLoading(false);
     }
-  }, [loadClases, loadGrupos, loadNextCodigo]);
+  }, [esNacional, loadClases, loadGrupos, loadNextCodigo]);
 
   useEffect(() => {
     void refreshMeta();
@@ -103,7 +129,9 @@ export function CatalogoAltaPanel({
 
       setCreated(result.data ?? null);
       setSuccess(
-        `Ítem ${result.data?.codigo} agregado. Ya puede usarlo al registrar activos de cuenta de orden.${successSuffix ? ` ${successSuffix}` : ""}`,
+        esNacional
+          ? `Ítem ${result.data?.codigo} agregado al catálogo nacional. Ya puede usarlo al registrar activos.${successSuffix ? ` ${successSuffix}` : ""}`
+          : `Ítem ${result.data?.codigo} agregado. Ya puede usarlo al registrar activos de cuenta de orden.${successSuffix ? ` ${successSuffix}` : ""}`,
       );
       setFormKey((k) => k + 1);
       void refreshMeta();
@@ -118,10 +146,13 @@ export function CatalogoAltaPanel({
       <div className="overflow-visible rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="font-semibold">Nuevo bien de cuenta de orden</h3>
+            <h3 className="font-semibold">
+              {esNacional ? "Nuevo ítem del catálogo nacional" : "Nuevo bien de cuenta de orden"}
+            </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Registre artículos menores que no figuran en el catálogo oficial. El código se asigna
-              automáticamente; complete cuenta contable y contabilidad según corresponda.
+              {esNacional
+                ? "Registre un bien del catálogo oficial SBN que no figure en la consulta. Indique el código de 8 dígitos y complete los datos contables."
+                : "Registre artículos menores que no figuran en el catálogo oficial. El código se asigna automáticamente; complete cuenta contable y contabilidad según corresponda."}
             </p>
           </div>
           {onClose && (
@@ -133,7 +164,9 @@ export function CatalogoAltaPanel({
 
         <CatalogoNacionalForm
           key={formKey}
+          variant={variant}
           initialDenominacion={initialDenominacion}
+          initialCodigo={initialCodigo}
           codigo={codigo}
           codigoLoading={codigoLoading}
           grupos={grupos}
@@ -147,6 +180,7 @@ export function CatalogoAltaPanel({
           onDeleteOpcionPersonalizada={onDeleteOpcionPersonalizada}
           onOpcionesChanged={refreshMeta}
           onSubmit={handleSubmit}
+          onCreateCuentaContable={onCreateCuentaContable}
         />
 
         {success && (
@@ -167,7 +201,7 @@ export function CatalogoAltaPanel({
         )}
       </div>
 
-      {!onClose && (
+      {!onClose && !esNacional && (
         <div className={`${panelCardClass} p-4 text-sm text-muted-foreground`}>
           <p className="font-medium text-foreground">Cómo funciona</p>
           <ul className="mt-2 list-inside list-disc space-y-1">
@@ -180,6 +214,17 @@ export function CatalogoAltaPanel({
             </li>
             <li>Estado en catálogo: <strong>EXCLUIDO</strong> (cuenta de orden).</li>
             <li>Elija clase y grupo; puede agregar valores con «Otros» y eliminar los que creó.</li>
+          </ul>
+        </div>
+      )}
+
+      {!onClose && esNacional && (
+        <div className={`${panelCardClass} p-4 text-sm text-muted-foreground`}>
+          <p className="font-medium text-foreground">Cómo funciona</p>
+          <ul className="mt-2 list-inside list-disc space-y-1">
+            <li>Código de 8 dígitos del catálogo nacional SBN (sin prefijo BD…).</li>
+            <li>Estado en catálogo: <strong>ACTIVO</strong>.</li>
+            <li>Complete cuenta contable, depreciación, grupo y clase según corresponda.</li>
           </ul>
         </div>
       )}

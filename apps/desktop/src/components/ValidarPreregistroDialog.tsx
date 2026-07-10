@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Ambiente, Sede } from "@inventario/types";
+import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { Button, Dialog, Label, Select } from "@inventario/ui";
 import { registrarActivo } from "../lib/activos";
 import { listAmbientes, listSedes } from "../lib/ubicacion";
@@ -40,8 +41,14 @@ export function ValidarPreregistroDialog({
     setPending(false);
     setSedeId("");
     setAmbienteId("");
-    void listSedes(entidadId).then(setSedes);
+    void listSedes(entidadId).then((data) => {
+      setSedes(data);
+      const implicitId = sedeIdSinSelector(data);
+      if (implicitId) setSedeId(implicitId);
+    });
   }, [open, entidadId]);
+
+  const mostrarSelectorSede = entidadMuestraSelectorSede(sedes);
 
   useEffect(() => {
     if (!open || !posibleAmbienteId || sedes.length === 0) return;
@@ -114,6 +121,7 @@ export function ValidarPreregistroDialog({
           </p>
         )}
 
+        {mostrarSelectorSede && (
         <div className="space-y-2">
           <Label htmlFor="validar-sede">Sede destino</Label>
           <Select
@@ -129,8 +137,9 @@ export function ValidarPreregistroDialog({
             ]}
           />
         </div>
+        )}
 
-        {sedeId && (
+        {(sedeId || !mostrarSelectorSede) && (
           <div className="space-y-2">
             <Label htmlFor="validar-ambiente">Ambiente destino</Label>
             <Select

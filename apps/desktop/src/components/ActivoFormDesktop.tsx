@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CatalogoNacional, CategoriaBien } from "@inventario/types";
 import type { ActivoEditScope } from "@inventario/ui/panel";
 import {
   CATEGORIA_BIEN_AYUDA,
   CATEGORIA_BIEN_LABELS,
+  CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+  activoTieneCuentaContablePropia,
+  debePersistirCuentaContableEnActivo,
   assessLabelPrintWarnings,
   buildNombreConsolidado,
   calcDepreciacionAcumulada,
@@ -21,7 +24,10 @@ import {
   resolveNombreEtiqueta,
   suggestNombreEtiqueta,
   validarFechaDDMMYYYY,
+  validarCuentaContableParaCatalogo,
   vidaUtilMesesFromPorcentaje,
+  entidadMuestraSelectorSede,
+  sedeIdSinSelector,
   type ActivoAtributoCampo,
   type UpdateActivosSimilaresInput,
 } from "@inventario/types";
@@ -31,6 +37,7 @@ import {
   CatalogoPicker,
   CategoriaBienSelector,
   ConfirmDialog,
+  CuentaContableFields,
   FileInput,
   Input,
   Label,
@@ -56,7 +63,7 @@ import {
 } from "../lib/offline";
 import { updateActivoPaths, uploadActivoFile } from "../lib/storage";
 import { suggestActivoAtributo, upsertLocalAtributosFromActivo } from "../lib/atributo-vocab";
-import { getCatalogoByCodigo, searchCatalogo } from "../lib/catalogo";
+import { getCatalogoByCodigo, searchCatalogo, searchCuentasContables, upsertCuentaContable } from "../lib/catalogo";
 
 const fieldsetCompact = `${panelFieldsetClass} lg:col-span-1`;
 const fieldsetWide = `${panelFieldsetClass} col-span-1 lg:col-span-2`;
@@ -134,6 +141,26 @@ export function ActivoFormDesktop({
   const [comprobanteSerie, setComprobanteSerie] = useState(
     activo?.comprobante_serie ? formatComprobanteSerieInput(activo.comprobante_serie) : "",
   );
+  const [cuentaCodigo, setCuentaCodigo] = useState(
+    activo && activoTieneCuentaContablePropia(activo)
+      ? (activo.cuenta_contable_codigo ?? "")
+      : "",
+  );
+  const [cuentaNombre, setCuentaNombre] = useState(
+    activo && activoTieneCuentaContablePropia(activo)
+      ? (activo.cuenta_contable_nombre ?? "")
+      : "",
+  );
+  const cuentaReferenciaRef = useRef({
+    codigo:
+      activo && activoTieneCuentaContablePropia(activo)
+        ? (activo.cuenta_contable_codigo ?? "")
+        : "",
+    nombre:
+      activo && activoTieneCuentaContablePropia(activo)
+        ? (activo.cuenta_contable_nombre ?? "")
+        : "",
+  });
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([]);
   const [ambientes, setAmbientes] = useState<{ id: string; nombre: string }[]>([]);
   const [sedeId, setSedeId] = useState(fixedSedeId ?? activo?.sede_id ?? "");
@@ -152,9 +179,19 @@ export function ActivoFormDesktop({
   const [labelWarnOpen, setLabelWarnOpen] = useState(false);
   const [labelWarnText, setLabelWarnText] = useState("");
 
+  const mostrarSelectorSede = entidadMuestraSelectorSede(sedes);
+
   useEffect(() => {
-    void listSedes(entidadId).then(setSedes);
-  }, [entidadId]);
+    void listSedes(entidadId).then((data) => {
+      setSedes(data);
+      if (!fixedSedeId) {
+        const implicitId = sedeIdSinSelector(data);
+        if (implicitId) setSedeId(implicitId);
+      }
+      const implicitId = sedeIdSinSelector(data);
+      if (implicitId && !posibleSedeId) setPosibleSedeId(implicitId);
+    });
+  }, [entidadId, fixedSedeId]);
 
   useEffect(() => {
     if (!sedeId) {
@@ -165,12 +202,13 @@ export function ActivoFormDesktop({
   }, [sedeId]);
 
   useEffect(() => {
-    if (!posibleSedeId) {
+    const sedePosible = posibleSedeId || sedeIdSinSelector(sedes);
+    if (!sedePosible) {
       setPosibleAmbientes([]);
       return;
     }
-    void listAmbientes(posibleSedeId).then(setPosibleAmbientes);
-  }, [posibleSedeId]);
+    void listAmbientes(sedePosible).then(setPosibleAmbientes);
+  }, [posibleSedeId, sedes]);
 
   useEffect(() => {
     if (!activo?.posible_ambiente_id || !isEdit) return;
@@ -214,7 +252,8 @@ export function ActivoFormDesktop({
     [valorNum, depreciacionAcumulada],
   );
   const nombreOficial = nombre.trim() || catalogo?.denominacion || "";
-  const mostrarDepreciacion = categoria !== "CUENTA_ORDEN";
+  const mostrarDepreciacion = categoria !== "CUENTA_ORDEN" && !modoPreregistro;
+  const mostrarCuentaContable = !modoPreregistro && !esEdicionMasiva;
   const nombreConsolidado = useMemo(
     () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas, detalle),
     [nombre, marca, modelo, serie, color, medidas, detalle],
@@ -240,8 +279,48 @@ export function ActivoFormDesktop({
     if (categoria === "CUENTA_ORDEN") {
       setDepreciacion("");
       setVidaUtilMeses("");
+      if (mostrarCuentaContable) {
+        setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+        setCuentaNombre("");
+      }
     }
-  }, [categoria]);
+  }, [categoria, mostrarCuentaContable]);
+
+  useEffect(() => {
+    if (!catalogo || isEdit) return;
+    if (categoria === "CUENTA_ORDEN") {
+      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+      setCuentaNombre("");
+      cuentaReferenciaRef.current = {
+        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+        nombre: "",
+      };
+      return;
+    }
+    const codigo = catalogo.cuenta_codigo ?? "";
+    const nombre = catalogo.contabilidad ?? "";
+    setCuentaCodigo(codigo);
+    setCuentaNombre(nombre);
+    cuentaReferenciaRef.current = { codigo, nombre };
+  }, [catalogo?.codigo, isEdit, categoria]);
+
+  useEffect(() => {
+    if (!isEdit || !activo || !catalogo || activoTieneCuentaContablePropia(activo)) return;
+    if (categoria === "CUENTA_ORDEN") {
+      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+      setCuentaNombre("");
+      cuentaReferenciaRef.current = {
+        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+        nombre: "",
+      };
+      return;
+    }
+    const codigo = catalogo.cuenta_codigo ?? "";
+    const nombre = catalogo.contabilidad ?? "";
+    setCuentaCodigo(codigo);
+    setCuentaNombre(nombre);
+    cuentaReferenciaRef.current = { codigo, nombre };
+  }, [isEdit, activo, catalogo?.codigo, categoria]);
 
   const searchAtributo = useCallback(
     (campo: ActivoAtributoCampo, query: string) => suggestActivoAtributo(campo, query),
@@ -260,8 +339,17 @@ export function ActivoFormDesktop({
       if (!isEdit) {
         void previewCodigoBarras(entidadId, item.codigo).then(setCodigoBarrasPreview);
       }
+      if (mostrarCuentaContable) {
+        if (categoria === "CUENTA_ORDEN") {
+          setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+          setCuentaNombre("");
+        } else {
+          setCuentaCodigo(item.cuenta_codigo ?? "");
+          setCuentaNombre(item.contabilidad ?? "");
+        }
+      }
     },
-    [entidadId, isEdit, categoria],
+    [entidadId, isEdit, categoria, mostrarCuentaContable],
   );
 
   useEffect(() => {
@@ -278,6 +366,8 @@ export function ActivoFormDesktop({
     setNombreEtiqueta("");
     setDepreciacion("");
     setVidaUtilMeses("");
+    setCuentaCodigo("");
+    setCuentaNombre("");
     if (!isEdit) setCodigoBarrasPreview(null);
   }
 
@@ -366,6 +456,18 @@ export function ActivoFormDesktop({
     setMessage(null);
 
     try {
+    if (
+      mostrarCuentaContable &&
+      categoria === "ACTIVO" &&
+      (cuentaCodigo.trim() || cuentaNombre.trim())
+    ) {
+      const cuentaError = validarCuentaContableParaCatalogo(cuentaCodigo, cuentaNombre);
+      if (cuentaError) {
+        setMessage(cuentaError);
+        return;
+      }
+    }
+
     const payload = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
@@ -382,6 +484,18 @@ export function ActivoFormDesktop({
         depreciacion: depreciacion || undefined,
         vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
       }),
+      ...(mostrarCuentaContable &&
+        debePersistirCuentaContableEnActivo({
+          esEdicion: isEdit,
+          activoTienePropia: activo ? activoTieneCuentaContablePropia(activo) : false,
+          cuentaCodigo,
+          cuentaNombre,
+          referenciaCodigo: cuentaReferenciaRef.current.codigo,
+          referenciaNombre: cuentaReferenciaRef.current.nombre,
+        }) && {
+          cuenta_contable_codigo: cuentaCodigo.trim() || null,
+          cuenta_contable_nombre: cuentaNombre.trim() || null,
+        }),
       observacion: observacion || undefined,
       valor_adquisicion: valor ? Number(valor) : undefined,
       valor_es_mercado: valorEsMercado,
@@ -459,6 +573,10 @@ export function ActivoFormDesktop({
         foto_path: activo?.foto_path ?? null,
         comprobante_path: valorEsMercado ? null : (activo?.comprobante_path ?? null),
         comprobante_serie: valorEsMercado ? null : (payload.comprobante_serie ?? null),
+        cuenta_contable_codigo: payload.cuenta_contable_codigo ?? null,
+        cuenta_contable_nombre: payload.cuenta_contable_nombre ?? null,
+        cuenta_codigo: payload.cuenta_contable_codigo ?? activo?.cuenta_codigo ?? null,
+        contabilidad: payload.cuenta_contable_nombre ?? activo?.contabilidad ?? null,
         motivo_baja: activo?.motivo_baja ?? null,
         created_by: activo?.created_by ?? "",
         updated_by: activo?.updated_by ?? null,
@@ -843,6 +961,20 @@ export function ActivoFormDesktop({
           />
         </div>
 
+        {mostrarCuentaContable && (
+          <CuentaContableFields
+            codigo={cuentaCodigo}
+            nombre={cuentaNombre}
+            onCodigoChange={setCuentaCodigo}
+            onNombreChange={setCuentaNombre}
+            searchCuentas={searchCuentasContables}
+            onCreateCuenta={upsertCuentaContable}
+            disabled={pending || categoria === "CUENTA_ORDEN"}
+            codigoId="activo_cuenta_codigo"
+            allowCreateNew={categoria !== "CUENTA_ORDEN"}
+          />
+        )}
+
         {mostrarNombreEtiqueta && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-end justify-between gap-2">
@@ -1129,6 +1261,7 @@ export function ActivoFormDesktop({
             Sugerencia de destino (opcional). Al validar podrá confirmarla o elegir otra.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
+            {mostrarSelectorSede && (
             <div className="space-y-2">
               <Label htmlFor="posible-sede">Sede</Label>
               <Select
@@ -1144,7 +1277,8 @@ export function ActivoFormDesktop({
                 ]}
               />
             </div>
-            {posibleSedeId && (
+            )}
+            {(posibleSedeId || !mostrarSelectorSede) && (
               <div className="space-y-2">
                 <Label htmlFor="posible-ambiente">Ambiente</Label>
                 <Select
@@ -1166,6 +1300,7 @@ export function ActivoFormDesktop({
       <fieldset className={fieldsetWide}>
         <legend className={panelLegendClass}>Ubicación</legend>
         <div className="grid gap-4 sm:grid-cols-2">
+          {mostrarSelectorSede && (
           <div className="space-y-2">
             <Label htmlFor="sede">Sede</Label>
             <Select
@@ -1181,6 +1316,7 @@ export function ActivoFormDesktop({
               ]}
             />
           </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="ambiente">Ambiente</Label>
             <Select

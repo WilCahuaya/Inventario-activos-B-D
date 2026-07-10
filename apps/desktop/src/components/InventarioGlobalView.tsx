@@ -22,6 +22,7 @@ interface InventarioGlobalViewProps {
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
   onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
+  onActivoDeleted?: () => void;
 }
 
 function CatalogSyncButton({
@@ -74,6 +75,7 @@ export function InventarioGlobalView({
   onIrAmbiente,
   onAbrirAmbienteDestino,
   onActivoUpdated,
+  onActivoDeleted,
 }: InventarioGlobalViewProps) {
   const toolbarExtra: ReactNode = (
     <>
@@ -129,6 +131,7 @@ export function InventarioGlobalView({
       onIrAmbiente={onIrAmbiente}
       onAbrirAmbienteDestino={onAbrirAmbienteDestino}
       onActivoUpdated={onActivoUpdated}
+      onActivoDeleted={onActivoDeleted}
     />
   );
 }

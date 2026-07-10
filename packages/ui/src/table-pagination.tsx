@@ -1,20 +1,65 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "./components";
+import { Select } from "./select";
 
 export const TABLE_PAGE_SIZE = 25;
+
+export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
+export type TablePageSize = (typeof TABLE_PAGE_SIZE_OPTIONS)[number];
+
+const TABLE_PAGE_SIZE_STORAGE_KEY = "inventario-table-page-size";
+
+function isTablePageSize(n: number): n is TablePageSize {
+  return (TABLE_PAGE_SIZE_OPTIONS as readonly number[]).includes(n);
+}
+
+function readStoredPageSize(): TablePageSize {
+  if (typeof window === "undefined") return TABLE_PAGE_SIZE;
+  try {
+    const raw = localStorage.getItem(TABLE_PAGE_SIZE_STORAGE_KEY);
+    if (!raw) return TABLE_PAGE_SIZE;
+    const n = Number(raw);
+    if (isTablePageSize(n)) return n;
+  } catch {
+    /* ignore */
+  }
+  return TABLE_PAGE_SIZE;
+}
 
 export function useTablePagination<T>(
   items: T[],
   resetKey?: string | number,
-  pageSize: number = TABLE_PAGE_SIZE,
+  options?: { initialPageSize?: TablePageSize; persistPageSize?: boolean },
 ) {
+  const persistPageSize = options?.persistPageSize !== false;
+  const [pageSize, setPageSizeState] = useState<TablePageSize>(
+    () => options?.initialPageSize ?? readStoredPageSize(),
+  );
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     setPage(1);
   }, [resetKey]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [pageSize]);
+
+  const setPageSize = useCallback(
+    (size: TablePageSize) => {
+      setPageSizeState(size);
+      if (!persistPageSize) return;
+      try {
+        localStorage.setItem(TABLE_PAGE_SIZE_STORAGE_KEY, String(size));
+      } catch {
+        /* ignore */
+      }
+    },
+    [persistPageSize],
+  );
 
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -34,9 +79,11 @@ export function useTablePagination<T>(
   return {
     page: safePage,
     setPage,
+    setPageSize,
+    pageSize,
+    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
     totalPages,
     paginated,
-    pageSize,
     total: items.length,
     rangeStart,
     rangeEnd,
@@ -51,7 +98,10 @@ export function TablePagination({
   rangeStart,
   rangeEnd,
   pageSize,
+  pageSizeOptions = TABLE_PAGE_SIZE_OPTIONS,
   onPageChange,
+  onPageSizeChange,
+  legend,
 }: {
   page: number;
   totalPages: number;
@@ -59,40 +109,68 @@ export function TablePagination({
   rangeStart: number;
   rangeEnd: number;
   pageSize: number;
+  pageSizeOptions?: readonly number[];
   onPageChange: (page: number) => void;
+  onPageSizeChange?: (pageSize: TablePageSize) => void;
+  legend?: ReactNode;
 }) {
-  if (total <= pageSize) return null;
+  if (total === 0) return null;
+
+  const showPageNav = total > pageSize;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 bg-muted/20 px-3 py-2">
-      <p className="text-xs text-muted-foreground">
-        {rangeStart}–{rangeEnd} de {total.toLocaleString("es-PE")} activos
-      </p>
-      <div className="flex items-center gap-1.5">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 px-2.5 text-xs"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-        >
-          Anterior
-        </Button>
-        <span className="min-w-[5.5rem] text-center text-xs text-muted-foreground">
-          Pág. {page} / {totalPages}
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 px-2.5 text-xs"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-        >
-          Siguiente
-        </Button>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 bg-muted/30 px-3 py-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
+        <p className="shrink-0 text-xs text-muted-foreground">
+          {rangeStart}–{rangeEnd} de {total.toLocaleString("es-PE")} activos
+        </p>
+        {onPageSizeChange && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Mostrar</span>
+            <Select
+              aria-label="Activos por página"
+              size="compact"
+              value={String(pageSize)}
+              onChange={(value) => {
+                const n = Number(value);
+                if (isTablePageSize(n)) onPageSizeChange(n);
+              }}
+              options={pageSizeOptions.map((n) => ({
+                value: String(n),
+                label: String(n),
+              }))}
+            />
+          </div>
+        )}
+        {legend ? <div className="min-w-0 flex-1 basis-full sm:basis-auto">{legend}</div> : null}
       </div>
+      {showPageNav && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 text-xs"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            Anterior
+          </Button>
+          <span className="min-w-[5.5rem] text-center text-xs text-muted-foreground">
+            Pág. {page} / {totalPages}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 px-2.5 text-xs"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            Siguiente
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

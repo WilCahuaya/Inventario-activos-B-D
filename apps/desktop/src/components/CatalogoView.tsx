@@ -1,7 +1,10 @@
-import { CatalogoPage } from "@inventario/ui";
+import {
+  CatalogoPage,
+} from "@inventario/ui";
 import { useOnline } from "../hooks/useOnline";
 import {
   createCatalogoNacional,
+  createCatalogoNacionalExtension,
   deleteCatalogoOpcionPersonalizada,
   deleteCatalogoPropio,
   getNextCodigoCatalogoPropio,
@@ -35,6 +38,17 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
       };
     }
     return createCatalogoNacional(...args);
+  }
+
+  async function handleCreateNacional(
+    ...args: Parameters<typeof createCatalogoNacionalExtension>
+  ) {
+    if (!online) {
+      return {
+        error: "Se requiere conexión a internet para agregar ítems al catálogo nacional.",
+      };
+    }
+    return createCatalogoNacionalExtension(...args);
   }
 
   async function handleUpdate(
@@ -110,7 +124,7 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
         </p>
       </div>
 
-        {!online && (
+      {!online && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-foreground">
           Sin conexión. Puede consultar el catálogo nacional ya sincronizado y ver ítems propios en
           caché; crear, editar o eliminar propios y completar los datos contables del catálogo nacional requiere
@@ -127,6 +141,7 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
             : "Mostrando resultados del catálogo nacional sincronizado en este equipo."
         }
         readOnlyPropio={!online}
+        readOnlyNacionalCreate={!online}
         loadNextCodigo={getNextCodigoCatalogoPropio}
         loadGrupos={listCatalogoGrupos}
         loadClases={listCatalogoClases}
@@ -134,6 +149,7 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
         onRegisterOpcionPersonalizada={handleRegisterOpcion}
         onDeleteOpcionPersonalizada={handleDeleteOpcion}
         onCreate={handleCreate}
+        onCreateNacional={handleCreateNacional}
         listPropio={listCatalogoPropio}
         onUpdatePropio={handleUpdate}
         onDeletePropio={handleDelete}

@@ -1,6 +1,8 @@
 import {
   MAX_ACTIVOS_SIMILARES_CANTIDAD,
+  applyCuentaContableToPayloadIfProvided,
   codigoBarrasLookupVariants,
+  resolveCuentaContableActivo,
   type ActivosSimilaresPreview,
   type CreateActivosSimilaresResult,
   type EjemplaresSimilaresResumen,
@@ -8,6 +10,8 @@ import {
   type UpdateActivosSimilaresResult,
   type PreviewDeleteActivosPorCodigosResult,
   type DeleteActivosPorCodigosResult,
+  type DeleteActivosPreregistradosResult,
+  MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE,
   MAX_ELIMINAR_ACTIVOS_POR_CODIGOS,
   parseCodigosBarrasInput,
 } from "@inventario/types";
@@ -57,6 +61,8 @@ export interface CreateActivoInput {
   fecha_adquisicion?: string;
   vida_util_meses?: number;
   comprobante_serie?: string;
+  cuenta_contable_codigo?: string | null;
+  cuenta_contable_nombre?: string | null;
   sede_id?: string;
   ambiente_id?: string;
   posible_ambiente_id?: string | null;
@@ -87,14 +93,16 @@ function mapActivoRow(row: Record<string, unknown>): ActivoConUbicacion {
   const cat = Array.isArray(catalogo) ? catalogo[0] : catalogo;
   const { entidades: _e, sedes: _s, ambientes: _a, posible_ambiente: _p, catalogo_nacional: _c, ...activo } =
     row;
+  const activoBase = activo as unknown as Activo;
+  const cuenta = resolveCuentaContableActivo(activoBase, cat);
   return {
-    ...(activo as unknown as Activo),
+    ...activoBase,
     entidad_nombre: entidades?.nombre,
     sede_nombre: sedes?.nombre,
     ambiente_nombre: ambientes?.nombre,
     posible_ambiente_nombre: posibleAmbiente?.nombre,
-    cuenta_codigo: cat?.cuenta_codigo ?? null,
-    contabilidad: cat?.contabilidad ?? null,
+    cuenta_codigo: cuenta.cuenta_codigo,
+    contabilidad: cuenta.contabilidad,
     catalogo_grupo: cat?.grupo?.trim() || null,
     catalogo_clase: cat?.clase?.trim() || null,
   };
@@ -257,23 +265,25 @@ export async function createActivo(
     comprobante_serie: input.comprobante_serie?.trim() || null,
   };
 
+  let payloadFinal = applyCuentaContableToPayloadIfProvided(payload, input);
+
   if (esPreregistro) {
-    payload.posible_ambiente_id = input.posible_ambiente_id || null;
-    payload.estado_registro = "PREREGISTRADO";
+    payloadFinal.posible_ambiente_id = input.posible_ambiente_id || null;
+    payloadFinal.estado_registro = "PREREGISTRADO";
   } else {
-    payload.estado_registro = "REGISTRADO";
-    payload.sede_id = input.sede_id || null;
-    payload.ambiente_id = input.ambiente_id || null;
-    if (!payload.sede_id || !payload.ambiente_id) {
+    payloadFinal.estado_registro = "REGISTRADO";
+    payloadFinal.sede_id = input.sede_id || null;
+    payloadFinal.ambiente_id = input.ambiente_id || null;
+    if (!payloadFinal.sede_id || !payloadFinal.ambiente_id) {
       return { error: "Seleccione sede y ambiente para registrar el activo." };
     }
   }
 
-  if (!payload.codigo_catalogo || !payload.nombre) {
+  if (!payloadFinal.codigo_catalogo || !payloadFinal.nombre) {
     return { error: "Código catálogo y nombre son obligatorios." };
   }
 
-  const { data, error } = await supabase.from("activos").insert(payload).select().single();
+  const { data, error } = await supabase.from("activos").insert(payloadFinal).select().single();
   if (error) return { error: error.message };
   return { data: data as Activo };
 }
@@ -328,20 +338,22 @@ export async function updateActivo(
     comprobante_serie: input.comprobante_serie?.trim() || null,
   };
 
+  const payloadFinal = applyCuentaContableToPayloadIfProvided(payload, input);
+
   if (esPreregistro) {
-    payload.posible_ambiente_id = input.posible_ambiente_id ?? null;
+    payloadFinal.posible_ambiente_id = input.posible_ambiente_id ?? null;
   } else {
-    payload.sede_id = input.sede_id || null;
-    payload.ambiente_id = ambienteId;
+    payloadFinal.sede_id = input.sede_id || null;
+    payloadFinal.ambiente_id = ambienteId;
   }
 
-  if (!payload.codigo_catalogo || !payload.nombre) {
+  if (!payloadFinal.codigo_catalogo || !payloadFinal.nombre) {
     return { error: "Código catálogo y nombre son obligatorios." };
   }
 
   const { data, error } = await supabase
     .from("activos")
-    .update(payload)
+    .update(payloadFinal)
     .eq("id", activoId)
     .select()
     .single();
@@ -446,6 +458,10 @@ export async function darDeBajaActivo(
 
   if (existing.estado_registro === "DADO_DE_BAJA") {
     return { error: "El activo ya está inactivo." };
+  }
+
+  if (existing.estado_registro === "PREREGISTRADO") {
+    return { error: "Un bien preregistrado no puede darse de baja. Elimínelo si fue un error." };
   }
 
   const { error } = await supabase
@@ -797,4 +813,90 @@ export async function deleteActivosPorCodigos(
       comprobante_paths: result.comprobante_paths ?? [],
     },
   };
+}
+
+export async function deleteActivosPreregistrados(
+  entidadId: string,
+  activoIds: string[],
+): Promise<{ data?: DeleteActivosPreregistradosResult; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
+    return { error: "No autorizado." };
+  }
+  if (!entidadId) return { error: "Entidad no válida." };
+
+  const uniqueIds = [...new Set(activoIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) return { error: "Seleccione al menos un preregistro." };
+
+  if (profile.rol === "ADMIN_ENTIDAD" && profile.entidad_id !== entidadId) {
+    return { error: "No autorizado." };
+  }
+
+  const supabase = getSupabaseClient();
+
+  let eliminados = 0;
+  const fotoPaths: string[] = [];
+  const comprobantePaths: string[] = [];
+  const deletedIds: string[] = [];
+
+  for (let i = 0; i < uniqueIds.length; i += MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE) {
+    const chunk = uniqueIds.slice(i, i + MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE);
+    const { data, error } = await supabase.rpc("delete_activos_preregistrados", {
+      p_entidad_id: entidadId,
+      p_activo_ids: chunk,
+    });
+    if (error) return { error: error.message };
+
+    const result = data as {
+      eliminados?: number;
+      activo_ids?: string[];
+      foto_paths?: string[];
+      comprobante_paths?: string[];
+    };
+
+    eliminados += result.eliminados ?? 0;
+    deletedIds.push(...(result.activo_ids ?? []));
+    for (const path of result.foto_paths ?? []) {
+      if (path && !fotoPaths.includes(path)) fotoPaths.push(path);
+    }
+    for (const path of result.comprobante_paths ?? []) {
+      if (path && !comprobantePaths.includes(path)) comprobantePaths.push(path);
+    }
+  }
+
+  try {
+    await removeActivoStoragePaths(fotoPaths, comprobantePaths);
+  } catch {
+    // La eliminación en BD ya se aplicó.
+  }
+
+  return {
+    data: {
+      eliminados,
+      activo_ids: deletedIds,
+      foto_paths: fotoPaths,
+      comprobante_paths: comprobantePaths,
+    },
+  };
+}
+
+export async function deleteActivoPreregistrado(
+  activoId: string,
+): Promise<{ data?: DeleteActivosPreregistradosResult; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+
+  const supabase = getSupabaseClient();
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  return deleteActivosPreregistrados(existing.entidad_id, [activoId]);
 }

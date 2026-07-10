@@ -25,6 +25,10 @@
     -ms-overflow-style: none;
   }
 
+  main.panel-main-padding:has(.panel-inventario-page) {
+    overflow-y: hidden;
+  }
+
   .panel-main-scroll::-webkit-scrollbar {
     display: none;
   }

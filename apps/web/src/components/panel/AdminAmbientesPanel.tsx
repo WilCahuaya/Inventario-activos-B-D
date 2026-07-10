@@ -1,15 +1,15 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
-import { Button, Dialog, ResponsablesPanel } from "@inventario/ui";
+import type { CreateResponsableInput, Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
+import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
+import { Button, CrearResponsableDialog, Dialog, ResponsablesPanel } from "@inventario/ui";
 import {
-  ActivosIcon,
   EditIcon,
   PanelDataTable,
   PanelIconAction,
-  PanelNavActionLink,
   PanelTableActions,
   PanelTableColgroup,
   PanelTableTd,
@@ -21,7 +21,7 @@ import {
   AMBIENTES_TABLE_COLS_SIN_SUCURSAL,
   AMBIENTES_TABLE_COLS_VISITA,
   AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA,
-  panelTableBodyRowClass,
+  panelTableClickableRowClass,
   panelTableHeadRowClass,
   panelTableShrinkCellClass,
   panelTableStickyHeadClass,
@@ -73,6 +73,10 @@ interface AdminAmbientesPanelProps {
   initialTab?: AdminEntityTab;
 }
 
+function adminActivoHref(ambienteId: string) {
+  return `/admin/ambientes/${ambienteId}`;
+}
+
 export function AdminAmbientesPanel({
   entidad,
   ambientes: initial,
@@ -89,6 +93,10 @@ export function AdminAmbientesPanel({
   const [busqueda, setBusqueda] = useState("");
   const [sedeFilterId, setSedeFilterId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createResponsableOpen, setCreateResponsableOpen] = useState(false);
+  const [createResponsableId, setCreateResponsableId] = useState("");
+  const [editResponsableOpen, setEditResponsableOpen] = useState(false);
+  const [editResponsableId, setEditResponsableId] = useState("");
   const [editAmbiente, setEditAmbiente] = useState<AmbienteConVisita | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,12 +107,35 @@ export function AdminAmbientesPanel({
   const [detalleLoading, setDetalleLoading] = useState(false);
   const visitaAbierta = initialVisitasActivas.length > 0;
 
-  const soloUnaSede = Boolean(sedeFilterId);
+  const sedeFiltrada = Boolean(sedeFilterId);
+  const entidadMultiplesSedes = entidadMuestraSelectorSede(sedes);
+  const ocultarSucursalEnLista = !entidadMultiplesSedes || sedeFiltrada;
 
   useEffect(() => {
     setSedeFilterId("");
     setBusqueda("");
   }, [entidad.id]);
+
+  useEffect(() => {
+    if (editAmbiente) {
+      setEditResponsableId(editAmbiente.responsable_id ?? "");
+      setEditResponsableOpen(false);
+    }
+  }, [editAmbiente]);
+
+  function closeCreateAmbiente() {
+    setCreateOpen(false);
+    setCreateResponsableOpen(false);
+    setCreateResponsableId("");
+    setError(null);
+  }
+
+  function closeEditAmbiente() {
+    setEditAmbiente(null);
+    setEditResponsableOpen(false);
+    setEditResponsableId("");
+    setError(null);
+  }
 
   async function syncAmbientesYResponsables() {
     const [ambList, respList] = await Promise.all([
@@ -131,6 +162,16 @@ export function AdminAmbientesPanel({
     return responsables.find((r) => r.id === id)?.nombre ?? null;
   }
 
+  async function createResponsableDesdeAmbiente(input: CreateResponsableInput) {
+    const result = await createResponsable(entidad.id, input);
+    if (result.data) {
+      const nuevo: ResponsableConConteo = { ...result.data, ambiente_count: 0 };
+      setResponsables((prev) => [...prev, nuevo]);
+      return { data: nuevo };
+    }
+    return { error: result.error };
+  }
+
   const ambientesBase = useMemo(() => {
     if (!sedeFilterId) return ambientes;
     return ambientes.filter((a) => a.sede_id === sedeFilterId);
@@ -144,9 +185,9 @@ export function AdminAmbientesPanel({
         a.nombre.toLowerCase().includes(q) ||
         (a.descripcion?.toLowerCase().includes(q) ?? false) ||
         (a.responsable?.toLowerCase().includes(q) ?? false) ||
-        (!soloUnaSede && a.sede_nombre.toLowerCase().includes(q)),
+        (entidadMultiplesSedes && !sedeFiltrada && a.sede_nombre.toLowerCase().includes(q)),
     );
-  }, [ambientesBase, busqueda, soloUnaSede]);
+  }, [ambientesBase, busqueda, entidadMultiplesSedes, sedeFiltrada]);
 
   const gruposPorSede = useMemo(() => {
     const porSede = new Map<string, AmbienteConVisita[]>();
@@ -307,7 +348,7 @@ export function AdminAmbientesPanel({
         left={
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <PanelCountLabel count={filtrados.length} singular="ambiente" plural="ambientes" />
-            {sedes.length > 0 && (
+            {entidadMultiplesSedes && (
               <SedeAmbienteFilterSelect
                 sedes={sedes}
                 value={sedeFilterId}
@@ -323,7 +364,7 @@ export function AdminAmbientesPanel({
                 value={busqueda}
                 onChange={setBusqueda}
                 placeholder={
-                  soloUnaSede
+                  ocultarSucursalEnLista
                     ? "Buscar ambiente o responsable…"
                     : "Buscar ambiente, responsable o sucursal…"
                 }
@@ -342,7 +383,9 @@ export function AdminAmbientesPanel({
         }
       />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && !createOpen && !editAmbiente && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
 
       {gruposPorSede.length === 0 ? (
         <PanelEmptyState
@@ -356,7 +399,7 @@ export function AdminAmbientesPanel({
         <PanelDataTable layout="auto">
           <PanelTableColgroup
             cols={
-              soloUnaSede
+              ocultarSucursalEnLista
                 ? visitaAbierta
                   ? AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA
                   : AMBIENTES_TABLE_COLS_SIN_SUCURSAL
@@ -370,7 +413,7 @@ export function AdminAmbientesPanel({
               <PanelTableTh>Ambiente</PanelTableTh>
               <PanelTableTh>Responsable</PanelTableTh>
               <PanelTableTh>Descripción</PanelTableTh>
-              {!soloUnaSede && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
+              {!ocultarSucursalEnLista && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
               <PanelTableTh align="center" className={panelTableShrinkCellClass}>
                 Activos
               </PanelTableTh>
@@ -385,7 +428,19 @@ export function AdminAmbientesPanel({
           </thead>
           <tbody>
             {filtrados.map((amb) => (
-              <tr key={amb.id} className={panelTableBodyRowClass}>
+              <tr
+                key={amb.id}
+                className={panelTableClickableRowClass}
+                onClick={() => router.push(adminActivoHref(amb.id))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    router.push(adminActivoHref(amb.id));
+                  }
+                }}
+                tabIndex={0}
+                role="link"
+              >
                 <PanelTableTd className="font-medium text-primary" title={amb.nombre}>
                   {amb.nombre}
                 </PanelTableTd>
@@ -395,16 +450,18 @@ export function AdminAmbientesPanel({
                 <PanelTableTd className="text-muted-foreground" title={amb.descripcion ?? undefined}>
                   {amb.descripcion ?? "—"}
                 </PanelTableTd>
-                {!soloUnaSede && (
+                {!ocultarSucursalEnLista && (
                   <PanelTableTd className={panelTableShrinkCellClass} title={amb.sede_nombre}>
-                    <button
-                      type="button"
-                      className="truncate font-medium text-primary hover:underline"
-                      title="Ver ambientes de esta sucursal"
-                      onClick={() => setSedeFilterId(amb.sede_id)}
-                    >
-                      {amb.sede_nombre}
-                    </button>
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="truncate font-medium text-primary hover:underline"
+                        title="Ver ambientes de esta sucursal"
+                        onClick={() => setSedeFilterId(amb.sede_id)}
+                      >
+                        {amb.sede_nombre}
+                      </button>
+                    </div>
                   </PanelTableTd>
                 )}
                 <PanelTableTd align="center" className={panelTableShrinkCellClass}>
@@ -419,53 +476,49 @@ export function AdminAmbientesPanel({
                   <StatusBadge variant="active">Activo</StatusBadge>
                 </PanelTableTd>
                 <PanelTableTd align="right" className={`overflow-visible ${panelTableNowrapCellClass}`}>
-                  <PanelTableActions
-                    onEdit={() => {
-                      setError(null);
-                      setEditAmbiente(amb);
-                    }}
-                    nav={{
-                      label: "Activos",
-                      kind: "activos",
-                      href: `/admin/ambientes/${amb.id}`,
-                    }}
-                  />
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <PanelTableActions
+                      onEdit={() => {
+                        setError(null);
+                        setEditAmbiente(amb);
+                      }}
+                    />
+                  </div>
                 </PanelTableTd>
               </tr>
             ))}
           </tbody>
         </PanelDataTable>
-      ) : soloUnaSede ? (
+      ) : ocultarSucursalEnLista ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtrados.map((amb) => (
-            <article key={amb.id} className={`${panelCardClass} flex flex-col`}>
-              <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
-                <h3 className="font-semibold leading-snug text-primary">{amb.nombre}</h3>
-                <StatusBadge variant="active">Activo</StatusBadge>
-              </div>
-              <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
-                <p className="font-medium text-foreground">
-                  {amb.responsable ?? "Sin responsable asignado"}
-                </p>
-                {amb.descripcion ? (
-                  <p className="text-muted-foreground">{amb.descripcion}</p>
-                ) : (
-                  <p className="italic text-muted-foreground">Sin descripción</p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  {amb.activo_count} {amb.activo_count === 1 ? "activo" : "activos"}
-                </p>
-              </div>
+            <article key={amb.id} className={`${panelCardClass} flex flex-col overflow-hidden`}>
+              <Link
+                href={adminActivoHref(amb.id)}
+                className="flex flex-1 flex-col outline-none transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
+                  <h3 className="font-semibold leading-snug text-primary">{amb.nombre}</h3>
+                  <StatusBadge variant="active">Activo</StatusBadge>
+                </div>
+                <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
+                  <p className="font-medium text-foreground">
+                    {amb.responsable ?? "Sin responsable asignado"}
+                  </p>
+                  {amb.descripcion ? (
+                    <p className="text-muted-foreground">{amb.descripcion}</p>
+                  ) : (
+                    <p className="italic text-muted-foreground">Sin descripción</p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    {amb.activo_count} {amb.activo_count === 1 ? "activo" : "activos"}
+                  </p>
+                </div>
+              </Link>
               <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
                 <PanelIconAction label="Editar" onClick={() => setEditAmbiente(amb)}>
                   <EditIcon />
                 </PanelIconAction>
-                <PanelNavActionLink
-                  href={`/admin/ambientes/${amb.id}`}
-                  label="Activos"
-                  icon={<ActivosIcon />}
-                  className="ml-auto"
-                />
               </div>
             </article>
           ))}
@@ -489,37 +542,36 @@ export function AdminAmbientesPanel({
               </div>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {lista.map((amb) => (
-                  <article key={amb.id} className={`${panelCardClass} flex flex-col`}>
-                    <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
-                      <h3 className="font-semibold leading-snug text-primary">{amb.nombre}</h3>
-                      <StatusBadge variant="active">Activo</StatusBadge>
-                    </div>
-                    <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
-                      <p className="font-medium text-foreground">
-                        {amb.responsable ?? "Sin responsable asignado"}
-                      </p>
-                      {amb.descripcion ? (
-                        <p className="text-muted-foreground">{amb.descripcion}</p>
-                      ) : (
-                        <p className="italic text-muted-foreground">Sin descripción</p>
-                      )}
-                      <p className="text-sm text-muted-foreground">
-                        {amb.activo_count} {amb.activo_count === 1 ? "activo" : "activos"}
-                      </p>
-                      <p className="mt-auto pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        {amb.sede_nombre}
-                      </p>
-                    </div>
+                  <article key={amb.id} className={`${panelCardClass} flex flex-col overflow-hidden`}>
+                    <Link
+                      href={adminActivoHref(amb.id)}
+                      className="flex flex-1 flex-col outline-none transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    >
+                      <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
+                        <h3 className="font-semibold leading-snug text-primary">{amb.nombre}</h3>
+                        <StatusBadge variant="active">Activo</StatusBadge>
+                      </div>
+                      <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
+                        <p className="font-medium text-foreground">
+                          {amb.responsable ?? "Sin responsable asignado"}
+                        </p>
+                        {amb.descripcion ? (
+                          <p className="text-muted-foreground">{amb.descripcion}</p>
+                        ) : (
+                          <p className="italic text-muted-foreground">Sin descripción</p>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          {amb.activo_count} {amb.activo_count === 1 ? "activo" : "activos"}
+                        </p>
+                        <p className="mt-auto pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {amb.sede_nombre}
+                        </p>
+                      </div>
+                    </Link>
                     <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
                       <PanelIconAction label="Editar" onClick={() => setEditAmbiente(amb)}>
                         <EditIcon />
                       </PanelIconAction>
-                      <PanelNavActionLink
-                        href={`/admin/ambientes/${amb.id}`}
-                        label="Activos"
-                        icon={<ActivosIcon />}
-                        className="ml-auto"
-                      />
                     </div>
                   </article>
                 ))}
@@ -533,24 +585,30 @@ export function AdminAmbientesPanel({
 
       <Dialog
         open={createOpen}
-        onClose={() => {
-          setCreateOpen(false);
-          setError(null);
-        }}
+        onClose={closeCreateAmbiente}
         title="Nuevo ambiente"
-        description="Registre un ambiente en una sucursal de su entidad."
+        description={
+          sedeFiltrada
+            ? `Registre un ambiente en ${sedes.find((s) => s.id === sedeFilterId)?.nombre ?? "esta sucursal"}.`
+            : !entidadMultiplesSedes
+              ? `Registre un ambiente en ${sedes[0]?.nombre ?? "la sucursal principal"}.`
+              : "Registre un ambiente en una sucursal de su entidad."
+        }
         className="max-w-md"
       >
         <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">
           <AmbienteFormFields
             sedes={sedes}
             responsables={responsables}
-            defaultSedeId={sedeFilterId || undefined}
-            showSedeSelect={!soloUnaSede}
+            defaultSedeId={sedeFilterId || sedeIdSinSelector(sedes) || undefined}
+            showSedeSelect={entidadMultiplesSedes}
+            responsableId={createResponsableId}
+            onResponsableIdChange={setCreateResponsableId}
+            onRequestCreateResponsable={() => setCreateResponsableOpen(true)}
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button type="button" variant="outline" onClick={closeCreateAmbiente}>
               Cancelar
             </Button>
             <Button type="submit" disabled={pending}>
@@ -560,21 +618,35 @@ export function AdminAmbientesPanel({
         </form>
       </Dialog>
 
+      <CrearResponsableDialog
+        open={createOpen && createResponsableOpen}
+        onClose={() => setCreateResponsableOpen(false)}
+        onCreate={createResponsableDesdeAmbiente}
+        onCreated={(nuevo) => {
+          setCreateResponsableId(nuevo.id);
+          setCreateResponsableOpen(false);
+        }}
+      />
+
       <Dialog
         open={!!editAmbiente}
-        onClose={() => {
-          setEditAmbiente(null);
-          setError(null);
-        }}
+        onClose={closeEditAmbiente}
         title="Editar ambiente"
         className="max-w-md"
       >
         {editAmbiente && (
           <form onSubmit={(e) => void handleEdit(e)} className="space-y-4">
-            <AmbienteFormFields ambiente={editAmbiente} sedes={sedes} responsables={responsables} />
+            <AmbienteFormFields
+              ambiente={editAmbiente}
+              sedes={sedes}
+              responsables={responsables}
+              responsableId={editResponsableId}
+              onResponsableIdChange={setEditResponsableId}
+              onRequestCreateResponsable={() => setEditResponsableOpen(true)}
+            />
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditAmbiente(null)}>
+              <Button type="button" variant="outline" onClick={closeEditAmbiente}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={pending}>
@@ -584,6 +656,16 @@ export function AdminAmbientesPanel({
           </form>
         )}
       </Dialog>
+
+      <CrearResponsableDialog
+        open={Boolean(editAmbiente) && editResponsableOpen}
+        onClose={() => setEditResponsableOpen(false)}
+        onCreate={createResponsableDesdeAmbiente}
+        onCreated={(nuevo) => {
+          setEditResponsableId(nuevo.id);
+          setEditResponsableOpen(false);
+        }}
+      />
     </div>
   );
 }

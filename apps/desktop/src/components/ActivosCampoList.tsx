@@ -1,9 +1,26 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Ambiente, Entidad, EstadoRegistro, Sede } from "@inventario/types";
-import { Button, Select } from "@inventario/ui";
+import {
+  aniosAdquisicionDesdeActivos,
+  entidadMuestraSelectorSede,
+  pasoFiltroAnioAdquisicion,
+  pasoFiltroSerieComprobante,
+  seriesComprobanteDesdeActivos,
+  sedeIdSinSelector,
+} from "@inventario/types";
+import { Button, ComprobanteSerieFiltroInput, Select, useToast, mensajeEliminacionPreregistros, PreregistroGestionToolbar, type PreregistroGestionToolbarState } from "@inventario/ui";
 import { listAmbientes, listAmbientesPorEntidad, listSedes } from "../lib/ubicacion";
-import { PanelSearchInput, panelFilterRowClass, panelStickyToolbarClass, panelToolbarActionsClass } from "@inventario/ui/panel";
+import {
+  PanelSearchInput,
+  PanelToolbarExpandTrigger,
+  panelFilterRowClass,
+  panelInventarioPageClass,
+  panelInventarioToolbarClass,
+  panelToolbarActionsClass,
+  usePanelInventarioUnifiedScroll,
+} from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
+import { deleteActivosPreregistrados } from "../lib/activos";
 import type { InventarioExportMeta } from "../lib/inventario-export";
 import type { AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
 import { ActivosInventarioExcelView } from "./ActivosInventarioExcelView";
@@ -22,7 +39,7 @@ const FILTROS_ESTADO_AMBIENTE: { value: "" | EstadoRegistro; label: string }[] =
   { value: "DADO_DE_BAJA", label: "Dados de baja" },
 ];
 
-type ActivosListVariant = "entity" | "global" | "ambiente";
+type ActivosListVariant = "entity" | "global" | "ambiente" | "entity-inventario";
 
 interface ActivosCampoListProps {
   className?: string;
@@ -47,6 +64,7 @@ interface ActivosCampoListProps {
   onIrAmbiente?: (activo: ActivoConUbicacion) => void;
   onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   onActivoUpdated: (activo: ActivoConUbicacion) => void;
+  onActivoDeleted?: () => void;
   exportMeta?: InventarioExportMeta;
   reportesExport?: ReactNode;
 }
@@ -74,11 +92,25 @@ export function ActivosCampoList({
   onIrAmbiente,
   onAbrirAmbienteDestino,
   onActivoUpdated,
+  onActivoDeleted,
   exportMeta,
   reportesExport,
 }: ActivosCampoListProps) {
+  const { pushToast } = useToast();
+  const [activosLocal, setActivosLocal] = useState(activos);
+
+  useEffect(() => {
+    setActivosLocal(activos);
+  }, [activos]);
+
+  const quitarActivos = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    setActivosLocal((prev) => prev.filter((a) => !idSet.has(a.id)));
+  }, []);
+
   const isGlobal = variant === "global";
   const isAmbiente = variant === "ambiente";
+  const isEntityInventario = variant === "entity-inventario";
   const hideUbicacionFilters = isAmbiente;
   const [filter, setFilter] = useState("");
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
@@ -87,11 +119,34 @@ export function ActivosCampoList({
   const [filterEntidadId, setFilterEntidadId] = useState("");
   const [sedeId, setSedeId] = useState(fixedSedeId ?? "");
   const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? ambienteFilter?.id ?? "");
+  const [anioAdquisicion, setAnioAdquisicion] = useState("");
+  const [serieComprobanteFiltro, setSerieComprobanteFiltro] = useState("");
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [ambientes, setAmbientes] = useState<Ambiente[]>([]);
   const [selectedActivos, setSelectedActivos] = useState<ActivoConUbicacion[]>([]);
 
   const sedesEntidadId = isGlobal ? filterEntidadId : entidadId;
+  const mostrarSelectorSede = entidadMuestraSelectorSede(sedes);
+  const mostrarFiltrosAdquisicion = isEntityInventario || (isGlobal && Boolean(filterEntidadId));
+  const entidadFiltrosAdquisicionId = isEntityInventario ? entidadId : filterEntidadId;
+  const aniosAdquisicionDisponibles = useMemo(
+    () =>
+      aniosAdquisicionDesdeActivos(
+        activosLocal.filter(
+          (a) => !entidadFiltrosAdquisicionId || a.entidad_id === entidadFiltrosAdquisicionId,
+        ),
+      ),
+    [activosLocal, entidadFiltrosAdquisicionId],
+  );
+  const seriesComprobanteDisponibles = useMemo(
+    () =>
+      seriesComprobanteDesdeActivos(
+        activosLocal.filter(
+          (a) => !entidadFiltrosAdquisicionId || a.entidad_id === entidadFiltrosAdquisicionId,
+        ),
+      ),
+    [activosLocal, entidadFiltrosAdquisicionId],
+  );
 
   useEffect(() => {
     if (fixedSedeId) setSedeId(fixedSedeId);
@@ -111,7 +166,18 @@ export function ActivosCampoList({
       }
       return;
     }
-    void listSedes(sedesEntidadId).then(setSedes);
+    void listSedes(sedesEntidadId).then((data) => {
+      setSedes(data);
+      if (!fixedSedeId) {
+        const implicitId = sedeIdSinSelector(data);
+        setSedeId(implicitId ?? "");
+        if (implicitId) {
+          void listAmbientes(implicitId).then(setAmbientes);
+        } else if (!fixedAmbienteId) {
+          setAmbientes([]);
+        }
+      }
+    });
   }, [sedesEntidadId, isAmbiente, fixedSedeId, fixedAmbienteId]);
 
   useEffect(() => {
@@ -154,6 +220,14 @@ export function ActivosCampoList({
     }
     const data = await listSedes(value);
     setSedes(data);
+    if (!fixedSedeId) {
+      const implicitId = sedeIdSinSelector(data);
+      setSedeId(implicitId ?? "");
+      if (implicitId) {
+        const ambList = await listAmbientes(implicitId);
+        setAmbientes(ambList);
+      }
+    }
   }
 
   async function handleSedeFilterChange(value: string) {
@@ -170,26 +244,40 @@ export function ActivosCampoList({
 
   function limpiarFiltros() {
     if (isGlobal) setFilterEntidadId("");
-    if (!fixedSedeId) setSedeId("");
+    if (!fixedSedeId) {
+      const implicitId = sedeIdSinSelector(sedes);
+      setSedeId(implicitId ?? "");
+      if (implicitId) {
+        void listAmbientes(implicitId).then(setAmbientes);
+      } else {
+        setAmbientes([]);
+      }
+    }
     if (!fixedAmbienteId) setAmbienteId("");
     setEstadoRegistro(esAmbientePreregistro ? "PREREGISTRADO" : "");
     setFilter("");
-    setSedes([]);
-    setAmbientes([]);
+    setAnioAdquisicion("");
+    setSerieComprobanteFiltro("");
+    if (!isEntityInventario && !sedesEntidadId) {
+      setSedes([]);
+    }
     onClearAmbienteFilter?.();
   }
 
   const hasActiveFilters = Boolean(
     (isGlobal && filterEntidadId) ||
-      sedeId ||
+      (!isGlobal && !isAmbiente && !isEntityInventario && entidadId) ||
+      (mostrarSelectorSede && sedeId) ||
       ambienteId ||
       estadoRegistro ||
-      filter.trim(),
+      filter.trim() ||
+      anioAdquisicion ||
+      serieComprobanteFiltro.trim(),
   );
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    return activos.filter((a) => {
+    return activosLocal.filter((a) => {
       if (isGlobal && filterEntidadId && a.entidad_id !== filterEntidadId) return false;
       if (!isGlobal && !isAmbiente && entidadId && a.entidad_id !== entidadId) return false;
       const sedeFiltro = fixedSedeId ?? sedeId;
@@ -201,6 +289,12 @@ export function ActivosCampoList({
       } else if (isAmbiente && a.estado_registro === "PREREGISTRADO") {
         return false;
       } else if (estadoRegistro && a.estado_registro !== estadoRegistro) {
+        return false;
+      }
+      if (mostrarFiltrosAdquisicion && !pasoFiltroAnioAdquisicion(a.fecha_adquisicion, anioAdquisicion)) {
+        return false;
+      }
+      if (mostrarFiltrosAdquisicion && !pasoFiltroSerieComprobante(a, serieComprobanteFiltro)) {
         return false;
       }
       if (!q) return true;
@@ -221,7 +315,7 @@ export function ActivosCampoList({
       return haystack.includes(q);
     });
   }, [
-    activos,
+    activosLocal,
     sedeId,
     ambienteId,
     fixedSedeId,
@@ -233,6 +327,9 @@ export function ActivosCampoList({
     filterEntidadId,
     entidadId,
     esAmbientePreregistro,
+    mostrarFiltrosAdquisicion,
+    anioAdquisicion,
+    serieComprobanteFiltro,
   ]);
 
   const emptyMessage = isAmbiente
@@ -247,6 +344,12 @@ export function ActivosCampoList({
         : filtered.length === 0
           ? "No hay activos que coincidan con los filtros aplicados."
           : "No hay activos que coincidan con la búsqueda."
+      : isEntityInventario
+        ? activos.length === 0
+          ? "Aún no hay activos en esta entidad. Sincronice o registre bienes en un ambiente."
+          : filtered.length === 0
+            ? "No hay activos que coincidan con los filtros aplicados."
+            : "No hay activos que coincidan con la búsqueda."
       : !entidadId
         ? "Seleccione una entidad para ver el inventario de activos."
         : activos.length === 0
@@ -256,173 +359,319 @@ export function ActivosCampoList({
             : "No hay activos que coincidan con la búsqueda.";
 
   const useCompactGlobal = isGlobal && compactLayout;
+  const useCompactInventarioPanel = useCompactGlobal || isEntityInventario;
+  const usePanelScrollLayout = useCompactInventarioPanel || isAmbiente;
+  const entidadInventarioNombre =
+    entidades.find((e) => e.id === entidadId)?.nombre ?? "la entidad";
+  const { panelScrollRef, showToolbarTrigger, scrollToToolbar } = usePanelInventarioUnifiedScroll();
+  const [preregistroHeaderToolbar, setPreregistroHeaderToolbar] =
+    useState<PreregistroGestionToolbarState | null>(null);
 
-  return (
-    <div className={`${useCompactGlobal ? "flex min-h-0 min-w-0 flex-col gap-1.5" : "space-y-3"} ${className ?? ""}`}>
-      {useCompactGlobal ? (
-        <>
-          <div className={panelStickyToolbarClass}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="panel-toolbar-title min-w-0">
-                <h1 className="panel-toolbar-heading text-foreground">
-                  Inventario global
-                </h1>
-                <p className="panel-toolbar-subtitle">
-                  Consulta y gestión de activos en todas las entidades
-                </p>
-              </div>
-              <div className={panelToolbarActionsClass}>
-                {toolbarExtra}
-                {exportMeta && (
-                  <InventarioExportButtons activos={filtered} meta={exportMeta} />
-                )}
-                {onPrintBatch && selectedActivos.length > 0 && (
-                  <Button type="button" size="sm" className="h-8 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
-                    Imprimir lote ({selectedActivos.length})
-                  </Button>
-                )}
-                <span className="text-sm text-muted-foreground">
-                  {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
-                  {loading ? " · …" : ""}
-                </span>
-              </div>
-            </div>
+  async function eliminarPreregistradosActivos(list: ActivoConUbicacion[]) {
+    const byEntidad = new Map<string, string[]>();
+    for (const activo of list) {
+      const ids = byEntidad.get(activo.entidad_id) ?? [];
+      ids.push(activo.id);
+      byEntidad.set(activo.entidad_id, ids);
+    }
+    let eliminados = 0;
+    for (const [eid, ids] of byEntidad) {
+      const result = await deleteActivosPreregistrados(eid, ids);
+      if (result.error) {
+        pushToast(result.error, "error");
+        return { error: result.error };
+      }
+      eliminados += result.data?.eliminados ?? ids.length;
+    }
+    quitarActivos(list.map((a) => a.id));
+    pushToast(mensajeEliminacionPreregistros(eliminados), "success");
+    onActivoDeleted?.();
+    return {};
+  }
 
-            <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
-              <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
-                {FILTROS_ESTADO.map((f) => (
-                  <button
-                    key={f.value || "all"}
-                    type="button"
-                    role="tab"
-                    aria-selected={estadoRegistro === f.value}
-                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                      estadoRegistro === f.value
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    onClick={() => setEstadoRegistro(f.value)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+  const gestionPreregistrosAlcance = esAmbientePreregistro
+    ? "de este ambiente"
+    : estadoRegistro === "PREREGISTRADO"
+      ? "del filtro actual"
+      : isEntityInventario || (!isGlobal && entidadId)
+        ? "de la entidad"
+        : "del filtro actual";
 
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:justify-end">
-                <div className="min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm">
-                  <PanelSearchInput
-                    value={filter}
-                    onChange={setFilter}
-                    placeholder="Buscar código, nombre, entidad…"
-                  />
-                </div>
+  const gestionPreregistros = useMemo(
+    () => ({
+      alcanceLabel: gestionPreregistrosAlcance,
+      onDeleteActivos: eliminarPreregistradosActivos,
+      toolbarPlacement: "header" as const,
+      onToolbarStateChange: setPreregistroHeaderToolbar,
+    }),
+    [gestionPreregistrosAlcance],
+  );
 
-                <Select
-                  aria-label="Entidad"
-                  size="compact"
-                  value={filterEntidadId}
-                  onChange={(value) => void handleEntidadFilterChange(value)}
-                  options={[
-                    { value: "", label: "Entidad: todas" },
-                    ...entidades.map((e) => ({ value: e.id, label: e.nombre })),
-                  ]}
-                />
-
-                <Select
-                  aria-label="Sede"
-                  size="compact"
-                  value={sedeId}
-                  disabled={!filterEntidadId}
-                  onChange={(value) => void handleSedeFilterChange(value)}
-                  options={[
-                    { value: "", label: "Sede: todas" },
-                    ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
-                  ]}
-                />
-
-                <Select
-                  aria-label="Ambiente"
-                  size="compact"
-                  value={ambienteId}
-                  disabled={!sedeId}
-                  onChange={(value) => {
-                    setAmbienteId(value);
-                    onClearAmbienteFilter?.();
-                  }}
-                  options={[
-                    { value: "", label: "Ambiente: todos" },
-                    ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
-                  ]}
-                />
-
-                {hasActiveFilters && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 px-2 text-xs"
-                    onClick={limpiarFiltros}
-                  >
-                    Limpiar
-                  </Button>
-                )}
-              </div>
-            </div>
+  const ambienteToolbar = isAmbiente ? (
+    <div className={panelInventarioToolbarClass}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {exportMeta?.ambienteNombre ? (
+          <div className="panel-toolbar-title min-w-0">
+            <h1 className="panel-toolbar-heading text-foreground">{exportMeta.ambienteNombre}</h1>
           </div>
+        ) : null}
+        <div className={`${panelToolbarActionsClass} ${exportMeta?.ambienteNombre ? "" : "w-full justify-end"}`}>
+          {preregistroHeaderToolbar && (
+            <PreregistroGestionToolbar {...preregistroHeaderToolbar} />
+          )}
+          {reportesExport ??
+            (exportMeta && (
+              <InventarioExportButtons activos={filtered} meta={exportMeta} />
+            ))}
+          {onPrintBatch && selectedActivos.length > 0 && (
+            <Button type="button" size="sm" className="h-8 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
+              Imprimir lote ({selectedActivos.length})
+            </Button>
+          )}
+          <span className="text-sm text-muted-foreground">
+            {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
+            {loading ? " · …" : ""}
+          </span>
+          {toolbarExtra}
+        </div>
+      </div>
 
-          {statusBanner}
-        </>
-      ) : isAmbiente ? (
-        <>
-          <div className="flex flex-nowrap items-center justify-between gap-2 pb-0.5">
-            {!esAmbientePreregistro && (
-              <div
-                className="inline-flex min-w-0 shrink overflow-x-auto gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
-                role="tablist"
-                aria-label="Estado del activo"
+      <div
+        className={panelFilterRowClass}
+        role={esAmbientePreregistro ? undefined : "tablist"}
+        aria-label={esAmbientePreregistro ? undefined : "Estado del activo"}
+      >
+        {!esAmbientePreregistro && (
+          <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
+            {FILTROS_ESTADO_AMBIENTE.map((f) => (
+              <button
+                key={f.value || "all"}
+                type="button"
+                role="tab"
+                aria-selected={estadoRegistro === f.value}
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                  estadoRegistro === f.value
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setEstadoRegistro(f.value)}
               >
-                {FILTROS_ESTADO_AMBIENTE.map((f) => (
-                  <button
-                    key={f.value || "all"}
-                    type="button"
-                    role="tab"
-                    aria-selected={estadoRegistro === f.value}
-                    className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                      estadoRegistro === f.value
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    onClick={() => setEstadoRegistro(f.value)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className={`flex shrink-0 flex-nowrap items-center gap-2 ${esAmbientePreregistro ? "ml-auto w-full justify-between" : ""}`}>
-              {reportesExport ??
-                (exportMeta && (
-                  <InventarioExportButtons activos={filtered} meta={exportMeta} />
-                ))}
-              {onPrintBatch && selectedActivos.length > 0 && (
-                <Button type="button" size="sm" className="h-8 shrink-0 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
-                  Imprimir lote ({selectedActivos.length})
-                </Button>
-              )}
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
-                {loading ? " · …" : ""}
-              </span>
-              {toolbarExtra}
-            </div>
+                {f.label}
+              </button>
+            ))}
           </div>
+        )}
 
+        <div className="min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm">
           <PanelSearchInput
             value={filter}
             onChange={setFilter}
-            placeholder="Buscar por código, nombre, sede o ambiente…"
+            placeholder="Buscar por código, nombre, marca…"
           />
-        </>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div className={`${usePanelScrollLayout ? `${panelInventarioPageClass} flex min-h-0 flex-col gap-1` : "space-y-3"} ${className ?? ""}`}>
+      {usePanelScrollLayout && showToolbarTrigger && (
+        <PanelToolbarExpandTrigger onClick={scrollToToolbar} />
+      )}
+      {useCompactInventarioPanel ? (
+        <ActivosInventarioExcelView
+          className="min-h-0 flex-1"
+          layout="global-panel"
+          bodyScrollRef={panelScrollRef}
+          toolbar={
+            <>
+              <div className={panelInventarioToolbarClass}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="panel-toolbar-title min-w-0">
+                    <h1 className="panel-toolbar-heading text-foreground">
+                      {isEntityInventario ? "Inventario de la entidad" : "Inventario global"}
+                    </h1>
+                    <p className="panel-toolbar-subtitle">
+                      {isEntityInventario
+                        ? `Todos los bienes de ${entidadInventarioNombre} en todos los ambientes`
+                        : "Consulta y gestión de activos en todas las entidades"}
+                    </p>
+                  </div>
+                  <div className={panelToolbarActionsClass}>
+                    {preregistroHeaderToolbar && (
+            <PreregistroGestionToolbar {...preregistroHeaderToolbar} />
+          )}
+                    {toolbarExtra}
+                    {exportMeta && (
+                      <InventarioExportButtons activos={filtered} meta={exportMeta} />
+                    )}
+                    {onPrintBatch && selectedActivos.length > 0 && (
+                      <Button type="button" size="sm" className="h-8 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
+                        Imprimir lote ({selectedActivos.length})
+                      </Button>
+                    )}
+                    <span className="text-sm text-muted-foreground">
+                      {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
+                      {loading ? " · …" : ""}
+                    </span>
+                  </div>
+                </div>
+
+                <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
+                  <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
+                    {FILTROS_ESTADO.map((f) => (
+                      <button
+                        key={f.value || "all"}
+                        type="button"
+                        role="tab"
+                        aria-selected={estadoRegistro === f.value}
+                        className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                          estadoRegistro === f.value
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        onClick={() => setEstadoRegistro(f.value)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:justify-end">
+                    <div className="min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm">
+                      <PanelSearchInput
+                        value={filter}
+                        onChange={setFilter}
+                        placeholder={
+                          isEntityInventario
+                            ? "Buscar código, nombre, sucursal o ambiente…"
+                            : "Buscar código, nombre, entidad…"
+                        }
+                      />
+                    </div>
+
+                    {isGlobal && (
+                      <Select
+                        aria-label="Entidad"
+                        size="compact"
+                        value={filterEntidadId}
+                        onChange={(value) => void handleEntidadFilterChange(value)}
+                        options={[
+                          { value: "", label: "Entidad: todas" },
+                          ...entidades.map((e) => ({ value: e.id, label: e.nombre })),
+                        ]}
+                      />
+                    )}
+
+                    {mostrarSelectorSede && (
+                    <Select
+                      aria-label="Sede"
+                      size="compact"
+                      value={sedeId}
+                      disabled={isGlobal ? !filterEntidadId : !entidadId}
+                      onChange={(value) => void handleSedeFilterChange(value)}
+                      options={[
+                        { value: "", label: "Sede: todas" },
+                        ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+                      ]}
+                    />
+                    )}
+
+                    <Select
+                      aria-label="Ambiente"
+                      size="compact"
+                      value={ambienteId}
+                      disabled={(mostrarSelectorSede && !sedeId) || (isGlobal ? !filterEntidadId : !entidadId)}
+                      onChange={(value) => {
+                        setAmbienteId(value);
+                        onClearAmbienteFilter?.();
+                      }}
+                      options={[
+                        { value: "", label: "Ambiente: todos" },
+                        ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
+                      ]}
+                    />
+
+                    {mostrarFiltrosAdquisicion && (
+                      <Select
+                        aria-label="Año de adquisición"
+                        size="compact"
+                        value={anioAdquisicion}
+                        onChange={setAnioAdquisicion}
+                        options={[
+                          { value: "", label: "Año: todos" },
+                          ...aniosAdquisicionDisponibles.map((y) => ({
+                            value: String(y),
+                            label: String(y),
+                          })),
+                        ]}
+                      />
+                    )}
+
+                    {mostrarFiltrosAdquisicion && (
+                      <ComprobanteSerieFiltroInput
+                        value={serieComprobanteFiltro}
+                        onChange={setSerieComprobanteFiltro}
+                        series={seriesComprobanteDisponibles}
+                      />
+                    )}
+
+                    {hasActiveFilters && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        onClick={limpiarFiltros}
+                      >
+                        Limpiar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {statusBanner}
+            </>
+          }
+          activos={filtered}
+          entidadId={entidadId}
+          online={online}
+          emptyMessage={emptyMessage}
+          mostrarPosibleAmbiente={esAmbientePreregistro}
+          onPrintLabel={onPrintLabel}
+          onActivoUpdated={onActivoUpdated}
+          onActivoDeleted={onActivoDeleted}
+          onPrintBatch={onPrintBatch}
+          onEditActivo={onEditActivo}
+          onIrAmbiente={isGlobal || isEntityInventario ? onIrAmbiente : undefined}
+          onAbrirAmbienteDestino={onAbrirAmbienteDestino}
+          onSelectionChange={setSelectedActivos}
+          mostrarUbicacion={isEntityInventario}
+          ubicacionMultiplesSedes={isEntityInventario && mostrarSelectorSede}
+          gestionPreregistros={gestionPreregistros}
+          onActivoEliminado={(id) => quitarActivos([id])}
+        />
+      ) : isAmbiente ? (
+        <ActivosInventarioExcelView
+          className="min-h-0 flex-1"
+          layout="global-panel"
+          bodyScrollRef={panelScrollRef}
+          toolbar={ambienteToolbar}
+          activos={filtered}
+          entidadId={entidadId}
+          online={online}
+          emptyMessage={emptyMessage}
+          mostrarPosibleAmbiente={esAmbientePreregistro}
+          onPrintLabel={onPrintLabel}
+          onActivoUpdated={onActivoUpdated}
+          onActivoDeleted={onActivoDeleted}
+          onPrintBatch={onPrintBatch}
+          onEditActivo={onEditActivo}
+          onAbrirAmbienteDestino={onAbrirAmbienteDestino}
+          onSelectionChange={setSelectedActivos}
+          gestionPreregistros={gestionPreregistros}
+          onActivoEliminado={(id) => quitarActivos([id])}
+        />
       ) : (
         <>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -471,6 +720,7 @@ export function ActivosCampoList({
               ]}
             />
           </div>
+          {mostrarSelectorSede && (
           <div className="space-y-1">
             <label htmlFor="filtro_sede" className="text-xs font-medium text-muted-foreground">
               Sede
@@ -486,6 +736,7 @@ export function ActivosCampoList({
               ]}
             />
           </div>
+          )}
           <div className="space-y-1">
             <label htmlFor="filtro_ambiente" className="text-xs font-medium text-muted-foreground">
               Ambiente
@@ -493,7 +744,7 @@ export function ActivosCampoList({
             <Select
               id="filtro_ambiente"
               value={ambienteId}
-              disabled={!sedeId}
+              disabled={mostrarSelectorSede ? !sedeId : !sedesEntidadId}
               onChange={(value) => {
                 setAmbienteId(value);
                 onClearAmbienteFilter?.();
@@ -524,6 +775,7 @@ export function ActivosCampoList({
         </>
       )}
 
+      {!usePanelScrollLayout && (
       <ActivosInventarioExcelView
         activos={filtered}
         entidadId={entidadId}
@@ -532,12 +784,16 @@ export function ActivosCampoList({
         mostrarPosibleAmbiente={esAmbientePreregistro}
         onPrintLabel={onPrintLabel}
         onActivoUpdated={onActivoUpdated}
+        onActivoDeleted={onActivoDeleted}
         onPrintBatch={onPrintBatch}
         onEditActivo={onEditActivo}
         onIrAmbiente={isGlobal ? onIrAmbiente : undefined}
         onAbrirAmbienteDestino={onAbrirAmbienteDestino}
         onSelectionChange={setSelectedActivos}
+        gestionPreregistros={gestionPreregistros}
+        onActivoEliminado={(id) => quitarActivos([id])}
       />
+      )}
     </div>
   );
 }

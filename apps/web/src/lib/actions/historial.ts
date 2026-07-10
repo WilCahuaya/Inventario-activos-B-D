@@ -1,16 +1,45 @@
 "use server";
 
-import type { HistorialCambio } from "@inventario/types";
+import {
+  collectHistorialLookupIds,
+  type HistorialActivoItem,
+  type HistorialLookupMaps,
+} from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth/profile";
 
-export interface HistorialConUsuario extends HistorialCambio {
-  usuario_nombre?: string;
+export interface HistorialActivoResult {
+  items: HistorialActivoItem[];
+  lookups: HistorialLookupMaps;
 }
 
-export async function listHistorialActivo(activoId: string): Promise<HistorialConUsuario[]> {
+async function buildHistorialLookups(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  items: HistorialActivoItem[],
+): Promise<HistorialLookupMaps> {
+  const { sedeIds, ambienteIds } = collectHistorialLookupIds(items);
+  const lookups: HistorialLookupMaps = { sedes: {}, ambientes: {} };
+
+  if (sedeIds.length > 0) {
+    const { data } = await supabase.from("sedes").select("id, nombre").in("id", sedeIds);
+    for (const row of data ?? []) {
+      lookups.sedes[row.id] = row.nombre;
+    }
+  }
+
+  if (ambienteIds.length > 0) {
+    const { data } = await supabase.from("ambientes").select("id, nombre").in("id", ambienteIds);
+    for (const row of data ?? []) {
+      lookups.ambientes[row.id] = row.nombre;
+    }
+  }
+
+  return lookups;
+}
+
+export async function listHistorialActivo(activoId: string): Promise<HistorialActivoResult> {
   const profile = await getProfile();
-  if (!profile) return [];
+  if (!profile) return { items: [], lookups: { sedes: {}, ambientes: {} } };
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -21,8 +50,8 @@ export async function listHistorialActivo(activoId: string): Promise<HistorialCo
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((row) => {
-    const { profiles, ...rest } = row as HistorialCambio & {
+  const items: HistorialActivoItem[] = (data ?? []).map((row) => {
+    const { profiles, ...rest } = row as HistorialActivoItem & {
       profiles: { nombre: string } | null;
     };
     return {
@@ -30,4 +59,7 @@ export async function listHistorialActivo(activoId: string): Promise<HistorialCo
       usuario_nombre: profiles?.nombre,
     };
   });
+
+  const lookups = await buildHistorialLookups(supabase, items);
+  return { items, lookups };
 }

@@ -31,7 +31,7 @@ function gruposDesdeMap(map: Map<string, number>, limit?: number): ReporteResume
 export function buildReporteResumenPreview(
   activos: ActivoReporte[],
   reporteId: ReporteId,
-  fechaCorte: string,
+  fechaCorte?: string,
 ): ReporteResumenPreview {
   const porEstado = new Map<string, number>();
   const porUbicacion = new Map<string, number>();
@@ -53,8 +53,8 @@ export function buildReporteResumenPreview(
     porUbicacion: gruposDesdeMap(porUbicacion, 8),
   };
 
-  if (esReporteInventarioValorizado(reporteId)) {
-    const totales = buildValorizacionTotales(activos, new Date(fechaCorte));
+  if (esReporteInventarioValorizado(reporteId) && fechaCorte) {
+    const totales = buildValorizacionTotales(activos, new Date(`${fechaCorte}T12:00:00`));
     resumen.valorizacion = {
       valorAdquisicion: formatMonedaPE(totales.valorAdquisicion),
       depreciacionAcumulada: formatMonedaPE(totales.depreciacionAcumulada),

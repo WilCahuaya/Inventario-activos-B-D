@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import {
   MAX_ACTIVOS_SIMILARES_CANTIDAD,
+  applyCuentaContableToPayloadIfProvided,
+  resolveCuentaContableActivo,
+  resolveObservacionAdmin,
+  mergeObservacionActivo,
+  splitObservacionActivo,
   type ActivosSimilaresPreview,
   type CreateActivosSimilaresResult,
   type EjemplaresSimilaresResumen,
@@ -11,6 +16,8 @@ import {
   type UpdateActivosSimilaresResult,
   type PreviewDeleteActivosPorCodigosResult,
   type DeleteActivosPorCodigosResult,
+  type DeleteActivosPreregistradosResult,
+  MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE,
   MAX_ELIMINAR_ACTIVOS_POR_CODIGOS,
   parseCodigosBarrasInput,
 } from "@inventario/types";
@@ -47,6 +54,10 @@ export interface CreateActivoInput {
   /** Solo contador: REGISTRADO = alta directa; omitir o PREREGISTRADO = preregistrar */
   estado_registro?: EstadoRegistro;
   comprobante_serie?: string;
+  cuenta_contable_codigo?: string | null;
+  cuenta_contable_nombre?: string | null;
+  /** Admin en bien REGISTRADO: observación del administrador (reemplaza la anterior). */
+  observacion_admin?: string;
 }
 
 export type UpdateActivoInput = Omit<CreateActivoInput, "entidad_id">;
@@ -114,7 +125,7 @@ export async function createActivo(input: CreateActivoInput) {
     responsable = ambiente?.responsable?.trim() || null;
   }
 
-  const payload: Record<string, unknown> = {
+  let payload: Record<string, unknown> = {
     entidad_id: esAdminEntidad ? profile.entidad_id! : input.entidad_id,
     codigo_catalogo: input.codigo_catalogo.trim(),
     nombre: input.nombre.trim(),
@@ -162,6 +173,10 @@ export async function createActivo(input: CreateActivoInput) {
   const comprobanteSerie = input.comprobante_serie?.trim();
   if (comprobanteSerie) payload.comprobante_serie = comprobanteSerie;
 
+  if (!esAdminEntidad) {
+    payload = applyCuentaContableToPayloadIfProvided(payload, input);
+  }
+
   if (!payload.codigo_catalogo || !payload.nombre) {
     return { error: "Código catálogo y nombre son obligatorios." };
   }
@@ -206,7 +221,7 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
 
   const { data: existing, error: fetchError } = await supabase
     .from("activos")
-    .select("entidad_id, ambiente_id, posible_ambiente_id, estado_registro")
+    .select("entidad_id, ambiente_id, posible_ambiente_id, estado_registro, estado_bien, observacion")
     .eq("id", activoId)
     .maybeSingle();
 
@@ -297,10 +312,22 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         return { error: "El ambiente no pertenece a la sede seleccionada." };
       }
 
+      const estadoAnterior = existing.estado_bien as EstadoBien;
+      const estadoNuevo = input.estado_bien ?? estadoAnterior;
+      const { contador, admin } = splitObservacionActivo(existing.observacion as string | null);
+      const adminActualizado = resolveObservacionAdmin(
+        input.observacion_admin ?? admin,
+        estadoAnterior,
+        estadoNuevo,
+      );
+      const observacion = mergeObservacionActivo(contador, adminActualizado);
+
       payload = {
         sede_id: input.sede_id,
         ambiente_id: ambienteId,
         responsable,
+        estado_bien: estadoNuevo,
+        observacion,
         updated_by: profile.id,
       };
     }
@@ -335,6 +362,10 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         posible_ambiente_id: input.posible_ambiente_id ?? null,
         updated_by: profile.id,
       };
+      payload = applyCuentaContableToPayloadIfProvided(payload, {
+        ...input,
+        categoria: input.categoria ?? "ACTIVO",
+      });
     } else {
       payload = {
         codigo_catalogo: input.codigo_catalogo.trim(),
@@ -364,6 +395,11 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         comprobante_serie: input.comprobante_serie?.trim() || null,
         updated_by: profile.id,
       };
+
+      payload = applyCuentaContableToPayloadIfProvided(payload, {
+        ...input,
+        categoria: input.categoria ?? "ACTIVO",
+      });
 
       const codigo = payload.codigo_catalogo as string;
       const nombre = payload.nombre as string;
@@ -498,6 +534,10 @@ export async function darDeBajaActivo(activoId: string, motivo: string) {
 
   if (existing.estado_registro === "DADO_DE_BAJA") {
     return { error: "El activo ya está inactivo." };
+  }
+
+  if (existing.estado_registro === "PREREGISTRADO") {
+    return { error: "Un bien preregistrado no puede darse de baja. Elimínelo si fue un error." };
   }
 
   const { error } = await supabase
@@ -776,14 +816,16 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
     const cat = Array.isArray(catalogo) ? catalogo[0] : catalogo;
     const { entidades: _e, sedes: _s, ambientes: _a, posible_ambiente: _p, catalogo_nacional: _c, ...activo } =
       row;
+    const activoBase = activo as unknown as Activo;
+    const cuenta = resolveCuentaContableActivo(activoBase, cat);
     return {
-      ...(activo as unknown as Activo),
+      ...activoBase,
       entidad_nombre: entidades?.nombre,
       sede_nombre: sedes?.nombre,
       ambiente_nombre: ambientes?.nombre,
       posible_ambiente_nombre: posibleAmbiente?.nombre,
-      cuenta_codigo: cat?.cuenta_codigo ?? null,
-      contabilidad: cat?.contabilidad ?? null,
+      cuenta_codigo: cuenta.cuenta_codigo,
+      contabilidad: cuenta.contabilidad,
       catalogo_grupo: cat?.grupo?.trim() || null,
       catalogo_clase: cat?.clase?.trim() || null,
     };
@@ -1022,4 +1064,109 @@ export async function deleteActivosPorCodigos(entidadId: string, codigosText: st
       comprobante_paths: result.comprobante_paths ?? [],
     } satisfies DeleteActivosPorCodigosResult,
   };
+}
+
+export async function deleteActivosPreregistrados(entidadId: string, activoIds: string[]) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
+    return { error: "No autorizado." };
+  }
+  if (!entidadId) return { error: "Entidad no válida." };
+
+  const uniqueIds = [...new Set(activoIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) return { error: "Seleccione al menos un preregistro." };
+
+  if (profile.rol === "ADMIN_ENTIDAD" && profile.entidad_id !== entidadId) {
+    return { error: "No autorizado." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: activoRows, error: fetchError } = await supabase
+    .from("activos")
+    .select("id, ambiente_id")
+    .eq("entidad_id", entidadId)
+    .in("id", uniqueIds);
+
+  if (fetchError) return { error: fetchError.message };
+
+  const ambienteIds = new Set<string>();
+  for (const row of activoRows ?? []) {
+    if (row.ambiente_id) ambienteIds.add(row.ambiente_id as string);
+  }
+
+  let eliminados = 0;
+  const fotoPaths: string[] = [];
+  const comprobantePaths: string[] = [];
+  const deletedIds: string[] = [];
+
+  for (let i = 0; i < uniqueIds.length; i += MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE) {
+    const chunk = uniqueIds.slice(i, i + MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE);
+    const { data, error } = await supabase.rpc("delete_activos_preregistrados", {
+      p_entidad_id: entidadId,
+      p_activo_ids: chunk,
+    });
+    if (error) return { error: error.message };
+
+    const result = data as {
+      eliminados?: number;
+      activo_ids?: string[];
+      foto_paths?: string[];
+      comprobante_paths?: string[];
+    };
+
+    eliminados += result.eliminados ?? 0;
+    deletedIds.push(...(result.activo_ids ?? []));
+    for (const path of result.foto_paths ?? []) {
+      if (path && !fotoPaths.includes(path)) fotoPaths.push(path);
+    }
+    for (const path of result.comprobante_paths ?? []) {
+      if (path && !comprobantePaths.includes(path)) comprobantePaths.push(path);
+    }
+  }
+
+  try {
+    await removeActivoStoragePaths(fotoPaths, comprobantePaths);
+  } catch {
+    // La eliminación en BD ya se aplicó.
+  }
+
+  revalidatePath("/contador/inventario");
+  revalidatePath("/contador/entidades");
+  revalidatePath("/admin/inventario");
+  revalidatePath("/admin/activos");
+  for (const ambienteId of ambienteIds) {
+    revalidateActivoPaths(entidadId, ambienteId);
+  }
+  if (ambienteIds.size === 0) {
+    revalidateActivoPaths(entidadId, null);
+  }
+
+  return {
+    data: {
+      eliminados,
+      activo_ids: deletedIds,
+      foto_paths: fotoPaths,
+      comprobante_paths: comprobantePaths,
+    } satisfies DeleteActivosPreregistradosResult,
+  };
+}
+
+export async function deleteActivoPreregistrado(activoId: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+
+  const supabase = await createClient();
+  const { data: existing, error: fetchError } = await supabase
+    .from("activos")
+    .select("entidad_id")
+    .eq("id", activoId)
+    .maybeSingle();
+
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Activo no encontrado." };
+  }
+
+  return deleteActivosPreregistrados(existing.entidad_id, [activoId]);
 }

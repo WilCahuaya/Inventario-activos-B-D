@@ -235,6 +235,9 @@ export interface Activo {
   foto_path: string | null;
   comprobante_path: string | null;
   comprobante_serie: string | null;
+  /** Snapshot por bien; si es null, se usa el catálogo nacional. */
+  cuenta_contable_codigo: string | null;
+  cuenta_contable_nombre: string | null;
   motivo_baja: string | null;
   created_by: string;
   updated_by: string | null;
@@ -316,6 +319,19 @@ export interface DeleteActivosPorCodigosResult {
   comprobante_paths: string[];
 }
 
+export const MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE = 500;
+
+export function esActivoPreregistrado(activo: { estado_registro: string }): boolean {
+  return activo.estado_registro === "PREREGISTRADO";
+}
+
+export interface DeleteActivosPreregistradosResult {
+  eliminados: number;
+  activo_ids: string[];
+  foto_paths: string[];
+  comprobante_paths: string[];
+}
+
 /** Parsea códigos separados por coma, punto y coma o salto de línea (sin duplicados). */
 export function parseCodigosBarrasInput(text: string): string[] {
   const seen = new Set<string>();
@@ -387,8 +403,39 @@ export function parseFechaDDMMYYYY(text: string): string | null {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-/** Formatea dígitos al escribir: 06062026 → 06/06/2026 */
+/** Formatea dígitos al escribir: 06062026 → 06/06/2026. Con barras, edita día/mes/año por segmento. */
 export function formatFechaInputDDMMYYYY(value: string): string {
+  if (value.includes("/")) {
+    const parts = value.split("/");
+    const day = (parts[0] ?? "").replace(/\D/g, "").slice(0, 2);
+    let month = "";
+    let year = "";
+
+    if (parts.length >= 3) {
+      month = (parts[1] ?? "").replace(/\D/g, "").slice(0, 2);
+      year = (parts[2] ?? "").replace(/\D/g, "").slice(0, 4);
+    } else if (parts.length === 2) {
+      const rest = (parts[1] ?? "").replace(/\D/g, "");
+      if (rest.length > 2) {
+        month = rest.slice(0, 2);
+        year = rest.slice(2, 6);
+      } else {
+        month = rest.slice(0, 2);
+      }
+    }
+
+    let out = day;
+    if (parts.length > 1 || value.includes("/")) {
+      out += `/${month}`;
+      if (parts.length > 2) {
+        out += `/${year}`;
+      } else if (year) {
+        out += `/${year}`;
+      }
+    }
+    return out;
+  }
+
   const digits = value.replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
@@ -418,6 +465,61 @@ const MESES_CORTO_ES = [
   "dic",
 ] as const;
 
+const MESES_LARGO_ES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+] as const;
+
+function partesFechaReporte(iso: string): { day: number; month: number; year: number } | null {
+  const isoMatch = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return {
+      year: Number(isoMatch[1]),
+      month: Number(isoMatch[2]),
+      day: Number(isoMatch[3]),
+    };
+  }
+  const dmy = iso.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (dmy) {
+    return {
+      day: Number(dmy[1]),
+      month: Number(dmy[2]),
+      year: Number(dmy[3]),
+    };
+  }
+  return null;
+}
+
+/** ISO (YYYY-MM-DD) o DD/MM/AAAA → «10 de julio de 2026». */
+export function formatFechaISOToLargoES(iso: string | null | undefined): string {
+  if (!iso?.trim()) return "";
+  const partes = partesFechaReporte(iso.trim());
+  if (!partes) return iso;
+  const month = MESES_LARGO_ES[partes.month - 1];
+  if (!month) return formatFechaISOToDDMMYYYY(iso);
+  return `${partes.day} de ${month} de ${partes.year}`;
+}
+
+export function labelFechaEmision(fecha: Date): string {
+  const largo = formatFechaISOToLargoES(fecha.toISOString().slice(0, 10));
+  return largo ? `Fecha de emisión: ${largo}` : "";
+}
+
+export function labelFechaCorte(fechaCorteIso: string): string {
+  const largo = formatFechaISOToLargoES(fechaCorteIso);
+  return largo ? `Fecha de corte: ${largo}` : "";
+}
+
 /** ISO (YYYY-MM-DD) → «08 oct 2026» para listados. */
 export function formatFechaISOToCortoES(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -435,7 +537,15 @@ export function categoriaBienLetra(categoria: CategoriaBien): "A" | "C" {
   return categoria === "CUENTA_ORDEN" ? "C" : "A";
 }
 
-/** Extrae el número de un texto de depreciación (ej. «10%» → «10»). */
+export {
+  entidadMuestraSelectorSede,
+  entidadTieneMultiplesSedes,
+  findSedePrincipal,
+  sedeIdSinSelector,
+  sedeImplicitaEntidad,
+  type SedeRef,
+} from "./sede-entidad";
+
 export function depreciacionPorcentajeNumero(depreciacion: string | null | undefined): string {
   if (!depreciacion?.trim()) return "—";
   const m = depreciacion.trim().match(/(\d+(?:[.,]\d+)?)/);
@@ -460,7 +570,12 @@ export function formatDepreciacionResumida(
 
 export type { CodigoBarrasPayload } from "./codigo-barras-types";
 
-import { CORRELATIVO_DIGITS, formatCodigoBarras, normalizeCodigoBarrasDisplay } from "./codigo-barras";
+import {
+  CODIGO_BARRAS_CATALOGO_DIGITS,
+  CORRELATIVO_DIGITS,
+  formatCodigoBarras,
+  normalizeCodigoBarrasDisplay,
+} from "./codigo-barras";
 
 export {
   CODIGO_BARRAS_CATALOGO_DIGITS,
@@ -552,6 +667,110 @@ export function normalizeCuentaContableFields(
   return {
     cuenta_codigo: codigo,
     contabilidad: normalizeNombreCuentaContable(codigo, rawNombre || null),
+  };
+}
+
+export interface ActivoCuentaContableSource {
+  cuenta_contable_codigo?: string | null;
+  cuenta_contable_nombre?: string | null;
+}
+
+export interface CatalogoCuentaContableSource {
+  cuenta_codigo?: string | null;
+  contabilidad?: string | null;
+}
+
+export function activoTieneCuentaContablePropia(activo: ActivoCuentaContableSource): boolean {
+  return Boolean(activo.cuenta_contable_codigo?.trim() || activo.cuenta_contable_nombre?.trim());
+}
+
+/** Cuenta efectiva: override del activo o respaldo del catálogo. */
+export function resolveCuentaContableActivo(
+  activo: ActivoCuentaContableSource,
+  catalogo?: CatalogoCuentaContableSource | null,
+): { cuenta_codigo: string | null; contabilidad: string | null } {
+  if (activoTieneCuentaContablePropia(activo)) {
+    return normalizeCuentaContableFields(
+      activo.cuenta_contable_codigo,
+      activo.cuenta_contable_nombre,
+    );
+  }
+  return {
+    cuenta_codigo: catalogo?.cuenta_codigo?.trim() || null,
+    contabilidad: catalogo?.contabilidad?.trim() || null,
+  };
+}
+
+/** Normaliza y persiste cuenta contable en columnas del activo (texto, sin FK). */
+export function buildActivoCuentaContablePayload(
+  cuentaCodigo?: string | null,
+  cuentaNombre?: string | null,
+  categoria: CategoriaBien = "ACTIVO",
+): { cuenta_contable_codigo: string | null; cuenta_contable_nombre: string | null } {
+  if (categoria === "CUENTA_ORDEN") {
+    const normalized = normalizeCuentaContableFields(
+      cuentaCodigo?.trim() || "2524",
+      cuentaNombre,
+    );
+    return {
+      cuenta_contable_codigo: normalized.cuenta_codigo,
+      cuenta_contable_nombre: normalized.contabilidad,
+    };
+  }
+  if (!cuentaCodigo?.trim() && !cuentaNombre?.trim()) {
+    return { cuenta_contable_codigo: null, cuenta_contable_nombre: null };
+  }
+  const normalized = normalizeCuentaContableFields(cuentaCodigo, cuentaNombre);
+  return {
+    cuenta_contable_codigo: normalized.cuenta_codigo,
+    cuenta_contable_nombre: normalized.contabilidad,
+  };
+}
+
+/** Solo persistir cuenta en el activo si el usuario la definió distinta a la referencia (p. ej. catálogo). */
+export function debePersistirCuentaContableEnActivo(input: {
+  esEdicion: boolean;
+  activoTienePropia: boolean;
+  cuentaCodigo: string;
+  cuentaNombre: string;
+  referenciaCodigo: string;
+  referenciaNombre: string;
+}): boolean {
+  const codigo = input.cuentaCodigo.trim();
+  const nombre = input.cuentaNombre.trim();
+  const refCodigo = input.referenciaCodigo.trim();
+  const refNombre = input.referenciaNombre.trim();
+
+  if (input.esEdicion && input.activoTienePropia) return true;
+
+  return codigo !== refCodigo || nombre !== refNombre;
+}
+
+export function applyCuentaContableToPayloadIfProvided<
+  T extends Record<string, unknown>,
+>(
+  payload: T,
+  input: {
+    cuenta_contable_codigo?: string | null;
+    cuenta_contable_nombre?: string | null;
+    categoria?: CategoriaBien;
+  },
+): T {
+  if (
+    input.cuenta_contable_codigo === undefined &&
+    input.cuenta_contable_nombre === undefined
+  ) {
+    return payload;
+  }
+  const cuenta = buildActivoCuentaContablePayload(
+    input.cuenta_contable_codigo,
+    input.cuenta_contable_nombre,
+    input.categoria ?? "ACTIVO",
+  );
+  return {
+    ...payload,
+    cuenta_contable_codigo: cuenta.cuenta_contable_codigo,
+    cuenta_contable_nombre: cuenta.cuenta_contable_nombre,
   };
 }
 
@@ -729,9 +948,70 @@ export function buildNombreConsolidado(
   return `${base} ${partes.join(", ")}`;
 }
 
-/** Serie de comprobante: mayúsculas; solo letras y números (sin guiones ni espacios). */
+/** Serie de comprobante: mayúsculas; letras, números, guión, barra y espacios (ej. F/E001 - 0007). */
 export function formatComprobanteSerieInput(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return value.toUpperCase().replace(/[^A-Z0-9/ -]/g, "");
+}
+
+export function normalizarSerieComprobante(value: string | null | undefined): string {
+  if (!value?.trim()) return "";
+  return formatComprobanteSerieInput(value).replace(/\s+/g, " ").trim();
+}
+
+export function activoTieneComprobante(activo: {
+  comprobante_path?: string | null;
+  comprobante_serie?: string | null;
+}): boolean {
+  return Boolean(
+    activo.comprobante_path?.trim() || activo.comprobante_serie?.trim(),
+  );
+}
+
+export function seriesComprobanteDesdeActivos(
+  activos: { comprobante_serie?: string | null }[],
+): string[] {
+  const series = new Set<string>();
+  for (const a of activos) {
+    const s = a.comprobante_serie?.trim();
+    if (s) series.add(normalizarSerieComprobante(s));
+  }
+  return [...series].sort((a, b) => a.localeCompare(b));
+}
+
+export function anioAdquisicionActivo(fecha_adquisicion: string | null | undefined): number | null {
+  if (!fecha_adquisicion?.trim()) return null;
+  const y = Number(fecha_adquisicion.slice(0, 4));
+  return Number.isFinite(y) ? y : null;
+}
+
+export function aniosAdquisicionDesdeActivos(
+  activos: { fecha_adquisicion: string | null }[],
+): number[] {
+  const years = new Set<number>();
+  for (const a of activos) {
+    const y = anioAdquisicionActivo(a.fecha_adquisicion);
+    if (y != null) years.add(y);
+  }
+  return [...years].sort((a, b) => b - a);
+}
+
+export function pasoFiltroAnioAdquisicion(
+  fecha_adquisicion: string | null | undefined,
+  anioFiltro: string,
+): boolean {
+  if (!anioFiltro) return true;
+  return anioAdquisicionActivo(fecha_adquisicion) === Number(anioFiltro);
+}
+
+export function pasoFiltroSerieComprobante(
+  activo: { comprobante_serie?: string | null },
+  filtroSerie: string,
+): boolean {
+  const query = normalizarSerieComprobante(filtroSerie);
+  if (!query) return true;
+  const serie = normalizarSerieComprobante(activo.comprobante_serie);
+  if (!serie) return false;
+  return serie.includes(query);
 }
 
 export function formatMedidas(
@@ -1028,6 +1308,55 @@ export function buildCreateCatalogoCuentaOrdenPayload(
   };
 }
 
+export function normalizeCodigoCatalogoNacional(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length >= CODIGO_BARRAS_CATALOGO_DIGITS) {
+    return digits.slice(0, CODIGO_BARRAS_CATALOGO_DIGITS);
+  }
+  return digits.padStart(CODIGO_BARRAS_CATALOGO_DIGITS, "0");
+}
+
+export function validarCreateCatalogoNacionalExtensionInput(
+  input: CreateCatalogoNacionalInput,
+): string | null {
+  const codigo = normalizeCodigoCatalogoNacional(input.codigo.trim());
+  if (!/^\d{8}$/.test(codigo)) {
+    return "El código debe tener 8 dígitos (catálogo nacional SBN).";
+  }
+  if (CATALOGO_PROPIO_CODIGO_RE.test(input.codigo.trim())) {
+    return "Use el catálogo propio para códigos BD…";
+  }
+  if (!normalizeCatalogoDenominacion(input.denominacion)) {
+    return "La denominación es obligatoria.";
+  }
+  if (!input.grupo?.trim()) {
+    return "Seleccione un grupo del catálogo.";
+  }
+  if (!input.clase?.trim()) {
+    return "Seleccione una clase del catálogo.";
+  }
+  return validarCuentaContableParaCatalogo(input.cuenta_codigo, input.contabilidad);
+}
+
+export function buildCreateCatalogoNacionalExtensionPayload(
+  input: CreateCatalogoNacionalInput,
+): Omit<CatalogoNacional, "created_at"> {
+  const cuenta = normalizeCuentaContableFields(input.cuenta_codigo, input.contabilidad);
+
+  return {
+    codigo: normalizeCodigoCatalogoNacional(input.codigo),
+    denominacion: normalizeCatalogoDenominacion(input.denominacion),
+    grupo: input.grupo!.trim(),
+    clase: input.clase!.trim(),
+    cuenta_codigo: cuenta.cuenta_codigo,
+    contabilidad: cuenta.contabilidad,
+    depreciacion: input.depreciacion?.trim() || null,
+    resolucion: input.resolucion?.trim() || null,
+    estado: "ACTIVO",
+    origen: "NACIONAL",
+  };
+}
+
 export interface UpdateCatalogoPropioInput {
   denominacion: string;
   grupo: string;
@@ -1232,6 +1561,7 @@ export {
   emptyImportActivoFila,
   importErrorFilaFromItem,
   mapImportHeaders,
+  normalizeImportDepreciacionRaw,
   normalizeImportKey,
   validateImportActivoFila,
   type ImportActivoCatalogoContabilidadUpdate,
@@ -1293,3 +1623,33 @@ export {
   type LabelPrintField,
   type LabelPrintWarning,
 } from "./label-text";
+
+export {
+  OBSERVACION_ADMIN_SEPARATOR,
+  resolveObservacionAdmin,
+  mergeObservacionActivo,
+  splitObservacionActivo,
+  type ObservacionActivoPartes,
+} from "./observacion-activo";
+
+export {
+  buildHistorialEventos,
+  collectHistorialLookupIds,
+  formatHistorialValor,
+  groupHistorialItems,
+  labelHistorialCampo,
+  type HistorialActivoCambio,
+  type HistorialActivoEvento,
+  type HistorialActivoEventoTipo,
+  type HistorialActivoItem,
+  type HistorialLookupMaps,
+} from "./historial-activo";
+
+export {
+  buildClasificacionResumen,
+  buildValorizacionTotales,
+  cuentaGrupoActivoValorizacion,
+  type ActivoValorizacionFuente,
+  type ClasificacionResumen,
+  type ValorizacionTotales,
+} from "./clasificacion-resumen";

@@ -7,12 +7,14 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  ToastProvider,
 } from "@inventario/ui";
 import { ThemeToggle } from "@inventario/ui/theme-toggle";
 import { buildAmbienteContextBreadcrumbs } from "./lib/ambiente-context-breadcrumbs";
 import { ActivoFormDesktop } from "./components/ActivoFormDesktop";
 import { ActivoEditWithScopeDesktop } from "./components/ActivoEditWithScopeDesktop";
 import { ActivosAmbienteView } from "./components/ActivosAmbienteView";
+import { DesktopDashboard } from "./components/DesktopDashboardView";
 import { AmbientesView } from "./components/AmbientesView";
 import { AppShell, type AppSubheader, type MainNav } from "./components/AppShell";
 import { EntidadesView } from "./components/EntidadesView";
@@ -49,26 +51,50 @@ type AmbienteContext = {
   esAmbientePreregistro?: boolean;
 };
 
+type EntityTab = "inventario" | "ambientes" | "responsables" | "sucursales" | "visitas";
+
 type EntidadesFlow =
   | { type: "list" }
   | {
       type: "ambientes";
       entidadId: string;
-      initialTab?: "ambientes" | "responsables" | "sucursales";
+      initialTab?: EntityTab;
       sedeFocus?: { id: string; nombre: string };
     }
   | { type: "activos"; context: AmbienteContext }
   | { type: "register"; context: AmbienteContext; initialCodigo?: string }
-  | { type: "edit"; activo: ActivoConUbicacion; context: AmbienteContext };
+  | {
+      type: "edit";
+      activo: ActivoConUbicacion;
+      context: AmbienteContext;
+      returnTo?: "entity-inventario";
+    };
 
 type InventarioFlow =
   | { type: "list" }
   | { type: "edit"; activo: ActivoConUbicacion };
 
-function entidadIdFromFlow(flow: EntidadesFlow): string {
-  if (flow.type === "list") return "";
-  if (flow.type === "ambientes") return flow.entidadId;
-  return flow.context.entidadId;
+function contextFromActivo(activo: ActivoConUbicacion): AmbienteContext {
+  return {
+    entidadId: activo.entidad_id,
+    ambienteId: activo.ambiente_id ?? "",
+    sedeId: activo.sede_id ?? "",
+    sedeNombre: activo.sede_nombre,
+    ambienteNombre: activo.ambiente_nombre ?? "Ambiente",
+  };
+}
+
+function entidadIdFromFlow(
+  mainNav: MainNav,
+  dashboardEntidadId: string,
+  entidadesFlow: EntidadesFlow,
+): string {
+  if (mainNav === "dashboard" && dashboardEntidadId) {
+    return dashboardEntidadId;
+  }
+  if (entidadesFlow.type === "list") return "";
+  if (entidadesFlow.type === "ambientes") return entidadesFlow.entidadId;
+  return entidadesFlow.context.entidadId;
 }
 
 function LoginForm() {
@@ -184,7 +210,8 @@ function MainApp({ userId }: { userId: string; email: string }) {
   } = useSelectedEntidad(Boolean(profile));
   const { pending, syncing, lastResult, syncNow } = useSyncQueue(Boolean(profile));
 
-  const [mainNav, setMainNav] = useState<MainNav>("entidades");
+  const [mainNav, setMainNav] = useState<MainNav>("dashboard");
+  const [dashboardEntidadId, setDashboardEntidadId] = useState("");
   const [entidadesFlow, setEntidadesFlow] = useState<EntidadesFlow>({ type: "list" });
   const [inventarioFlow, setInventarioFlow] = useState<InventarioFlow>({ type: "list" });
   const [printTarget, setPrintTarget] = useState<ActivoConUbicacion | null>(null);
@@ -196,11 +223,20 @@ function MainApp({ userId }: { userId: string; email: string }) {
     setMainNav("catalogo");
   }
 
-  const drillEntidadId = entidadIdFromFlow(entidadesFlow);
+  const drillEntidadId = entidadIdFromFlow(mainNav, dashboardEntidadId, entidadesFlow);
   const activosEntidadId = drillEntidadId || entidadId;
 
   const activosCache = useActivosCache(activosEntidadId, Boolean(profile) && Boolean(activosEntidadId));
   const globalActivos = useGlobalActivosCache(entidades, Boolean(profile));
+
+  useEffect(() => {
+    if (entidades.length === 0) return;
+    if (!dashboardEntidadId || !entidades.some((e) => e.id === dashboardEntidadId)) {
+      const firstId = entidades[0].id;
+      setDashboardEntidadId(firstId);
+      setEntidadId(firstId);
+    }
+  }, [entidades, dashboardEntidadId, setEntidadId]);
 
   const refreshActivos = useCallback(async () => {
     await activosCache.refresh();
@@ -250,16 +286,25 @@ function MainApp({ userId }: { userId: string; email: string }) {
     }
   }
 
+  function openEntidadResumen(entidadIdTarget: string) {
+    setEntidadId(entidadIdTarget);
+    setDashboardEntidadId(entidadIdTarget);
+    setMainNav("dashboard");
+  }
+
   function goEntidadesList() {
+    setMainNav("entidades");
     setEntidadesFlow({ type: "list" });
   }
 
   function goAmbientes(entidadIdTarget: string) {
+    setMainNav("entidades");
     setEntidadId(entidadIdTarget);
     setEntidadesFlow({ type: "ambientes", entidadId: entidadIdTarget });
   }
 
   function goSedeAmbientes(entidadIdTarget: string, sedeId: string, sedeNombre: string) {
+    setMainNav("entidades");
     setEntidadId(entidadIdTarget);
     setEntidadesFlow({
       type: "ambientes",
@@ -269,6 +314,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
   }
 
   function goResponsables(entidadIdTarget: string) {
+    setMainNav("entidades");
     setEntidadId(entidadIdTarget);
     setEntidadesFlow({
       type: "ambientes",
@@ -318,11 +364,36 @@ function MainApp({ userId }: { userId: string; email: string }) {
 
   async function handleActivoUpdated(_activo: ActivoConUbicacion) {
     if (entidadesFlow.type === "edit") {
-      setEntidadesFlow({ type: "activos", context: entidadesFlow.context });
+      if (entidadesFlow.returnTo === "entity-inventario") {
+        setEntidadesFlow({
+          type: "ambientes",
+          entidadId: entidadesFlow.context.entidadId,
+          initialTab: "inventario",
+        });
+      } else {
+        setEntidadesFlow({ type: "activos", context: entidadesFlow.context });
+      }
     } else if (inventarioFlow.type === "edit") {
       setInventarioFlow({ type: "list" });
     }
     await refreshActivos();
+  }
+
+  async function handleActivoDeleted() {
+    await refreshActivos();
+  }
+
+  function returnFromEntidadesEdit() {
+    if (entidadesFlow.type !== "edit") return;
+    if (entidadesFlow.returnTo === "entity-inventario") {
+      setEntidadesFlow({
+        type: "ambientes",
+        entidadId: entidadesFlow.context.entidadId,
+        initialTab: "inventario",
+      });
+    } else {
+      goActivosListFromContext(entidadesFlow.context);
+    }
   }
 
   async function handleSyncNow() {
@@ -356,7 +427,12 @@ function MainApp({ userId }: { userId: string; email: string }) {
 
   let subheader: AppSubheader | undefined;
 
-  if (mainNav === "entidades") {
+  if (mainNav === "dashboard") {
+    subheader = {
+      breadcrumbs: [{ label: "Dashboard" }],
+      subtitle: "Seleccione una entidad para ver el resumen contable y sus ambientes",
+    };
+  } else if (mainNav === "entidades") {
     if (entidadesFlow.type === "ambientes" && drillEntidad) {
       subheader = entidadesFlow.sedeFocus
         ? {
@@ -376,8 +452,8 @@ function MainApp({ userId }: { userId: string; email: string }) {
               { label: drillEntidad.nombre },
             ],
             subtitle: drillEntidad.ruc
-              ? `RUC ${drillEntidad.ruc} · Ambientes, responsables y sucursales`
-              : "Ambientes, responsables y sucursales",
+              ? `RUC ${drillEntidad.ruc} · Inventario, ambientes y sucursales`
+              : "Inventario, ambientes y sucursales",
           };
     } else if (entidadesFlow.type === "activos") {
       subheader = {
@@ -457,6 +533,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
   ).length;
 
   return (
+    <ToastProvider>
     <AppShell
       activeNav={mainNav}
       onNavChange={handleNavChange}
@@ -467,13 +544,26 @@ function MainApp({ userId }: { userId: string; email: string }) {
       syncing={syncing}
       user={{ nombre: profile.nombre, email: profile.email }}
     >
+      {mainNav === "dashboard" && (
+        <DesktopDashboard
+          entidades={entidades}
+          selectedEntidadId={dashboardEntidadId || entidades[0]?.id || ""}
+          onSelectEntidad={(id) => {
+            setDashboardEntidadId(id);
+            setEntidadId(id);
+          }}
+          activos={activosCache.activos}
+          activosLoading={activosCache.loading}
+          onGestionarEntidad={goAmbientes}
+        />
+      )}
+
       {mainNav === "entidades" && entidadesFlow.type === "list" && (
         <EntidadesView
           entidades={entidades}
           online={online}
           onEntidadesChange={setEntidadesList}
-          onViewAmbientes={goAmbientes}
-          onViewResponsables={goResponsables}
+          onViewAmbientes={openEntidadResumen}
         />
       )}
 
@@ -486,6 +576,22 @@ function MainApp({ userId }: { userId: string; email: string }) {
           sedeFocus={entidadesFlow.sedeFocus}
           drillDown
           online={online}
+          activos={activosCache.activos}
+          activosLoading={activosCache.loading}
+          onPrintLabel={setPrintTarget}
+          onPrintBatch={setBatchPrintTargets}
+          onEditActivo={(activo) =>
+            setEntidadesFlow({
+              type: "edit",
+              activo,
+              context: contextFromActivo(activo),
+              returnTo: "entity-inventario",
+            })
+          }
+          onIrAmbiente={goAmbienteFromActivo}
+          onAbrirAmbienteDestino={goAmbienteDestino}
+          onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
+          onActivoDeleted={() => void handleActivoDeleted()}
           onViewActivos={(amb) =>
             goActivosAmbiente({
               entidadId: entidadesFlow.entidadId,
@@ -532,6 +638,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
               })
             }
             onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
+          onActivoDeleted={() => void handleActivoDeleted()}
             onAbrirAmbienteDestino={goAmbienteDestino}
           />
         )}
@@ -568,8 +675,8 @@ function MainApp({ userId }: { userId: string; email: string }) {
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           activo={entidadesFlow.activo}
           onAddCatalogoMissing={openCatalogoFromSearch}
-          onSuccess={() => goActivosListFromContext(entidadesFlow.context)}
-          onCancel={() => goActivosListFromContext(entidadesFlow.context)}
+          onSuccess={() => returnFromEntidadesEdit()}
+          onCancel={() => returnFromEntidadesEdit()}
         />
       )}
 
@@ -591,6 +698,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
           onIrAmbiente={goAmbienteFromActivo}
           onAbrirAmbienteDestino={goAmbienteDestino}
           onActivoUpdated={(activo) => void handleActivoUpdated(activo)}
+          onActivoDeleted={() => void handleActivoDeleted()}
         />
       )}
 
@@ -646,6 +754,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
         />
       )}
     </AppShell>
+    </ToastProvider>
   );
 }
 

@@ -13,6 +13,7 @@ import {
 } from "@inventario/types";
 import { cn } from "./components";
 import { EstadoBienBadge, inventarioDepreciacionFila } from "./inventario-table-cells";
+import { ObservacionActivoDisplay } from "./observacion-activo-display";
 import { Sheet } from "./sheet";
 
 export type ActivoDetalle = Activo & {
@@ -383,7 +384,14 @@ export function ActivoDetalleSheet({
           <DetalleSplitRow>
             {tieneNotas && (
               <DetalleSection title="Notas" cols={1}>
-                <DetalleField label="Observación" value={activo.observacion} />
+                <DetalleField
+                  label="Observación"
+                  value={
+                    activo.observacion?.trim() ? (
+                      <ObservacionActivoDisplay observacion={activo.observacion} />
+                    ) : undefined
+                  }
+                />
                 <DetalleField label="Motivo de baja" value={activo.motivo_baja} />
               </DetalleSection>
             )}

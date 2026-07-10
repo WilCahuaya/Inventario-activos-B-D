@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EntidadConConteo } from "@inventario/types";
 import {
@@ -10,13 +11,10 @@ import {
 } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "@inventario/ui";
 import {
-  AmbientesIcon,
   DeleteIcon,
   PanelDataTable,
   PanelIconAction,
-  PanelNavActionLink,
   PanelTableActions,
-  ResponsablesIcon,
   PanelTableColgroup,
   PanelTableTd,
   PanelTableTh,
@@ -24,7 +22,7 @@ import {
   ENTIDADES_TABLE_COLS,
   panelTableShrinkCellClass,
   panelTableNowrapCellClass,
-  panelTableBodyRowClass,
+  panelTableClickableRowClass,
   panelTableHeadRowClass,
   panelTableStickyHeadClass,
   useStoredViewMode,
@@ -189,6 +187,10 @@ function entidadFromForm(form: FormData) {
     admin_email: String(form.get("admin_email") || ""),
     admin_telefono: String(form.get("admin_telefono") || ""),
   };
+}
+
+function entidadPageHref(entidadId: string) {
+  return `/contador?entidad=${encodeURIComponent(entidadId)}`;
 }
 
 export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConConteo[] }) {
@@ -362,7 +364,19 @@ export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConCo
           </thead>
           <tbody>
             {filtradas.map((entidad) => (
-              <tr key={entidad.id} className={panelTableBodyRowClass}>
+              <tr
+                key={entidad.id}
+                className={panelTableClickableRowClass}
+                onClick={() => router.push(entidadPageHref(entidad.id))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    router.push(entidadPageHref(entidad.id));
+                  }
+                }}
+                tabIndex={0}
+                role="link"
+              >
                 <PanelTableTd className="font-medium text-primary" title={entidad.nombre}>
                   {entidad.nombre}
                 </PanelTableTd>
@@ -387,25 +401,15 @@ export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConCo
                   align="right"
                   className={`overflow-visible ${panelTableNowrapCellClass}`}
                 >
-                  <PanelTableActions
-                    onEdit={() => {
-                      setError(null);
-                      setEditEntidad(entidad);
-                    }}
-                    onDelete={() => handleDelete(entidad)}
-                    navs={[
-                      {
-                        label: "Ambientes",
-                        kind: "ambientes",
-                        href: `/contador/entidades/${entidad.id}`,
-                      },
-                      {
-                        label: "Responsables",
-                        kind: "responsables",
-                        href: `/contador/entidades/${entidad.id}?tab=responsables`,
-                      },
-                    ]}
-                  />
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <PanelTableActions
+                      onEdit={() => {
+                        setError(null);
+                        setEditEntidad(entidad);
+                      }}
+                      onDelete={() => handleDelete(entidad)}
+                    />
+                  </div>
                 </PanelTableTd>
               </tr>
             ))}
@@ -414,29 +418,34 @@ export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConCo
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtradas.map((entidad) => (
-            <article key={entidad.id} className={`${panelCardClass} flex flex-col`}>
-              <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
-                <h3 className="font-semibold leading-snug text-primary">{entidad.nombre}</h3>
-                <StatusBadge variant="active">Activa</StatusBadge>
-              </div>
+            <article key={entidad.id} className={`${panelCardClass} flex flex-col overflow-hidden`}>
+              <Link
+                href={entidadPageHref(entidad.id)}
+                className="flex flex-1 flex-col outline-none transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
+                  <h3 className="font-semibold leading-snug text-primary">{entidad.nombre}</h3>
+                  <StatusBadge variant="active">Activa</StatusBadge>
+                </div>
 
-              <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
-                {entidad.ruc && (
+                <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
+                  {entidad.ruc && (
+                    <p className="text-muted-foreground">
+                      RUC: <span className="font-medium text-foreground">{entidad.ruc}</span>
+                    </p>
+                  )}
+                  {entidad.admin_nombre && (
+                    <p className="font-medium text-foreground">{entidad.admin_nombre}</p>
+                  )}
+                  {entidad.direccion && (
+                    <p className="text-muted-foreground">{entidad.direccion}</p>
+                  )}
                   <p className="text-muted-foreground">
-                    RUC: <span className="font-medium text-foreground">{entidad.ruc}</span>
+                    {entidad.ambiente_count}{" "}
+                    {entidad.ambiente_count === 1 ? "ambiente" : "ambientes"}
                   </p>
-                )}
-                {entidad.admin_nombre && (
-                  <p className="font-medium text-foreground">{entidad.admin_nombre}</p>
-                )}
-                {entidad.direccion && (
-                  <p className="text-muted-foreground">{entidad.direccion}</p>
-                )}
-                <p className="text-muted-foreground">
-                  {entidad.ambiente_count}{" "}
-                  {entidad.ambiente_count === 1 ? "ambiente" : "ambientes"}
-                </p>
-              </div>
+                </div>
+              </Link>
 
               <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
                 <PanelIconAction
@@ -455,17 +464,6 @@ export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConCo
                 >
                   <DeleteIcon />
                 </PanelIconAction>
-                <PanelNavActionLink
-                  href={`/contador/entidades/${entidad.id}`}
-                  label="Ambientes"
-                  icon={<AmbientesIcon />}
-                  className="ml-auto"
-                />
-                <PanelNavActionLink
-                  href={`/contador/entidades/${entidad.id}?tab=responsables`}
-                  label="Responsables"
-                  icon={<ResponsablesIcon />}
-                />
               </div>
             </article>
           ))}

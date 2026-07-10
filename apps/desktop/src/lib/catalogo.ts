@@ -12,6 +12,7 @@ import type {
 import {
   buildCatalogoCampoOpciones,
   buildCreateCatalogoCuentaOrdenPayload,
+  buildCreateCatalogoNacionalExtensionPayload,
   buildUpdateCatalogoPropioPayload,
   buildUpdateCatalogoNacionalContabilidadPayload,
   CATALOGO_PROPIO_CODIGO_RE,
@@ -22,6 +23,7 @@ import {
   shouldRegistrarCatalogoOpcionPersonalizada,
   suggestGrupoForDenominacion,
   validarCreateCatalogoCuentaOrdenInput,
+  validarCreateCatalogoNacionalExtensionInput,
   validarUpdateCatalogoPropioInput,
   validarUpsertCuentaContableInput,
 } from "@inventario/types";
@@ -375,6 +377,50 @@ export async function createCatalogoNacional(
 
   if (existing) {
     return { error: `El código ${payload.codigo} ya existe en el catálogo.` };
+  }
+
+  const cuentaError = await ensureCuentaContableForCatalogo(
+    supabase,
+    payload.cuenta_codigo,
+    payload.contabilidad,
+  );
+  if (cuentaError.error) return { error: cuentaError.error };
+
+  const { data, error } = await supabase
+    .from("catalogo_nacional")
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  const row = data as CatalogoNacional;
+  syncLocalRow(row);
+  await registrarOpcionesDesdeCatalogoInput(input);
+  return { data: row };
+}
+
+export async function createCatalogoNacionalExtension(
+  input: CreateCatalogoNacionalInput,
+): Promise<{ data?: CatalogoNacional; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+
+  const validationError = validarCreateCatalogoNacionalExtensionInput(input);
+  if (validationError) return { error: validationError };
+
+  const payload = buildCreateCatalogoNacionalExtensionPayload(input);
+  const supabase = getSupabaseClient();
+
+  const { data: existing } = await supabase
+    .from("catalogo_nacional")
+    .select("codigo")
+    .eq("codigo", payload.codigo)
+    .maybeSingle();
+
+  if (existing) {
+    return { error: `El código ${payload.codigo} ya existe en el catálogo nacional.` };
   }
 
   const cuentaError = await ensureCuentaContableForCatalogo(

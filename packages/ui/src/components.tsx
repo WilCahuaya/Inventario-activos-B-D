@@ -1,7 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, DragEvent, InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "react";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { forwardRef, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -54,18 +54,22 @@ function shouldDisableSpellCheck({
   );
 }
 
-export function Input({
-  className,
-  spellCheck,
-  readOnly,
-  type,
-  inputMode,
-  lang,
-  ...props
-}: InputHTMLAttributes<HTMLInputElement>) {
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
+  {
+    className,
+    spellCheck,
+    readOnly,
+    type,
+    inputMode,
+    lang,
+    ...props
+  },
+  ref,
+) {
   const resolvedSpellCheck = spellCheck ?? !shouldDisableSpellCheck({ readOnly, type, inputMode });
   return (
     <input
+      ref={ref}
       className={cn(
         "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
         "ring-offset-background placeholder:text-muted-foreground",
@@ -81,7 +85,7 @@ export function Input({
       {...props}
     />
   );
-}
+});
 
 export function Textarea({
   className,
@@ -416,6 +420,15 @@ export function CardContent({ className, children }: { className?: string; child
   return <div className={cn("p-6 pt-0", className)}>{children}</div>;
 }
 
+function DialogCloseIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className} aria-hidden>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
 export function Dialog({
   open,
   onClose,
@@ -439,16 +452,11 @@ export function Dialog({
 
   useEffect(() => {
     if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
     document.documentElement.classList.add("dialog-open");
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
       document.documentElement.classList.remove("dialog-open");
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || !mounted) return null;
 
@@ -456,7 +464,6 @@ export function Dialog({
     <div
       className="fixed inset-0 z-[300] flex items-end justify-center overflow-hidden bg-black/50 p-2 sm:items-center sm:p-4"
       role="presentation"
-      onClick={onClose}
     >
       <div
         role="dialog"
@@ -466,13 +473,24 @@ export function Dialog({
           "flex max-h-[92vh] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-lg sm:max-h-[90vh]",
           className ?? "max-w-lg",
         )}
-        onClick={(e) => e.stopPropagation()}
       >
-        <div className="shrink-0 space-y-1 px-4 pb-2 pt-4 sm:px-6 sm:pb-3 sm:pt-6">
-          <h2 id="dialog-title" className="text-lg font-semibold">
-            {title}
-          </h2>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        <div className="shrink-0 px-4 pb-2 pt-4 sm:px-6 sm:pb-3 sm:pt-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+              <h2 id="dialog-title" className="text-lg font-semibold">
+                {title}
+              </h2>
+              {description && <p className="text-sm text-muted-foreground">{description}</p>}
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Cerrar"
+              onClick={onClose}
+            >
+              <DialogCloseIcon className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="scrollbar-none min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
           {children}

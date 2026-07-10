@@ -8,6 +8,28 @@ export const panelShellHeaderClass = "panel-shell-header";
 
 export const panelStickyToolbarClass = "panel-sticky-toolbar";
 
+export const panelStickyToolbarCollapsedClass = "panel-sticky-toolbar--collapsed";
+
+export const panelToolbarExpandTriggerClass = "panel-toolbar-expand-trigger";
+
+export const panelToolbarExpandTriggerStickyClass = "panel-toolbar-expand-trigger--sticky";
+
+export const panelInventarioScrollClass = "panel-inventario-scroll scrollbar-themed";
+
+export const panelInventarioListClass = "panel-inventario-list";
+
+export const panelInventarioBodyScrollClass = "panel-inventario-body-scroll scrollbar-themed";
+
+export const panelInventarioPaginationFooterClass = "panel-inventario-pagination-footer";
+
+export const panelInventarioPageClass = "panel-inventario-page";
+
+export const panelInventarioChromeClass = "panel-inventario-chrome";
+
+export const panelInventarioToolbarClass = "panel-inventario-toolbar";
+
+export const panelDataTableWrapEmbeddedClass = "panel-data-table-wrap--embedded";
+
 export const panelFilterRowClass = "panel-filter-row";
 
 export const panelToolbarActionsClass = "panel-toolbar-actions";

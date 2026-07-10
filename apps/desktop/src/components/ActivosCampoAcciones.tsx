@@ -28,6 +28,8 @@ interface ActivosCampoAccionesProps {
   onPrintLabel: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
   onValidated?: (activo: ActivoConUbicacion) => void;
+  onActivoDeleted?: () => void;
+  onActivoEliminado?: (activoId: string) => void;
   compact?: boolean;
   variant?: "auto" | "menu" | "icons-and-menu" | "icons";
 }
@@ -42,6 +44,8 @@ export function ActivosCampoAcciones({
   onPrintLabel,
   onPrintBatch,
   onValidated,
+  onActivoDeleted,
+  onActivoEliminado,
   compact,
   variant = "auto",
 }: ActivosCampoAccionesProps) {
@@ -189,6 +193,8 @@ export function ActivosCampoAcciones({
         onIrAmbiente={onIrAmbiente}
         onAbrirAmbienteDestino={onAbrirAmbienteDestino}
         onActivoUpdated={onValidated}
+        onActivoDeleted={onActivoDeleted}
+        onActivoEliminado={onActivoEliminado}
         onPrintLabel={onPrintLabel}
         onPrintBatch={onPrintBatch}
       />

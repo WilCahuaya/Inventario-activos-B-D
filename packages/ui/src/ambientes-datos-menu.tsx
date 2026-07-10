@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./components";
 
-export type AmbientesDatosMenuAction = "import-ambientes" | "import-activos" | "eliminar-codigos";
+export type AmbientesDatosMenuAction = "import-ambientes" | "import-activos";
 
 interface AmbientesDatosMenuProps {
   onAction: (action: AmbientesDatosMenuAction) => void;
@@ -132,7 +132,7 @@ export function AmbientesDatosMenu({
             className="overflow-hidden rounded-lg border border-border bg-card p-1 shadow-lg"
           >
             <p className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Carga y eliminación masiva
+              Carga masiva
             </p>
             <ul className="space-y-0.5">
               <li>
@@ -155,19 +155,6 @@ export function AmbientesDatosMenu({
                   onClick={() => handleSelect("import-activos")}
                 >
                   Importar activos
-                </button>
-              </li>
-            </ul>
-            <div className="my-1 border-t border-border/70" role="separator" />
-            <ul>
-              <li>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full rounded-md px-2 py-2 text-left text-xs text-destructive transition-colors hover:bg-destructive/10"
-                  onClick={() => handleSelect("eliminar-codigos")}
-                >
-                  Eliminar activos por código de barras
                 </button>
               </li>
             </ul>

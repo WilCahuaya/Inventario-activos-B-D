@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { computeFloatingMenuLayout, type FloatingMenuLayout } from "./dropdown-position";
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -84,12 +85,7 @@ export function Select({
 }) {
   const [open, setOpen] = useState(false);
   const [internalValue, setInternalValue] = useState(defaultValue);
-  const [menuRect, setMenuRect] = useState<{
-    top: number;
-    left: number;
-    minWidth: number;
-    maxWidth: number;
-  } | null>(null);
+  const [menuRect, setMenuRect] = useState<FloatingMenuLayout | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -121,19 +117,16 @@ export function Select({
     function updatePosition() {
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
-      const viewportPadding = 8;
-      setMenuRect({
-        top: rect.bottom + 4,
-        left: rect.left,
-        minWidth: rect.width,
-        maxWidth: Math.max(rect.width, window.innerWidth - rect.left - viewportPadding),
-      });
+      const menuHeight = listRef.current?.getBoundingClientRect().height ?? 0;
+      setMenuRect(computeFloatingMenuLayout(rect, menuHeight));
     }
 
     updatePosition();
+    const frameId = requestAnimationFrame(() => updatePosition());
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      cancelAnimationFrame(frameId);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
@@ -186,6 +179,7 @@ export function Select({
           left: menuRect.left,
           minWidth: menuRect.minWidth,
           maxWidth: menuRect.maxWidth,
+          maxHeight: menuRect.maxHeight,
           width: "max-content",
           zIndex: 300,
         }}

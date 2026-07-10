@@ -6,9 +6,9 @@ import type {
   ResponsableConConteo,
   UpdateResponsableInput,
 } from "@inventario/types";
-import { RESPONSABLE_CARGO_DEFAULT } from "@inventario/types";
-import { Button, Dialog, Input, Label } from "./components";
+import { Button, Dialog } from "./components";
 import { ConfirmDialog } from "./confirm-dialog";
+import { ResponsableFormFields, responsableFromForm } from "./responsable-form-fields";
 import {
   ActivateIcon,
   DeleteIcon,
@@ -51,89 +51,6 @@ export interface ResponsablesPanelProps {
   onSetActivo: (id: string, activo: boolean) => Promise<{ error?: string }>;
   onDelete?: (id: string) => Promise<{ error?: string }>;
   onReload?: () => void | Promise<void>;
-}
-
-function cargoDisplay(responsable?: ResponsableConConteo): string {
-  if (responsable?.es_administrador) {
-    return responsable.cargo ?? "Administrador";
-  }
-  return responsable?.cargo ?? RESPONSABLE_CARGO_DEFAULT;
-}
-
-function ResponsableFormFields({
-  responsable,
-  idPrefix,
-}: {
-  responsable?: ResponsableConConteo;
-  idPrefix: string;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}_nombre`}>Nombre completo</Label>
-        <Input
-          id={`${idPrefix}_nombre`}
-          name="nombre"
-          required
-          placeholder="Ej. Juan Pérez García"
-          defaultValue={responsable?.nombre ?? ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}_dni`}>DNI</Label>
-        <Input
-          id={`${idPrefix}_dni`}
-          name="dni"
-          required
-          inputMode="numeric"
-          autoComplete="off"
-          maxLength={8}
-          pattern="[0-9]{8}"
-          title="8 dígitos"
-          placeholder="12345678"
-          defaultValue={responsable?.dni ?? ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}_cargo`}>Cargo</Label>
-        <Input
-          id={`${idPrefix}_cargo`}
-          value={cargoDisplay(responsable)}
-          readOnly
-          disabled
-          className="bg-muted/50"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}_email`}>Correo</Label>
-        <Input
-          id={`${idPrefix}_email`}
-          name="email"
-          type="email"
-          placeholder="Opcional"
-          defaultValue={responsable?.email ?? ""}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}_telefono`}>Teléfono</Label>
-        <Input
-          id={`${idPrefix}_telefono`}
-          name="telefono"
-          placeholder="Opcional"
-          defaultValue={responsable?.telefono ?? ""}
-        />
-      </div>
-    </>
-  );
-}
-
-function responsableFromForm(form: FormData): CreateResponsableInput {
-  return {
-    nombre: String(form.get("nombre") || ""),
-    dni: String(form.get("dni") || ""),
-    email: String(form.get("email") || ""),
-    telefono: String(form.get("telefono") || ""),
-  };
 }
 
 function formatOptional(value: string | null | undefined): string {

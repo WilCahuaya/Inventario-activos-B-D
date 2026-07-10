@@ -35,6 +35,8 @@ export const panelTableThClass =
 export const panelTableBodyRowClass =
   "border-b border-border/40 last:border-b-0 transition-colors hover:bg-muted/30";
 
+export const panelTableClickableRowClass = `${panelTableBodyRowClass} cursor-pointer hover:bg-muted/50`;
+
 export const panelTableTdClass =
   "max-w-0 overflow-hidden px-2 py-2.5 align-middle sm:px-3 lg:py-3 xl:px-4 2xl:px-5";
 

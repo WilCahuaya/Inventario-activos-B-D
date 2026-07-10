@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
+import type { CreateResponsableInput, Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
+import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { panelFieldsetClass } from "@inventario/ui/panel";
 import { Button, Dialog, ResponsablesPanel, Select } from "@inventario/ui";
 import {
-  ActivosIcon,
   DeleteIcon,
   EditIcon,
   PanelBanner,
   PanelCountLabel,
   PanelDataTable,
   PanelIconAction,
-  PanelNavAction,
   PanelTableActions,
   PanelTableColgroup,
   PanelTableTd,
@@ -27,7 +26,7 @@ import {
   AMBIENTES_TABLE_COLS_VISITA,
   AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA,
   panelCardClass,
-  panelTableBodyRowClass,
+  panelTableClickableRowClass,
   panelTableHeadRowClass,
   panelTableShrinkCellClass,
   panelTableStickyHeadClass,
@@ -44,7 +43,7 @@ import {
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
 import { AmbientesImportDialog } from "./AmbientesImportDialog";
 import { InventarioImportDialog } from "./InventarioImportDialog";
-import { ConfirmDialog, EliminarActivosPorCodigosDialog } from "@inventario/ui";
+import { ConfirmDialog, CrearResponsableDialog, EliminarActivosPorCodigosDialog } from "@inventario/ui";
 import { GestionarSucursales } from "./GestionarSucursales";
 import {
   createAmbiente,
@@ -74,11 +73,15 @@ import {
 import {
   deleteActivosPorCodigos,
   previewDeleteActivosPorCodigos,
+  type ActivoConUbicacion,
 } from "../lib/activos";
+import { InventarioEntidadView } from "./InventarioEntidadView";
+import type { AmbienteDestinoNavigation } from "./AgregarBienesSimilaresDialog";
 
-type EntityTab = "ambientes" | "responsables" | "sucursales" | "visitas";
+type EntityTab = "inventario" | "ambientes" | "responsables" | "sucursales" | "visitas";
 
 const ENTITY_TABS: { id: EntityTab; label: string }[] = [
+  { id: "inventario", label: "Inventario" },
   { id: "ambientes", label: "Ambientes" },
   { id: "responsables", label: "Responsables" },
   { id: "sucursales", label: "Sucursales" },
@@ -93,6 +96,15 @@ interface AmbientesViewProps {
   drillDown?: boolean;
   online: boolean;
   onViewActivos: (ambiente: AmbienteConSede) => void;
+  activos: ActivoConUbicacion[];
+  activosLoading: boolean;
+  onPrintLabel: (activo: ActivoConUbicacion) => void;
+  onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
+  onEditActivo?: (activo: ActivoConUbicacion) => void;
+  onIrAmbiente?: (activo: ActivoConUbicacion) => void;
+  onActivoUpdated: (activo: ActivoConUbicacion) => void;
+  onActivoDeleted?: () => void;
+  onAbrirAmbienteDestino?: (destino: AmbienteDestinoNavigation) => void;
   initialTab?: EntityTab;
   sedeFocus?: { id: string; nombre: string };
 }
@@ -111,28 +123,34 @@ function AmbienteCard({
   onViewActivos: () => void;
 }) {
   return (
-    <article className={`${panelCardClass} flex flex-col`}>
-      <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
-        <h3 className="font-semibold leading-snug text-primary">{ambiente.nombre}</h3>
-        <StatusBadge variant="active">Activo</StatusBadge>
-      </div>
+    <article className={`${panelCardClass} flex flex-col overflow-hidden`}>
+      <button
+        type="button"
+        className="flex flex-1 flex-col text-left outline-none transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        onClick={onViewActivos}
+      >
+        <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
+          <h3 className="font-semibold leading-snug text-primary">{ambiente.nombre}</h3>
+          <StatusBadge variant="active">Activo</StatusBadge>
+        </div>
 
-      <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
-        <p className="font-medium text-foreground">
-          {ambiente.responsable ?? "Sin responsable asignado"}
-        </p>
-        {ambiente.descripcion ? (
-          <p className="text-muted-foreground">{ambiente.descripcion}</p>
-        ) : (
-          <p className="italic text-muted-foreground">Sin descripción</p>
-        )}
-        <p className="text-sm text-muted-foreground">
-          {ambiente.activo_count} {ambiente.activo_count === 1 ? "activo" : "activos"}
-        </p>
-        <p className="mt-auto pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Entidad: {entidadNombre}
-        </p>
-      </div>
+        <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">
+            {ambiente.responsable ?? "Sin responsable asignado"}
+          </p>
+          {ambiente.descripcion ? (
+            <p className="text-muted-foreground">{ambiente.descripcion}</p>
+          ) : (
+            <p className="italic text-muted-foreground">Sin descripción</p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            {ambiente.activo_count} {ambiente.activo_count === 1 ? "activo" : "activos"}
+          </p>
+          <p className="mt-auto pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Entidad: {entidadNombre}
+          </p>
+        </div>
+      </button>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
         <PanelIconAction label="Editar" onClick={onEdit}>
@@ -141,12 +159,6 @@ function AmbienteCard({
         <PanelIconAction label="Eliminar" variant="danger" onClick={onDelete}>
           <DeleteIcon />
         </PanelIconAction>
-        <PanelNavAction
-          label="Activos"
-          icon={<ActivosIcon />}
-          className="ml-auto"
-          onClick={onViewActivos}
-        />
       </div>
     </article>
   );
@@ -160,7 +172,16 @@ export function AmbientesView({
   drillDown = false,
   online,
   onViewActivos,
-  initialTab = "ambientes",
+  activos,
+  activosLoading,
+  onPrintLabel,
+  onPrintBatch,
+  onEditActivo,
+  onIrAmbiente,
+  onActivoUpdated,
+  onActivoDeleted,
+  onAbrirAmbienteDestino,
+  initialTab = "inventario",
   sedeFocus,
 }: AmbientesViewProps) {
   const [ambientes, setAmbientes] = useState<AmbienteConVisita[]>([]);
@@ -185,13 +206,55 @@ export function AmbientesView({
   const [busqueda, setBusqueda] = useState("");
   const [sedeFilterId, setSedeFilterId] = useState(sedeFocus?.id ?? "");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createResponsableOpen, setCreateResponsableOpen] = useState(false);
+  const [createResponsableId, setCreateResponsableId] = useState("");
+  const [editResponsableOpen, setEditResponsableOpen] = useState(false);
+  const [editResponsableId, setEditResponsableId] = useState("");
   const [editAmbiente, setEditAmbiente] = useState<AmbienteConVisita | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AmbienteConVisita | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes", "list");
 
-  const soloUnaSede = Boolean(sedeFilterId);
+  const sedeFiltrada = Boolean(sedeFilterId);
+  const entidadMultiplesSedes = entidadMuestraSelectorSede(sedes);
+  const ocultarSucursalEnLista = !entidadMultiplesSedes || sedeFiltrada;
+
+  const entityTabs = useMemo(
+    () =>
+      entidadMultiplesSedes
+        ? ENTITY_TABS
+        : ENTITY_TABS.filter((t) => t.id !== "sucursales"),
+    [entidadMultiplesSedes],
+  );
+
+  useEffect(() => {
+    if (!entidadMultiplesSedes && tab === "sucursales") {
+      setTab("inventario");
+    }
+  }, [entidadMultiplesSedes, tab]);
+
+  useEffect(() => {
+    if (editAmbiente) {
+      setEditResponsableId(editAmbiente.responsable_id ?? "");
+      setEditResponsableOpen(false);
+    }
+  }, [editAmbiente]);
+
+  function closeCreateAmbiente() {
+    setCreateOpen(false);
+    setCreateResponsableOpen(false);
+    setCreateResponsableId("");
+    setError(null);
+  }
+
+  function closeEditAmbiente() {
+    setEditAmbiente(null);
+    setEditResponsableOpen(false);
+    setEditResponsableId("");
+    setError(null);
+  }
+
   const visitaAbierta = visitasActivas.length > 0;
   const sedesEnVisita = visitasActivas
     .map((v) => v.sede_id)
@@ -331,6 +394,16 @@ export function AmbientesView({
     return responsables.find((r) => r.id === id)?.nombre ?? null;
   }
 
+  async function createResponsableDesdeAmbiente(input: CreateResponsableInput) {
+    const result = await createResponsable(entidad.id, input);
+    if (result.data) {
+      const nuevo: ResponsableConConteo = { ...result.data, ambiente_count: 0 };
+      setResponsables((prev) => [...prev, nuevo]);
+      return { data: nuevo };
+    }
+    return { error: result.error };
+  }
+
   const ambientesBase = useMemo(() => {
     if (!sedeFilterId) return ambientes;
     return ambientes.filter((a) => a.sede_id === sedeFilterId);
@@ -344,9 +417,9 @@ export function AmbientesView({
         a.nombre.toLowerCase().includes(q) ||
         (a.descripcion?.toLowerCase().includes(q) ?? false) ||
         (a.responsable?.toLowerCase().includes(q) ?? false) ||
-        (!soloUnaSede && a.sede_nombre.toLowerCase().includes(q)),
+        (entidadMultiplesSedes && !sedeFiltrada && a.sede_nombre.toLowerCase().includes(q)),
     );
-  }, [ambientesBase, busqueda, soloUnaSede]);
+  }, [ambientesBase, busqueda, entidadMultiplesSedes, sedeFiltrada]);
 
   const gruposPorSede = useMemo(() => {
     const porSede = new Map<string, AmbienteConVisita[]>();
@@ -482,7 +555,13 @@ export function AmbientesView({
   }
 
   return (
-    <div className="min-w-0 w-full space-y-4">
+    <div
+      className={
+        !sedeFocus && tab === "inventario"
+          ? "flex min-h-0 min-w-0 w-full flex-1 flex-col gap-1"
+          : "min-w-0 w-full space-y-4"
+      }
+    >
       {!drillDown && (
         <PanelPageHeader
           title="Gestión de ambientes"
@@ -520,34 +599,52 @@ export function AmbientesView({
         </div>
       ) : null}
 
-      {!online && (
+      {!online && tab !== "inventario" && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           Sin conexión: la gestión de ambientes requiere internet.
         </p>
       )}
 
-      {online && (
-        <>
-          {!sedeFocus && (
-            <PanelTabs
-              tabs={ENTITY_TABS}
-              value={tab}
-              onChange={setTab}
-              actions={
-                <IniciarVisitaCampoButton
-                  visitas={visitasActivas}
-                  sedes={sedes.map((s) => ({
-                    id: s.id,
-                    nombre: s.nombre,
-                    es_principal: s.es_principal,
-                  }))}
-                  pending={visitaPending}
-                  onClick={handleAbrirVisita}
-                />
-              }
-            />
-          )}
+      {!sedeFocus && (
+        <PanelTabs
+          tabs={entityTabs}
+          value={tab}
+          onChange={setTab}
+          actions={
+            online ? (
+              <IniciarVisitaCampoButton
+                visitas={visitasActivas}
+                sedes={sedes.map((s) => ({
+                  id: s.id,
+                  nombre: s.nombre,
+                  es_principal: s.es_principal,
+                }))}
+                pending={visitaPending}
+                onClick={handleAbrirVisita}
+              />
+            ) : undefined
+          }
+        />
+      )}
 
+      {!sedeFocus && tab === "inventario" ? (
+        <InventarioEntidadView
+          entidad={entidad}
+          entidades={entidades}
+          activos={activos}
+          activosLoading={activosLoading}
+          online={online}
+          onPrintLabel={onPrintLabel}
+          onPrintBatch={onPrintBatch}
+          onEditActivo={onEditActivo}
+          onIrAmbiente={onIrAmbiente}
+          onAbrirAmbienteDestino={onAbrirAmbienteDestino}
+          onActivoUpdated={onActivoUpdated}
+          onActivoDeleted={onActivoDeleted}
+          onOpenEliminarPorCodigos={() => setEliminarOpen(true)}
+        />
+      ) : !online ? null : (
+        <>
           {!sedeFocus && tab === "visitas" ? (
             <VisitasCampoHistorialPanel
               historial={visitasHistorial}
@@ -619,7 +716,7 @@ export function AmbientesView({
                       singular="ambiente"
                       plural="ambientes"
                     />
-                    {sedes.length > 0 && !sedeFocus && (
+                    {entidadMultiplesSedes && !sedeFocus && (
                       <SedeAmbienteFilterSelect
                         sedes={sedes}
                         value={sedeFilterId}
@@ -635,7 +732,7 @@ export function AmbientesView({
                         value={busqueda}
                         onChange={setBusqueda}
                         placeholder={
-                          soloUnaSede
+                          ocultarSucursalEnLista
                             ? "Buscar ambiente o responsable…"
                             : "Buscar ambiente, responsable o sucursal…"
                         }
@@ -647,8 +744,7 @@ export function AmbientesView({
                         disabled={loading || !online}
                         onAction={(action) => {
                           if (action === "import-ambientes") setImportAmbientesOpen(true);
-                          else if (action === "import-activos") setImportActivosOpen(true);
-                          else setEliminarOpen(true);
+                          else setImportActivosOpen(true);
                         }}
                         importActivosDisabled={loading || ambientes.length === 0 || !online}
                         importActivosDisabledReason={
@@ -709,7 +805,7 @@ export function AmbientesView({
                 <PanelDataTable layout="auto">
                   <PanelTableColgroup
                     cols={
-                      soloUnaSede
+                      ocultarSucursalEnLista
                         ? visitaAbierta
                           ? AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA
                           : AMBIENTES_TABLE_COLS_SIN_SUCURSAL
@@ -723,7 +819,7 @@ export function AmbientesView({
                       <PanelTableTh>Ambiente</PanelTableTh>
                       <PanelTableTh>Responsable</PanelTableTh>
                       <PanelTableTh>Descripción</PanelTableTh>
-                      {!soloUnaSede && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
+                      {!ocultarSucursalEnLista && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
                       <PanelTableTh align="center" className={panelTableShrinkCellClass}>
                         Activos
                       </PanelTableTh>
@@ -738,7 +834,19 @@ export function AmbientesView({
                   </thead>
                   <tbody>
                     {ambientesFiltrados.map((amb) => (
-                      <tr key={amb.id} className={panelTableBodyRowClass}>
+                      <tr
+                        key={amb.id}
+                        className={panelTableClickableRowClass}
+                        onClick={() => onViewActivos(amb)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onViewActivos(amb);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="link"
+                      >
                         <PanelTableTd className="font-medium text-primary" title={amb.nombre}>
                           {amb.nombre}
                         </PanelTableTd>
@@ -748,16 +856,18 @@ export function AmbientesView({
                         <PanelTableTd className="text-muted-foreground" title={amb.descripcion ?? undefined}>
                           {amb.descripcion ?? "—"}
                         </PanelTableTd>
-                        {!soloUnaSede && (
+                        {!ocultarSucursalEnLista && (
                           <PanelTableTd className={panelTableShrinkCellClass} title={amb.sede_nombre}>
-                            <button
-                              type="button"
-                              className="truncate font-medium text-primary hover:underline"
-                              title="Ver ambientes de esta sucursal"
-                              onClick={() => setSedeFilterId(amb.sede_id)}
-                            >
-                              {amb.sede_nombre}
-                            </button>
+                            <div onClick={(event) => event.stopPropagation()}>
+                              <button
+                                type="button"
+                                className="truncate font-medium text-primary hover:underline"
+                                title="Ver ambientes de esta sucursal"
+                                onClick={() => setSedeFilterId(amb.sede_id)}
+                              >
+                                {amb.sede_nombre}
+                              </button>
+                            </div>
                           </PanelTableTd>
                         )}
                         <PanelTableTd align="center" className={panelTableShrinkCellClass}>
@@ -765,7 +875,10 @@ export function AmbientesView({
                         </PanelTableTd>
                         {visitaAbierta && (
                           <PanelTableTd className={panelTableNowrapCellClass}>
-                            <div className="flex flex-col items-start gap-1">
+                            <div
+                              className="flex flex-col items-start gap-1"
+                              onClick={(event) => event.stopPropagation()}
+                            >
                               <VisitaCampoEstadoBadge estado={amb.visita_estado} />
                               {!amb.es_preregistro && amb.visita_estado === "EN_PROCESO" && (
                                 <Button
@@ -789,27 +902,24 @@ export function AmbientesView({
                           align="right"
                           className={`overflow-visible ${panelTableNowrapCellClass}`}
                         >
-                          <PanelTableActions
-                            onEdit={() => {
-                              setError(null);
-                              setEditAmbiente(amb);
-                            }}
-                            onDelete={() => {
-                              setError(null);
-                              setDeleteTarget(amb);
-                            }}
-                            nav={{
-                              label: "Activos",
-                              kind: "activos",
-                              onClick: () => onViewActivos(amb),
-                            }}
-                          />
+                          <div onClick={(event) => event.stopPropagation()}>
+                            <PanelTableActions
+                              onEdit={() => {
+                                setError(null);
+                                setEditAmbiente(amb);
+                              }}
+                              onDelete={() => {
+                                setError(null);
+                                setDeleteTarget(amb);
+                              }}
+                            />
+                          </div>
                         </PanelTableTd>
                       </tr>
                     ))}
                   </tbody>
                 </PanelDataTable>
-              ) : soloUnaSede ? (
+              ) : ocultarSucursalEnLista ? (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {ambientesFiltrados.map((amb) => (
                     <AmbienteCard
@@ -874,27 +984,29 @@ export function AmbientesView({
 
       <Dialog
         open={createOpen}
-        onClose={() => {
-          setCreateOpen(false);
-          setError(null);
-        }}
+        onClose={closeCreateAmbiente}
         title="Nuevo ambiente"
         description={
-          soloUnaSede
+          sedeFiltrada
             ? `Registre un ambiente en ${sedes.find((s) => s.id === sedeFilterId)?.nombre ?? "esta sucursal"}.`
-            : "Registre un ambiente en la sucursal que corresponda."
+            : !entidadMultiplesSedes
+              ? `Registre un ambiente en ${sedes[0]?.nombre ?? "la sucursal principal"}.`
+              : "Registre un ambiente en la sucursal que corresponda."
         }
       >
         <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">
           <AmbienteFormFields
             sedes={sedes}
             responsables={responsables}
-            defaultSedeId={sedeFilterId || undefined}
-            showSedeSelect={!soloUnaSede}
+            defaultSedeId={sedeFilterId || sedeIdSinSelector(sedes) || undefined}
+            showSedeSelect={entidadMultiplesSedes}
+            responsableId={createResponsableId}
+            onResponsableIdChange={setCreateResponsableId}
+            onRequestCreateResponsable={() => setCreateResponsableOpen(true)}
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button type="button" variant="outline" onClick={closeCreateAmbiente}>
               Cancelar
             </Button>
             <Button type="submit" disabled={pending || sedes.length === 0}>
@@ -904,21 +1016,35 @@ export function AmbientesView({
         </form>
       </Dialog>
 
+      <CrearResponsableDialog
+        open={createOpen && createResponsableOpen}
+        onClose={() => setCreateResponsableOpen(false)}
+        onCreate={createResponsableDesdeAmbiente}
+        onCreated={(nuevo) => {
+          setCreateResponsableId(nuevo.id);
+          setCreateResponsableOpen(false);
+        }}
+      />
+
       <Dialog
         open={!!editAmbiente}
-        onClose={() => {
-          setEditAmbiente(null);
-          setError(null);
-        }}
+        onClose={closeEditAmbiente}
         title="Editar ambiente"
         description={editAmbiente?.nombre}
       >
         {editAmbiente && (
           <form onSubmit={(e) => void handleEditAmbiente(e)} className="space-y-4">
-            <AmbienteFormFields ambiente={editAmbiente} sedes={sedes} responsables={responsables} />
+            <AmbienteFormFields
+              ambiente={editAmbiente}
+              sedes={sedes}
+              responsables={responsables}
+              responsableId={editResponsableId}
+              onResponsableIdChange={setEditResponsableId}
+              onRequestCreateResponsable={() => setEditResponsableOpen(true)}
+            />
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditAmbiente(null)}>
+              <Button type="button" variant="outline" onClick={closeEditAmbiente}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={pending}>
@@ -928,6 +1054,16 @@ export function AmbientesView({
           </form>
         )}
       </Dialog>
+
+      <CrearResponsableDialog
+        open={Boolean(editAmbiente) && editResponsableOpen}
+        onClose={() => setEditResponsableOpen(false)}
+        onCreate={createResponsableDesdeAmbiente}
+        onCreated={(nuevo) => {
+          setEditResponsableId(nuevo.id);
+          setEditResponsableOpen(false);
+        }}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget}

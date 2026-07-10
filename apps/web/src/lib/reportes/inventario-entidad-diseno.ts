@@ -1,4 +1,5 @@
 import type { Range, WorkSheet } from "xlsx-js-style";
+import { labelFechaCorte, labelFechaEmision } from "@inventario/types";
 import {
   STYLE_HEADER_BOLD,
   STYLE_HEADER_NORMAL,
@@ -7,6 +8,7 @@ import {
   setCell,
 } from "./excel-styles";
 import type { ReporteContexto, ReporteId } from "./types";
+import { esReporteAdquiridosEjercicio, tituloReporteAdquiridosEjercicio } from "./ejercicio";
 
 export const ACTA_DE_INVENTARIO_ACTIVOS_FIJOS_GENERAL_TITULO =
   "ACTA DE INVENTARIO DE ACTIVOS FIJOS GENERAL";
@@ -19,27 +21,17 @@ export const INVENTARIO_ACTIVOS_VALORIZADOS_GENERAL_TITULO =
 
 export const REPORTE_BAJAS_TITULO = "REPORTE DE BAJAS DE ACTIVOS FIJOS";
 
+export const REPORTE_ACTIVOS_ESTADO_MALO_TITULO = "REPORTE DE ACTIVOS EN ESTADO MALO";
+
 const REPORTES_ENTIDAD_DISENO: ReporteId[] = [
   "inventario_entidad_sin_valores",
   "inventario_entidad_activos_fijos",
   "inventario_entidad_valorizado",
   "reporte_bajas",
+  "reporte_activos_estado_malo",
+  "reporte_adquiridos_ejercicio_actual",
+  "reporte_adquiridos_ejercicio_anterior",
 ];
-
-const MESES_LARGO_ES = [
-  "enero",
-  "febrero",
-  "marzo",
-  "abril",
-  "mayo",
-  "junio",
-  "julio",
-  "agosto",
-  "septiembre",
-  "octubre",
-  "noviembre",
-  "diciembre",
-] as const;
 
 export function esReporteEntidadDiseno(reporteId: ReporteId): boolean {
   return REPORTES_ENTIDAD_DISENO.includes(reporteId);
@@ -49,8 +41,12 @@ export function reporteEntidadIncluyeFirmas(reporteId: ReporteId): boolean {
   return reporteId === "inventario_entidad_sin_valores";
 }
 
-export function tituloReporteEntidadDiseno(reporteId: ReporteId): string {
+export function tituloReporteEntidadDiseno(reporteId: ReporteId, fechaCorte?: string): string {
   if (reporteId === "reporte_bajas") return REPORTE_BAJAS_TITULO;
+  if (reporteId === "reporte_activos_estado_malo") return REPORTE_ACTIVOS_ESTADO_MALO_TITULO;
+  if (esReporteAdquiridosEjercicio(reporteId)) {
+    return tituloReporteAdquiridosEjercicio(reporteId, fechaCorte);
+  }
   if (reporteId === "inventario_entidad_sin_valores") {
     return ACTA_DE_INVENTARIO_ACTIVOS_FIJOS_GENERAL_TITULO;
   }
@@ -61,17 +57,11 @@ export function tituloReporteEntidadDiseno(reporteId: ReporteId): string {
 }
 
 export function buildEntidadActualizacionLabel(fechaCorte: string): string {
-  const match = fechaCorte.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) return `Actualización al ${fechaCorte}`;
-  const day = Number(match[3]);
-  const month = MESES_LARGO_ES[Number(match[2]) - 1];
-  const year = match[1];
-  if (!month) return `Actualización al ${fechaCorte}`;
-  return `Actualización al ${day} de ${month} de ${year}`;
+  return labelFechaCorte(fechaCorte);
 }
 
 export function measureEntidadDisenoHeaderEndY(startY = 10): number {
-  return startY + 5 + 5 + 4 + 3;
+  return startY + 5 + 5 + 4 + 4 + 3;
 }
 
 export function entidadDisenoExportFilename(ctx: ReporteContexto): string {
@@ -88,6 +78,9 @@ export function entidadDisenoExportFilename(ctx: ReporteContexto): string {
     inventario_entidad_activos_fijos: "inventario-activos-fijos-general",
     inventario_entidad_valorizado: "inventario-activos-valorizados-general",
     reporte_bajas: "reporte-bajas",
+    reporte_activos_estado_malo: "reporte-activos-estado-malo",
+    reporte_adquiridos_ejercicio_actual: "adquiridos-ejercicio-actual",
+    reporte_adquiridos_ejercicio_anterior: "adquiridos-ejercicio-anterior",
   };
   const prefijo = prefijos[ctx.reporteId] ?? "inventario-entidad";
   return `${prefijo}-${slug}-${fecha}`;
@@ -107,15 +100,19 @@ export function addEntidadDisenoHeaderPdf(
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.text(tituloReporteEntidadDiseno(ctx.reporteId), margin, y);
+  doc.text(tituloReporteEntidadDiseno(ctx.reporteId, ctx.fechaCorte ?? undefined), margin, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.text(`Registros: ${totalRegistros}`, pageW - margin, y, { align: "right" });
   y += 5;
 
   doc.setFontSize(9);
-  doc.text(buildEntidadActualizacionLabel(ctx.fechaCorte), margin, y);
-  y += 5;
+  doc.text(labelFechaEmision(ctx.fechaGeneracion), margin, y);
+  y += 4;
+  if (ctx.fechaCorte && !esReporteAdquiridosEjercicio(ctx.reporteId)) {
+    doc.text(labelFechaCorte(ctx.fechaCorte), margin, y);
+    y += 4;
+  }
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
@@ -191,7 +188,7 @@ export function writeEntidadDisenoHeader(
   const split = Math.max(Math.floor(colCount / 2) - 1, 0);
   let r = 0;
 
-  setCell(ws, r, 0, tituloReporteEntidadDiseno(ctx.reporteId), STYLE_HEADER_TITLE);
+  setCell(ws, r, 0, tituloReporteEntidadDiseno(ctx.reporteId, ctx.fechaCorte ?? undefined), STYLE_HEADER_TITLE);
   setCell(ws, r, split + 1, `Registros: ${totalRegistros}`, {
     ...STYLE_HEADER_NORMAL,
     alignment: { horizontal: "right", vertical: "center", wrapText: true },
@@ -200,9 +197,15 @@ export function writeEntidadDisenoHeader(
   if (split + 1 < lastCol) addMerge(merges, r, split + 1, lastCol);
   r++;
 
-  setCell(ws, r, 0, buildEntidadActualizacionLabel(ctx.fechaCorte), STYLE_HEADER_NORMAL);
+  setCell(ws, r, 0, labelFechaEmision(ctx.fechaGeneracion), STYLE_HEADER_NORMAL);
   addMerge(merges, r, 0, lastCol);
   r++;
+
+  if (ctx.fechaCorte && !esReporteAdquiridosEjercicio(ctx.reporteId)) {
+    setCell(ws, r, 0, labelFechaCorte(ctx.fechaCorte), STYLE_HEADER_NORMAL);
+    addMerge(merges, r, 0, lastCol);
+    r++;
+  }
 
   setCell(ws, r, 0, ctx.entidadNombre.toUpperCase(), STYLE_HEADER_BOLD);
   addMerge(merges, r, 0, lastCol);

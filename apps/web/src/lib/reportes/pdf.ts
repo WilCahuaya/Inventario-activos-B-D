@@ -1,5 +1,5 @@
 import { formatMonedaPE } from "@inventario/types";
-import { buildInstitutionalHeader } from "./header-meta";
+import { buildInstitutionalHeader, fechaCorteCalculo } from "./header-meta";
 import {
   addAmbienteDisenoHeaderPdf,
   addFichaAsignacionFirmasPdf,
@@ -81,11 +81,13 @@ function addInstitutionalHeader(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.text(header.generado, pageW - margin, y, { align: "right" });
+  doc.text(header.fechaEmision, pageW - margin, y, { align: "right" });
   y += 4;
 
   doc.text(header.productoRuc, margin, y);
-  doc.text(header.fechaCorte, pageW - margin, y, { align: "right" });
+  if (header.fechaCorte) {
+    doc.text(header.fechaCorte, pageW - margin, y, { align: "right" });
+  }
   y += 5;
 
   doc.setFont("helvetica", "bold");
@@ -127,11 +129,11 @@ export async function exportReportePdf(
   const { default: autoTable } = await import("jspdf-autotable");
 
   const def = REPORTES.find((r) => r.id === ctx.reporteId)!;
-  const fechaCorte = new Date(ctx.fechaCorte + "T12:00:00");
+  const fechaCorte = fechaCorteCalculo(ctx);
   const useAmbienteDiseno = esReporteAmbienteDiseno(ctx.reporteId);
   const useEntidadDiseno = esReporteEntidadDiseno(ctx.reporteId);
   const useDisenoExtendido = esReporteDisenoExtendido(ctx.reporteId);
-  const titulo = reporteTitulo(ctx.reporteId, def.valorizado);
+  const titulo = reporteTitulo(ctx.reporteId, def.valorizado, ctx.fechaCorte ?? undefined);
   const headerDefs = reporteTableHeaderDefs(ctx.reporteId, def.valorizado);
   const pdfHead = buildPdfTableHead(headerDefs);
   const multilineHead = reporteHeaderMultilinea(headerDefs);

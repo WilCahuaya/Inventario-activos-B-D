@@ -6,6 +6,9 @@ import type { Activo, Ambiente, CatalogoNacional, CategoriaBien, Entidad, Sede }
 import {
   CATEGORIA_BIEN_AYUDA,
   CATEGORIA_BIEN_LABELS,
+  CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+  activoTieneCuentaContablePropia,
+  applyCuentaContableToPayloadIfProvided,
   assessLabelPrintWarnings,
   buildNombreConsolidado,
   calcDepreciacionAcumulada,
@@ -23,7 +26,12 @@ import {
   resolveNombreEtiqueta,
   suggestNombreEtiqueta,
   validarFechaDDMMYYYY,
+  validarCuentaContableParaCatalogo,
   vidaUtilMesesFromPorcentaje,
+  debePersistirCuentaContableEnActivo,
+  entidadMuestraSelectorSede,
+  sedeIdSinSelector,
+  splitObservacionActivo,
   type ActivoAtributoCampo,
   type UpdateActivosSimilaresInput,
 } from "@inventario/types";
@@ -33,6 +41,7 @@ import {
   CatalogoPicker,
   CategoriaBienSelector,
   ConfirmDialog,
+  CuentaContableFields,
   FileInput,
   Input,
   Label,
@@ -44,14 +53,13 @@ import {
 import {
   createActivo,
   previewCodigoBarras,
-  cambiarUbicacionActivo,
   updateActivo,
   updateActivoPaths,
   updateActivosSimilares,
   type UpdateActivoInput,
 } from "@/lib/actions/activos";
 import { suggestActivoAtributo } from "@/lib/actions/atributo-vocab";
-import { getCatalogoByCodigo, searchCatalogo } from "@/lib/actions/catalogo";
+import { getCatalogoByCodigo, searchCatalogo, searchCuentasContables, upsertCuentaContable } from "@/lib/actions/catalogo";
 import { createAmbiente, createSede, getAmbiente, listAmbientes, listSedes } from "@/lib/actions/ubicacion";
 import { uploadActivoFile } from "@/lib/upload-activo-file";
 import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
@@ -78,6 +86,8 @@ interface ActivoFormProps {
   variant?: "page" | "modal";
   onSuccess?: () => void;
   onCancel?: () => void;
+  /** Código de catálogo nacional a precargar al crear (8 dígitos). */
+  initialCatalogoCodigo?: string;
 }
 
 function formatSoles(value: number | null) {
@@ -101,6 +111,7 @@ export function ActivoForm({
   variant = "page",
   onSuccess,
   onCancel,
+  initialCatalogoCodigo,
 }: ActivoFormProps) {
   const isEdit = mode === "edit" && Boolean(activo);
   const esEdicionMasiva = Boolean(
@@ -123,6 +134,8 @@ export function ActivoForm({
   const [nombreEtiqueta, setNombreEtiqueta] = useState("");
   const [categoria, setCategoria] = useState<CategoriaBien>("ACTIVO");
   const mostrarDepreciacion = categoria !== "CUENTA_ORDEN" && !esPreregistroAdmin;
+  const mostrarCuentaContable =
+    asignaCodigoInmediato && !soloUbicacionEdit && !esEdicionMasiva;
   const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">("BUENO");
   const [marca, setMarca] = useState("");
   const [modelo, setModelo] = useState("");
@@ -137,6 +150,7 @@ export function ActivoForm({
   const [fechaAdquisicion, setFechaAdquisicion] = useState("");
   const [fechaAdquisicionError, setFechaAdquisicionError] = useState<string | null>(null);
   const [observacion, setObservacion] = useState("");
+  const [observacionAdmin, setObservacionAdmin] = useState("");
   const [entidadId, setEntidadId] = useState(fixedEntidadId ?? "");
   const [codigoBarrasPreview, setCodigoBarrasPreview] = useState<string | null>(null);
   const [sedes, setSedes] = useState<Sede[]>([]);
@@ -150,6 +164,9 @@ export function ActivoForm({
   const [nuevoAmbiente, setNuevoAmbiente] = useState("");
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [comprobanteSerie, setComprobanteSerie] = useState("");
+  const [cuentaCodigo, setCuentaCodigo] = useState("");
+  const [cuentaNombre, setCuentaNombre] = useState("");
+  const cuentaReferenciaRef = useRef({ codigo: "", nombre: "" });
   const [serieDialogOpen, setSerieDialogOpen] = useState(false);
 
   const searchAtributo = useCallback(
@@ -171,6 +188,17 @@ export function ActivoForm({
     () => resolveNombreEtiqueta(entidadNombre, entidadSeleccionada?.nombre_etiqueta),
     [entidadNombre, entidadSeleccionada?.nombre_etiqueta],
   );
+  const observacionPartes = useMemo(
+    () => splitObservacionActivo(activo?.observacion),
+    [activo?.observacion],
+  );
+
+  useEffect(() => {
+    if (!initialCatalogoCodigo || isEdit) return;
+    void getCatalogoByCodigo(initialCatalogoCodigo).then((item) => {
+      if (item) setCatalogo(item);
+    });
+  }, [initialCatalogoCodigo, isEdit]);
 
   useEffect(() => {
     if (!activo || !isEdit) return;
@@ -195,9 +223,17 @@ export function ActivoForm({
     setValorEsMercado(activo.valor_es_mercado);
     setFechaAdquisicion(formatFechaISOToDDMMYYYY(activo.fecha_adquisicion));
     setObservacion(activo.observacion ?? "");
+    setObservacionAdmin(splitObservacionActivo(activo.observacion).admin);
     setComprobanteSerie(
       activo.comprobante_serie ? formatComprobanteSerieInput(activo.comprobante_serie) : "",
     );
+    if (activoTieneCuentaContablePropia(activo)) {
+      const codigo = activo.cuenta_contable_codigo ?? "";
+      const nombre = activo.cuenta_contable_nombre ?? "";
+      setCuentaCodigo(codigo);
+      setCuentaNombre(nombre);
+      cuentaReferenciaRef.current = { codigo, nombre };
+    }
     setCodigoBarrasPreview(activo.codigo_barras);
     if (activo.sede_id) setSedeId(activo.sede_id);
     if (activo.ambiente_id) setAmbienteId(activo.ambiente_id);
@@ -228,11 +264,51 @@ export function ActivoForm({
   }, [catalogo?.codigo, mostrarDepreciacion]);
 
   useEffect(() => {
+    if (!catalogo || isEdit) return;
+    if (categoria === "CUENTA_ORDEN") {
+      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+      setCuentaNombre("");
+      cuentaReferenciaRef.current = {
+        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+        nombre: "",
+      };
+      return;
+    }
+    const codigo = catalogo.cuenta_codigo ?? "";
+    const nombre = catalogo.contabilidad ?? "";
+    setCuentaCodigo(codigo);
+    setCuentaNombre(nombre);
+    cuentaReferenciaRef.current = { codigo, nombre };
+  }, [catalogo?.codigo, isEdit, categoria]);
+
+  useEffect(() => {
+    if (!isEdit || !activo || !catalogo || activoTieneCuentaContablePropia(activo)) return;
+    if (categoria === "CUENTA_ORDEN") {
+      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+      setCuentaNombre("");
+      cuentaReferenciaRef.current = {
+        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
+        nombre: "",
+      };
+      return;
+    }
+    const codigo = catalogo.cuenta_codigo ?? "";
+    const nombre = catalogo.contabilidad ?? "";
+    setCuentaCodigo(codigo);
+    setCuentaNombre(nombre);
+    cuentaReferenciaRef.current = { codigo, nombre };
+  }, [isEdit, activo, catalogo?.codigo, categoria]);
+
+  useEffect(() => {
     if (categoria === "CUENTA_ORDEN") {
       setDepreciacion("");
       setVidaUtilMeses("");
+      if (mostrarCuentaContable) {
+        setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+        setCuentaNombre("");
+      }
     }
-  }, [categoria]);
+  }, [categoria, mostrarCuentaContable]);
 
   function handleDepreciacionChange(value: string) {
     setDepreciacion(value);
@@ -265,6 +341,8 @@ export function ActivoForm({
     void previewCodigoBarras(entidadEfectiva, catalogo.codigo).then(setCodigoBarrasPreview);
   }, [entidadEfectiva, catalogo?.codigo, asignaCodigoInmediato]);
 
+  const mostrarSelectorSede = entidadMuestraSelectorSede(sedes);
+
   useEffect(() => {
     if (fixedSedeId && !soloUbicacionEdit) {
       setSedeId(fixedSedeId);
@@ -277,7 +355,11 @@ export function ActivoForm({
     }
     void listSedes(entidadEfectiva).then((data) => {
       setSedes(data);
-      if (data.length === 1 && !soloUbicacionEdit) setSedeId(data[0].id);
+      if (!soloUbicacionEdit) {
+        setSedeId(sedeIdSinSelector(data) ?? "");
+        const implicitId = sedeIdSinSelector(data);
+        if (implicitId && !posibleSedeId) setPosibleSedeId(implicitId);
+      }
     });
   }, [entidadEfectiva, fixedSedeId, soloUbicacionEdit]);
 
@@ -300,12 +382,13 @@ export function ActivoForm({
   }, [sedeId, soloUbicacionEdit, ambienteId]);
 
   useEffect(() => {
-    if (!posibleSedeId) {
+    const sedePosible = posibleSedeId || sedeIdSinSelector(sedes);
+    if (!sedePosible) {
       setPosibleAmbientes([]);
       return;
     }
-    void listAmbientes(posibleSedeId).then(setPosibleAmbientes);
-  }, [posibleSedeId]);
+    void listAmbientes(sedePosible).then(setPosibleAmbientes);
+  }, [posibleSedeId, sedes]);
 
   const fechaAdquisicionIso = useMemo(
     () => (fechaAdquisicion.trim() ? parseFechaDDMMYYYY(fechaAdquisicion) : null),
@@ -446,7 +529,14 @@ export function ActivoForm({
             sede_id: sedeId,
             ambiente_id: ambienteId,
           })
-        : await cambiarUbicacionActivo(activo.id, sedeId, ambienteId);
+        : await updateActivo(activo.id, {
+            codigo_catalogo: activo.codigo_catalogo,
+            nombre: activo.nombre,
+            sede_id: sedeId,
+            ambiente_id: ambienteId,
+            estado_bien: estadoBien,
+            observacion_admin: observacionAdmin,
+          });
 
       setPending(false);
       if (result.error) {
@@ -458,7 +548,7 @@ export function ActivoForm({
           `${"data" in result && result.data ? (result.data as { actualizados?: number }).actualizados : ejemplaresTotal} ejemplares actualizados.`,
         );
       } else {
-        setMessage("Ubicación actualizada correctamente.");
+        setMessage("Bien actualizado correctamente.");
       }
       onSuccess?.();
       return;
@@ -510,6 +600,19 @@ export function ActivoForm({
       return;
     }
 
+    if (
+      mostrarCuentaContable &&
+      categoria === "ACTIVO" &&
+      (cuentaCodigo.trim() || cuentaNombre.trim())
+    ) {
+      const cuentaError = validarCuentaContableParaCatalogo(cuentaCodigo, cuentaNombre);
+      if (cuentaError) {
+        setPending(false);
+        setMessage(cuentaError);
+        return;
+      }
+    }
+
     const payload: UpdateActivoInput = {
       codigo_catalogo: catalogo.codigo,
       nombre: nombre.trim() || catalogo.denominacion,
@@ -545,6 +648,20 @@ export function ActivoForm({
         depreciacion: depreciacion || undefined,
         vida_util_meses: vidaUtilMeses ? Number(vidaUtilMeses) : undefined,
       });
+    }
+    if (
+      mostrarCuentaContable &&
+      debePersistirCuentaContableEnActivo({
+        esEdicion: Boolean(isEdit && activo),
+        activoTienePropia: activo ? activoTieneCuentaContablePropia(activo) : false,
+        cuentaCodigo,
+        cuentaNombre,
+        referenciaCodigo: cuentaReferenciaRef.current.codigo,
+        referenciaNombre: cuentaReferenciaRef.current.nombre,
+      })
+    ) {
+      payload.cuenta_contable_codigo = cuentaCodigo.trim() || null;
+      payload.cuenta_contable_nombre = cuentaNombre.trim() || null;
     }
 
     let bulkPatch: UpdateActivosSimilaresInput | null = null;
@@ -659,21 +776,24 @@ export function ActivoForm({
   const isGridForm = variant === "modal" || variant === "page";
   const formGridClass =
     isGridForm && soloUbicacionEdit
-      ? "grid min-w-0 grid-cols-1 gap-4"
+      ? "grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-5"
       : isGridForm
         ? "grid min-w-0 grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2"
         : "space-y-6";
+  const colSpanHalf = soloUbicacionEdit ? "md:col-span-1" : "lg:col-span-1";
+  const colSpanFull = soloUbicacionEdit ? "md:col-span-2" : "lg:col-span-2";
   const fieldsetCompact = isGridForm
-    ? `${panelFieldsetClass} lg:col-span-1`
+    ? `${panelFieldsetClass} ${colSpanHalf}`
     : panelFieldsetClass;
   const fieldsetWide = isGridForm
-    ? `${panelFieldsetClass} col-span-1 lg:col-span-2`
+    ? `${panelFieldsetClass} col-span-1 ${colSpanFull}`
     : panelFieldsetClass;
+  const fieldsetUbicacionAdmin = soloUbicacionEdit ? fieldsetCompact : fieldsetWide;
   const categoriaGridClass = isGridForm ? "grid gap-3 sm:grid-cols-2" : "space-y-3";
   const detalleGridClass = isGridForm
     ? "grid min-w-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4"
     : "grid gap-4 sm:grid-cols-2 lg:grid-cols-4";
-  const actionsBottomRight = isGridForm && !soloUbicacionEdit;
+  const actionsBottomRight = isGridForm;
   const messageToneClass =
     message &&
     (message.includes("Error") ||
@@ -709,9 +829,9 @@ export function ActivoForm({
       }
     >
       {variant === "page" && !onCancel && (
-        <p className="col-span-1 text-sm font-medium lg:col-span-2">
+        <p className={`col-span-1 text-sm font-medium ${colSpanFull}`}>
           {soloUbicacionEdit
-            ? "Editar ubicación"
+            ? "Editar bien"
             : isEdit
               ? "Editar activo"
               : "Nuevo activo"}
@@ -733,7 +853,7 @@ export function ActivoForm({
       )}
 
       {soloUbicacionEdit && activo && (
-        <div className="col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 lg:col-span-2">
+        <div className={`col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 ${colSpanFull}`}>
           <p className="font-semibold text-foreground">{activo.nombre}</p>
           <p className="font-mono text-xs text-muted-foreground">
             {activo.codigo_barras ?? activo.codigo_catalogo}
@@ -741,7 +861,7 @@ export function ActivoForm({
           <p className="text-xs text-muted-foreground">
             {esEdicionMasiva
               ? `Seleccione sede y ambiente. Se moverán los ${ejemplaresTotal} ejemplares.`
-              : "Seleccione la sede y el ambiente de destino. El bien se moverá dentro de su entidad."}
+              : "Puede cambiar ubicación, estado del bien y agregar observaciones del administrador."}
           </p>
         </div>
       )}
@@ -924,6 +1044,8 @@ export function ActivoForm({
             setNombreEtiqueta("");
             setDepreciacion("");
             setVidaUtilMeses("");
+            setCuentaCodigo("");
+            setCuentaNombre("");
           }}
           renderAddMissing={(q) => (
             <Link
@@ -969,6 +1091,20 @@ export function ActivoForm({
             onChange={(e) => setNombre(e.target.value)}
           />
         </div>
+
+        {mostrarCuentaContable && (
+          <CuentaContableFields
+            codigo={cuentaCodigo}
+            nombre={cuentaNombre}
+            onCodigoChange={setCuentaCodigo}
+            onNombreChange={setCuentaNombre}
+            searchCuentas={searchCuentasContables}
+            onCreateCuenta={upsertCuentaContable}
+            disabled={pending || categoria === "CUENTA_ORDEN"}
+            codigoId="activo_cuenta_codigo"
+            allowCreateNew={categoria !== "CUENTA_ORDEN"}
+          />
+        )}
 
         {mostrarNombreEtiqueta && (
         <div className="space-y-2">
@@ -1271,7 +1407,7 @@ export function ActivoForm({
             Indique dónde podría ubicarse el bien (opcional). Al validar el preregistro se podrá
             confirmar o elegir otro ambiente.
           </p>
-          <div className="space-y-2">
+          <div className={mostrarSelectorSede ? "space-y-2" : "hidden"}>
             <Label htmlFor="posible_sede_id">Sede</Label>
             <Select
               id="posible_sede_id"
@@ -1286,7 +1422,7 @@ export function ActivoForm({
               ]}
             />
           </div>
-          {posibleSedeId && (
+          {(posibleSedeId || !mostrarSelectorSede) && (
             <div className="mt-3 space-y-2">
               <Label htmlFor="posible_ambiente_id">Ambiente</Label>
               <Select
@@ -1305,8 +1441,9 @@ export function ActivoForm({
 
       {/* Ubicación */}
       {!hideUbicacion && (
-      <fieldset className={fieldsetWide}>
+      <fieldset className={fieldsetUbicacionAdmin}>
         <legend className={panelLegendClass}>Ubicación</legend>
+        <div className={soloUbicacionEdit ? "grid gap-4" : undefined}>
         {!soloUbicacionEdit && sedes.length === 0 ? (
           <div className="flex flex-wrap gap-2">
             <Input
@@ -1319,7 +1456,7 @@ export function ActivoForm({
               Crear sede
             </Button>
           </div>
-        ) : (
+        ) : mostrarSelectorSede ? (
           <div className="space-y-2">
             <Label htmlFor="sede_id">Sede</Label>
             <Select
@@ -1336,7 +1473,7 @@ export function ActivoForm({
               ]}
             />
           </div>
-        )}
+        ) : null}
 
         {sedeId && (
           <div className="space-y-2">
@@ -1366,24 +1503,69 @@ export function ActivoForm({
             )}
           </div>
         )}
+        </div>
       </fieldset>
       )}
 
+      {soloUbicacionEdit && !esEdicionMasiva && (
+        <>
+          <fieldset className={fieldsetCompact}>
+            <legend className={panelLegendClass}>Estado del bien</legend>
+            <div className="space-y-2">
+              <Label htmlFor="estado_bien_admin">Estado</Label>
+              <Select
+                id="estado_bien_admin"
+                value={estadoBien}
+                onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+                options={[
+                  { value: "BUENO", label: "Bueno" },
+                  { value: "REGULAR", label: "Regular" },
+                  { value: "MALO", label: "Malo" },
+                ]}
+              />
+            </div>
+          </fieldset>
+
+          <fieldset className={fieldsetWide}>
+            <legend className={panelLegendClass}>Observaciones</legend>
+            <div className={`grid gap-4 ${soloUbicacionEdit ? "md:grid-cols-2" : "lg:grid-cols-2"}`}>
+              {observacionPartes.contador ? (
+                <div className="space-y-1 rounded-md border border-border/50 bg-muted/20 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Contador</p>
+                  <p className="whitespace-pre-wrap text-sm text-foreground">{observacionPartes.contador}</p>
+                </div>
+              ) : null}
+              <div className={`space-y-2 ${observacionPartes.contador ? "" : soloUbicacionEdit ? "md:col-span-2" : "lg:col-span-2"}`}>
+              <Label htmlFor="observacion_admin">Observación (administrador)</Label>
+              <Textarea
+                id="observacion_admin"
+                className="min-h-[80px] text-blue-600 dark:text-blue-400"
+                value={observacionAdmin}
+                onChange={(e) => setObservacionAdmin(e.target.value)}
+                placeholder="Notas del administrador. Si cambia el estado sin escribir nada, se registrará automáticamente."
+              />
+              <p className="text-xs text-muted-foreground">
+                No puede modificar las observaciones del contador. Su texto se muestra en azul.
+              </p>
+              </div>
+            </div>
+          </fieldset>
+        </>
+      )}
+
       {message && !actionsBottomRight && (
-        <p
-          className={`col-span-1 text-sm lg:col-span-2 ${messageToneClass}`}
-        >
+        <p className={`col-span-1 text-sm ${colSpanFull} ${messageToneClass}`}>
           {message}
         </p>
       )}
 
       {actionsBottomRight ? (
-        <div className="col-span-1 flex flex-col items-end gap-2 lg:col-start-2">
+        <div className={`col-span-1 flex flex-col items-end gap-2 ${soloUbicacionEdit ? "md:col-start-2" : "lg:col-start-2"}`}>
           {message && <p className={`text-sm ${messageToneClass}`}>{message}</p>}
           {formActionButtons}
         </div>
       ) : (
-      <div className={isGridForm ? "col-span-1 flex flex-wrap gap-2 lg:col-span-2" : undefined}>
+      <div className={isGridForm ? `col-span-1 flex flex-wrap gap-2 ${colSpanFull}` : undefined}>
         {formActionButtons}
       </div>
       )}
