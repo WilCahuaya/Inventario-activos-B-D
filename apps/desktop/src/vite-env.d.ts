@@ -15,11 +15,13 @@ interface Window {
     platform: string;
     authCallbackPath: string;
     authCallbackUrl: string;
+    authDesktopRedirectUrl?: string;
     beginGoogleAuth: () => Promise<void>;
     cancelGoogleAuth: () => Promise<void>;
     getAuthDiagnostics: () => Promise<{
       ok: boolean;
       callbackUrl: string;
+      localCallbackUrl?: string;
       callbackPort: number;
       platform: string;
       error?: string;

@@ -51,10 +51,16 @@ Agregar estas **Redirect URLs**:
 ```
 http://localhost:3000/auth/callback
 http://localhost:5173/auth/callback
+http://localhost:54324/auth/callback
+http://127.0.0.1:54324/auth/callback
+pe.bdconsultores.inventario://auth/callback
+https://bdconsultores.vercel.app/auth/callback
+https://bdconsultores.vercel.app/auth/desktop-bridge
 ```
 
-> En producción agregar también:  
-> `https://tu-dominio.vercel.app/auth/callback`
+> **Site URL** recomendado: `https://bdconsultores.vercel.app` (no use `https://bdconsultores.org`).
+
+**Escritorio:** tras Google, Supabase debe ir al puente `/auth/desktop-bridge`, que reenvía el `code` a `localhost:54324` sin consumirlo (PKCE en Electron). Si abre `bdconsultores.org`, falta el puente en Redirect URLs o el Site URL está mal.
 
 ### 2.3 (Opcional) Restringir dominios
 
@@ -96,8 +102,8 @@ pnpm dev:desktop
 ```
 
 1. Clic en **Continuar con Google**
-2. Se abre ventana de Google dentro de Electron
-3. Tras autorizar → vuelve al panel con su email
+2. Se abre una ventana de la app para Google
+3. Tras autorizar → la app continúa con su email (aunque el redirect pase por el Site URL)
 
 ---
 
@@ -106,8 +112,9 @@ pnpm dev:desktop
 | Error | Solución |
 |---|---|
 | `redirect_uri_mismatch` | URI en Google Cloud debe ser `https://REF.supabase.co/auth/v1/callback` |
+| Desktop no completa login / abre bdconsultores.org | Agregar `http://localhost:54324/auth/callback` (y `127.0.0.1`) en Redirect URLs; Site URL = app Vercel, no el sitio .org |
 | Vuelve a login sin sesión | Agregar `http://localhost:3000/auth/callback` en Supabase Redirect URLs |
-| Desktop no completa login | Agregar `http://localhost:5173/auth/callback` en Redirect URLs |
+| Desktop (Vite) no completa login | Agregar `http://localhost:5173/auth/callback` en Redirect URLs |
 | `Access blocked: app not verified` | Completar OAuth consent screen o usar cuentas de prueba en External |
 
 ---

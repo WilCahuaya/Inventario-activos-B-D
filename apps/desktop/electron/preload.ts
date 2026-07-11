@@ -1,13 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
+  buildDesktopOAuthRedirectUrl,
   DESKTOP_OAUTH_REDIRECT_URL,
   OAUTH_CALLBACK_PATH,
 } from "../shared/auth/constants";
+import { getSiteOrigin } from "./env";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   authCallbackPath: OAUTH_CALLBACK_PATH,
   authCallbackUrl: DESKTOP_OAUTH_REDIRECT_URL,
+  authDesktopRedirectUrl: buildDesktopOAuthRedirectUrl(getSiteOrigin()),
   beginGoogleAuth: () => ipcRenderer.invoke("auth:begin"),
   cancelGoogleAuth: () => ipcRenderer.invoke("auth:cancel"),
   getAuthDiagnostics: () =>

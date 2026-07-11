@@ -32,7 +32,12 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = [
   "http://localhost:3000/auth/callback",
-  "http://localhost:5173/auth/callback"
+  "http://localhost:5173/auth/callback",
+  "http://localhost:54324/auth/callback",
+  "http://127.0.0.1:54324/auth/callback",
+  "pe.bdconsultores.inventario://auth/callback",
+  "https://bdconsultores.vercel.app/auth/callback",
+  "https://bdconsultores.vercel.app/auth/desktop-bridge"
 ]
 jwt_expiry = 3600
 enable_signup = false

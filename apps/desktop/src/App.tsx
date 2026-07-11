@@ -162,8 +162,8 @@ function LoginForm() {
         </p>
         {loading && (
           <p className="mb-4 text-center text-sm text-slate-500 dark:text-slate-400">
-            Se abrirá su navegador (Chrome o Edge). Complete el acceso allí y regrese a esta
-            ventana.
+            Se abrirá su navegador (Chrome o Edge). Complete el acceso allí; la aplicación
+            continuará sola.
           </p>
         )}
         {error && <p className="bd-portal-error">{error}</p>}

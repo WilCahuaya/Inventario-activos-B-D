@@ -1,0 +1,11 @@
+# Evita subir artefactos enormes en `vercel deploy` local
+node_modules
+**/node_modules
+.pnpm-store
+apps/desktop/release
+**/dist
+**/dist-electron
+**/.next
+**/.turbo
+**/*.db
+.git

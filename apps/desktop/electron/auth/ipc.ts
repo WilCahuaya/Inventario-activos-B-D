@@ -1,8 +1,10 @@
 import { ipcMain } from "electron";
 import {
+  buildDesktopOAuthRedirectUrl,
   DESKTOP_OAUTH_REDIRECT_URL,
   OAUTH_CALLBACK_PORT,
 } from "../../shared/auth/constants";
+import { getSiteOrigin } from "../env";
 import { ensureOAuthCallbackServer } from "./callback-server";
 import type { GoogleAuthFlowDeps } from "./google-flow";
 import { runGoogleAuthFlow } from "./google-flow";
@@ -17,18 +19,21 @@ export function registerAuthIpcHandlers(getDeps: () => GoogleAuthFlowDeps): void
   });
 
   ipcMain.handle("auth:diagnostics", async () => {
+    const desktopRedirect = buildDesktopOAuthRedirectUrl(getSiteOrigin());
     try {
       await ensureOAuthCallbackServer();
       return {
         ok: true,
-        callbackUrl: DESKTOP_OAUTH_REDIRECT_URL,
+        callbackUrl: desktopRedirect,
+        localCallbackUrl: DESKTOP_OAUTH_REDIRECT_URL,
         callbackPort: OAUTH_CALLBACK_PORT,
         platform: process.platform,
       };
     } catch (error) {
       return {
         ok: false,
-        callbackUrl: DESKTOP_OAUTH_REDIRECT_URL,
+        callbackUrl: desktopRedirect,
+        localCallbackUrl: DESKTOP_OAUTH_REDIRECT_URL,
         callbackPort: OAUTH_CALLBACK_PORT,
         platform: process.platform,
         error: error instanceof Error ? error.message : "Error desconocido",

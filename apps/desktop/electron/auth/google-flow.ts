@@ -1,11 +1,13 @@
 import type { BrowserWindow } from "electron";
 import {
-  DESKTOP_OAUTH_REDIRECT_URL,
-  isAuthCallbackUrl,
+  buildDesktopOAuthRedirectUrl,
+  isDesktopOAuthResultUrl,
   OAUTH_CALLBACK_PORT,
 } from "../../shared/auth/constants";
 import { ensureDesktopOAuthRedirect, extractOAuthRedirectTo } from "../../shared/auth/oauth-url";
+import { getSiteOrigin } from "../env";
 import { ensureOAuthCallbackServer, setOAuthCallbackHandler } from "./callback-server";
+import { closeOAuthWindow } from "./oauth-window";
 import { openSystemBrowser } from "./open-browser";
 import { setProtocolAuthHandler } from "./protocol";
 import { stopSiteUrlCatchServer, tryEnsureSiteUrlCatchServer } from "./site-url-catch";
@@ -27,8 +29,10 @@ export async function runGoogleAuthFlow(
     throw new Error("URL de autenticación inválida");
   }
 
-  const fixedOAuthUrl = ensureDesktopOAuthRedirect(oauthUrl, DESKTOP_OAUTH_REDIRECT_URL);
+  const desktopRedirect = buildDesktopOAuthRedirectUrl(getSiteOrigin());
+  const fixedOAuthUrl = ensureDesktopOAuthRedirect(oauthUrl, desktopRedirect);
   console.info("[auth] redirect_to:", extractOAuthRedirectTo(fixedOAuthUrl));
+  console.info("[auth] desktop redirect target:", desktopRedirect);
 
   await ensureOAuthCallbackServer();
   await tryEnsureSiteUrlCatchServer();
@@ -37,9 +41,10 @@ export async function runGoogleAuthFlow(
 
   try {
     console.info(
-      "[auth] Abriendo Google en navegador externo. Callback en puerto",
+      "[auth] Abriendo Google en navegador del sistema. Callback local en puerto",
       OAUTH_CALLBACK_PORT,
     );
+    closeOAuthWindow();
     await openSystemBrowser(fixedOAuthUrl);
 
     return await new Promise<string>((resolve, reject) => {
@@ -50,6 +55,7 @@ export async function runGoogleAuthFlow(
         setOAuthCallbackHandler(null);
         setProtocolAuthHandler(null);
         stopSiteUrlCatchServer();
+        closeOAuthWindow();
         if (timeoutId) clearTimeout(timeoutId);
         deps.setOAuthInProgress(false);
       };
@@ -81,7 +87,7 @@ export async function runGoogleAuthFlow(
       };
 
       const handleAuthCallback = (callbackUrl: string) => {
-        if (!isAuthCallbackUrl(callbackUrl)) {
+        if (!isDesktopOAuthResultUrl(callbackUrl)) {
           console.warn("[auth] Callback ignorado:", callbackUrl);
           return;
         }
@@ -93,7 +99,10 @@ export async function runGoogleAuthFlow(
 
       timeoutId = setTimeout(() => {
         fail(
-          "Tiempo de espera agotado. Complete el inicio de sesión en el navegador o intente de nuevo.",
+          "Tiempo de espera agotado. Tras Google debe abrirse el puente " +
+            `(${desktopRedirect}) y luego localhost:${OAUTH_CALLBACK_PORT}. ` +
+            "En Supabase → Authentication → URL Configuration agregue ese puente en Redirect URLs " +
+            "y use Site URL = https://bdconsultores.vercel.app (no bdconsultores.org).",
         );
       }, AUTH_TIMEOUT_MS);
     });
@@ -102,6 +111,7 @@ export async function runGoogleAuthFlow(
     setOAuthCallbackHandler(null);
     setProtocolAuthHandler(null);
     stopSiteUrlCatchServer();
+    closeOAuthWindow();
     throw error instanceof Error ? error : new Error("No se pudo abrir el navegador");
   }
 }

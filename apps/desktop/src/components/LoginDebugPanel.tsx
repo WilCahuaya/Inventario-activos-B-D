@@ -52,9 +52,10 @@ export function LoginDebugPanel({ debug, forceVisible = false }: LoginDebugPanel
           </pre>
           {isDev && (
             <p className="text-[11px]">
-              Tras Google debe abrirse{" "}
-              <code className="text-foreground">http://localhost:54324/auth/callback</code> en el
-              navegador. Si el puerto 3000 está ocupado (app web), el login sigue usando el 54324.
+              Tras Google el navegador debe pasar por{" "}
+              <code className="text-foreground">…/auth/desktop-bridge</code> y luego{" "}
+              <code className="text-foreground">http://localhost:54324/auth/callback</code>. En
+              Supabase Redirect URLs agregue el puente Vercel.
             </p>
           )}
           <Button

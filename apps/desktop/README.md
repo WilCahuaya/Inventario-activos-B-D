@@ -88,7 +88,7 @@ apps/desktop/
 
 Flujo OAuth en escritorio:
 
-1. Supabase genera URL de Google con `redirect_to` corregido a `localhost:54324`.
-2. Se abre el navegador del sistema (Chrome/Edge).
-3. Si Supabase redirige al Site URL (`localhost:3000`), un servidor temporal reenvía a `:54324`.
-4. El servidor en `:54324` entrega tokens a la app y muestra «Inicio de sesión correcto».
+1. Supabase genera URL de Google con `redirect_to` = puente HTTPS (`…/auth/desktop-bridge`).
+2. Se abre el navegador del sistema (Chrome/Edge) — Google no bloquea Electron.
+3. El puente en Vercel reenvía el `code` a `http://localhost:54324/auth/callback` (sin canjearlo).
+4. El servidor local entrega el callback a la app; Electron hace el exchange PKCE.
