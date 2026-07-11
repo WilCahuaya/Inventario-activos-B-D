@@ -93,7 +93,10 @@ export function usesCode128SubsetC(symbol: string): boolean {
   return /^\d+$/.test(symbol) && symbol.length >= 4 && symbol.length % 2 === 0;
 }
 
-/** Payload ^FD para ^BCN: fuerza subset C en códigos numéricos pares (más estrecho y legible). */
+/**
+ * Payload ^FD para ^BCN: fuerza subset C en códigos numéricos pares (más estrecho y legible).
+ * Catálogo propio BD… ya viene como 24… vía formatCodigoBarrasSimbolo.
+ */
 export function code128ZplPayload(symbol: string): string {
   return usesCode128SubsetC(symbol) ? `>:${symbol}` : symbol;
 }

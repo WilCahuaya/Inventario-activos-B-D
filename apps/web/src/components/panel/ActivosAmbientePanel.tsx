@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Activo, EstadoRegistro } from "@inventario/types";
+import { matchesCodigoBarrasQuery } from "@inventario/types";
 import { useToast, mensajeEliminacionPreregistros } from "@inventario/ui";
 import {
   ActivoEditScopeNav,
@@ -223,8 +224,7 @@ export function ActivosAmbientePanel({
       if (!q) return true;
       return (
         a.nombre.toLowerCase().includes(q) ||
-        (a.codigo_barras?.toLowerCase().includes(q) ?? false) ||
-        a.codigo_catalogo.toLowerCase().includes(q) ||
+        matchesCodigoBarrasQuery(busqueda, a.codigo_barras, a.codigo_catalogo) ||
         (a.marca?.toLowerCase().includes(q) ?? false) ||
         (a.modelo?.toLowerCase().includes(q) ?? false)
       );

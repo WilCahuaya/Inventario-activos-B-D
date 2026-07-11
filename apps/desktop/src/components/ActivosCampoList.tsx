@@ -3,6 +3,7 @@ import type { Ambiente, Entidad, EstadoRegistro, Sede } from "@inventario/types"
 import {
   aniosAdquisicionDesdeActivos,
   entidadMuestraSelectorSede,
+  matchesCodigoBarrasQuery,
   pasoFiltroAnioAdquisicion,
   pasoFiltroSerieComprobante,
   seriesComprobanteDesdeActivos,
@@ -298,10 +299,9 @@ export function ActivosCampoList({
         return false;
       }
       if (!q) return true;
+      if (matchesCodigoBarrasQuery(filter, a.codigo_barras, a.codigo_catalogo)) return true;
       const haystack = [
         a.nombre,
-        a.codigo_barras,
-        a.codigo_catalogo,
         a.entidad_nombre,
         a.ambiente_nombre,
         a.sede_nombre,

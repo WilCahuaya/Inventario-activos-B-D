@@ -6,6 +6,7 @@ import type { Activo, Entidad, EstadoRegistro } from "@inventario/types";
 import {
   aniosAdquisicionDesdeActivos,
   entidadMuestraSelectorSede,
+  matchesCodigoBarrasQuery,
   pasoFiltroAnioAdquisicion,
   pasoFiltroSerieComprobante,
   seriesComprobanteDesdeActivos,
@@ -241,8 +242,7 @@ export function InventarioGlobalPanel({
       if (!q) return true;
       return (
         a.nombre.toLowerCase().includes(q) ||
-        (a.codigo_barras?.toLowerCase().includes(q) ?? false) ||
-        a.codigo_catalogo.toLowerCase().includes(q) ||
+        matchesCodigoBarrasQuery(busqueda, a.codigo_barras, a.codigo_catalogo) ||
         (!hasFixedEntidad && (a.entidad_nombre?.toLowerCase().includes(q) ?? false)) ||
         (a.sede_nombre?.toLowerCase().includes(q) ?? false) ||
         (a.ambiente_nombre?.toLowerCase().includes(q) ?? false)

@@ -13,7 +13,7 @@ import {
   type DeleteActivosPreregistradosResult,
   MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE,
   MAX_ELIMINAR_ACTIVOS_POR_CODIGOS,
-  parseCodigosBarrasInput,
+  parseCodigosBarrasInputDetailed,
 } from "@inventario/types";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import { fetchProfile } from "./profile";
@@ -750,7 +750,13 @@ export async function previewDeleteActivosPorCodigos(
   if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
   if (!entidadId) return { error: "Seleccione la entidad." };
 
-  const codigos = parseCodigosBarrasInput(codigosText);
+  const parsed = parseCodigosBarrasInputDetailed(codigosText);
+  if (parsed.invalidos.length > 0) {
+    return {
+      error: `Formato inválido (solo 12 dígitos o 8-4 con guion): ${parsed.invalidos.join(", ")}`,
+    };
+  }
+  const codigos = parsed.codigos;
   if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
   if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
     return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };
@@ -775,7 +781,13 @@ export async function deleteActivosPorCodigos(
   if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
   if (!entidadId) return { error: "Seleccione la entidad." };
 
-  const codigos = parseCodigosBarrasInput(codigosText);
+  const parsed = parseCodigosBarrasInputDetailed(codigosText);
+  if (parsed.invalidos.length > 0) {
+    return {
+      error: `Formato inválido (solo 12 dígitos o 8-4 con guion): ${parsed.invalidos.join(", ")}`,
+    };
+  }
+  const codigos = parsed.codigos;
   if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
   if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
     return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };

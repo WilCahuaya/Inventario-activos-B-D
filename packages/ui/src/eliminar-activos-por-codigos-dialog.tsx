@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import type { Entidad } from "@inventario/types";
 import {
   MAX_ELIMINAR_ACTIVOS_POR_CODIGOS,
-  parseCodigosBarrasInput,
+  formatCodigosBarrasLinesWithGuion,
+  insertGuionCodigoBarras12,
+  parseCodigosBarrasInputDetailed,
   type DeleteActivosPorCodigosResult,
   type PreviewDeleteActivosPorCodigosResult,
 } from "@inventario/types";
@@ -50,10 +52,13 @@ export function EliminarActivosPorCodigosDialog({
   const [success, setSuccess] = useState<string | null>(null);
 
   const activeEntidadId = fixedEntidadId ?? entidadId;
-  const parsedCount = parseCodigosBarrasInput(codigosText).length;
+  const parsed = parseCodigosBarrasInputDetailed(codigosText);
+  const parsedCount = parsed.codigos.length;
+  const hasInvalidos = parsed.invalidos.length > 0;
   const canPreview =
     Boolean(activeEntidadId) &&
     parsedCount > 0 &&
+    !hasInvalidos &&
     parsedCount <= MAX_ELIMINAR_ACTIVOS_POR_CODIGOS &&
     !previewPending &&
     !deletePending;
@@ -150,19 +155,61 @@ export function EliminarActivosPorCodigosDialog({
             className="min-h-[120px] font-mono text-sm"
             value={codigosText}
             onChange={(e) => {
-              setCodigosText(e.target.value);
+              const next = e.target.value;
+              // El lector suele enviar Enter tras 12 dígitos: formatea líneas ya cerradas.
+              const formatted = formatCodigosBarrasLinesWithGuion(next, {
+                leaveLastIncomplete: true,
+              });
+              setCodigosText(formatted);
               setPreview(null);
               setSuccess(null);
               setError(null);
             }}
-            placeholder={"53649569-0001\n53649569-0002\n53649569-0012"}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const el = e.currentTarget;
+              const { value, selectionStart } = el;
+              const lineStart = value.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1;
+              const currentLine = value.slice(lineStart, selectionStart).trim();
+              if (!/^\d{12}$/.test(currentLine)) return;
+
+              e.preventDefault();
+              const formatted = insertGuionCodigoBarras12(currentLine);
+              const next =
+                value.slice(0, lineStart) + formatted + "\n" + value.slice(selectionStart);
+              setCodigosText(next);
+              setPreview(null);
+              setSuccess(null);
+              setError(null);
+              requestAnimationFrame(() => {
+                const pos = lineStart + formatted.length + 1;
+                el.selectionStart = pos;
+                el.selectionEnd = pos;
+              });
+            }}
+            onBlur={() => {
+              setCodigosText(formatCodigosBarrasLinesWithGuion(codigosText));
+            }}
+            placeholder={"746443220001\n74644322-0002\n746443220012"}
             spellCheck={false}
           />
           <p className="text-xs text-muted-foreground">
-            {parsedCount > 0
-              ? `${parsedCount} código${parsedCount === 1 ? "" : "s"} detectado${parsedCount === 1 ? "" : "s"} (máx. ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS}).`
-              : "Ejemplo: 53649569-0001, 53649569-0002"}
+            Una fila por código: 12 dígitos del lector (
+            <code className="text-[0.7rem]">746443220001</code>). Al pasar a la siguiente fila se
+            inserta el guion (
+            <code className="text-[0.7rem]">74644322-0001</code>).
           </p>
+          {parsedCount > 0 && !hasInvalidos && (
+            <p className="text-xs text-muted-foreground">
+              {parsedCount} código{parsedCount === 1 ? "" : "s"} válido
+              {parsedCount === 1 ? "" : "s"} (máx. {MAX_ELIMINAR_ACTIVOS_POR_CODIGOS}).
+            </p>
+          )}
+          {hasInvalidos && (
+            <p className="text-xs text-destructive">
+              Formato inválido (solo 12 dígitos o 8-4 con guion): {parsed.invalidos.join(", ")}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">

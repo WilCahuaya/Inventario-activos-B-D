@@ -332,19 +332,6 @@ export interface DeleteActivosPreregistradosResult {
   comprobante_paths: string[];
 }
 
-/** Parsea códigos separados por coma, punto y coma o salto de línea (sin duplicados). */
-export function parseCodigosBarrasInput(text: string): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const part of text.split(/[\n,;]+/)) {
-    const code = part.trim();
-    if (!code || seen.has(code)) continue;
-    seen.add(code);
-    result.push(code);
-  }
-  return result;
-}
-
 export function formatEjemplaresEnAmbienteTexto(resumen: EjemplaresSimilaresResumen): string {
   const { total } = resumen;
   if (total <= 0) return "";
@@ -578,18 +565,28 @@ import {
 } from "./codigo-barras";
 
 export {
+  CATALOGO_PROPIO_SIMBOLO_PREFIX,
   CODIGO_BARRAS_CATALOGO_DIGITS,
   CODIGO_BARRAS_DISPLAY_LENGTH,
+  CODIGO_BARRAS_ELIMINAR_INPUT_RE,
   CODIGO_BARRAS_SIMBOLO_LENGTH,
   CORRELATIVO_DIGITS,
   codigoBarrasLookupVariants,
+  decodeCatalogoPropioDesdeSimbolo,
+  encodeCatalogoPropioParaSimbolo,
   formatCodigoBarras,
   formatCodigoBarrasSimbolo,
   formatCodigoBarrasSimboloFromPayload,
+  matchesCodigoBarrasQuery,
   normalizeCodigoBarrasDisplay,
+  normalizeCodigoBarrasForSearch,
   parseCodigoBarras,
+  parseCodigosBarrasInput,
+  parseCodigosBarrasInputDetailed,
+  formatCodigosBarrasLinesWithGuion,
+  insertGuionCodigoBarras12,
 } from "./codigo-barras";
-
+export type { ParseCodigosBarrasInputResult } from "./codigo-barras";
 /** Correlativo con ceros (4 dígitos por defecto, ej. 0003). */
 export function formatCorrelativoDisplay(
   correlativo: number | null,

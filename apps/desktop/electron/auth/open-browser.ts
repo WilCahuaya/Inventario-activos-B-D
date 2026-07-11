@@ -19,20 +19,24 @@ function spawnDetached(command: string, args: string[]): Promise<void> {
   });
 }
 
+/**
+ * En Windows, `cmd /c start URL` rompe en `&` (query string) y se pierde redirect_to.
+ * Por eso preferimos shell.openExternal / Start-Process con la URL entre comillas.
+ */
 async function openWindowsBrowser(url: string): Promise<void> {
   try {
-    await spawnDetached("cmd.exe", ["/d", "/c", "start", '""', url]);
-    console.info("[auth] Navegador abierto con cmd start");
+    await shell.openExternal(url, { activate: true });
+    console.info("[auth] Navegador abierto con shell.openExternal");
     return;
   } catch (error) {
-    console.warn("[auth] cmd start falló:", error);
+    console.warn("[auth] shell.openExternal falló:", error);
   }
 
   try {
     const escaped = url.replace(/'/g, "''");
     await execFileAsync(
       "powershell.exe",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `Start-Process '${escaped}'`],
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `Start-Process -FilePath '${escaped}'`],
       { windowsHide: true },
     );
     console.info("[auth] Navegador abierto con PowerShell Start-Process");
@@ -40,6 +44,11 @@ async function openWindowsBrowser(url: string): Promise<void> {
   } catch (error) {
     console.warn("[auth] PowerShell Start-Process falló:", error);
   }
+
+  // Último recurso: un solo argumento tras /c para que `&` no separe comandos.
+  const quoted = url.replace(/"/g, "");
+  await spawnDetached("cmd.exe", ["/d", "/c", `start "" "${quoted}"`]);
+  console.info("[auth] Navegador abierto con cmd start (URL entrecomillada)");
 }
 
 export async function openSystemBrowser(url: string): Promise<void> {

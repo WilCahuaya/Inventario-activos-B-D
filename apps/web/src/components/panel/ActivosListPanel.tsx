@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Activo } from "@inventario/types";
+import { matchesCodigoBarrasQuery } from "@inventario/types";
 import { ActivoUpload } from "./ActivoUpload";
 import { RegistrarActivoButton } from "./RegistrarActivoButton";
 import {
@@ -45,8 +46,7 @@ export function ActivosListPanel({
     return activos.filter(
       (a) =>
         a.nombre.toLowerCase().includes(q) ||
-        (a.codigo_barras?.toLowerCase().includes(q) ?? false) ||
-        a.codigo_catalogo.toLowerCase().includes(q) ||
+        matchesCodigoBarrasQuery(busqueda, a.codigo_barras, a.codigo_catalogo) ||
         (a.entidad_nombre?.toLowerCase().includes(q) ?? false),
     );
   }, [activos, busqueda]);
