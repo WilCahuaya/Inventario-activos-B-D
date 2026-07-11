@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { EntidadConConteo } from "@inventario/types";
-import { Button } from "@inventario/ui";
 import {
   EntidadResumenPanel,
   PanelCountLabel,
@@ -35,7 +34,6 @@ interface DesktopDashboardProps {
   onSelectEntidad: (entidadId: string) => void;
   activos: ActivoConUbicacion[];
   activosLoading?: boolean;
-  onGestionarEntidad: (entidadId: string) => void;
 }
 
 export function DesktopDashboard({
@@ -44,7 +42,6 @@ export function DesktopDashboard({
   onSelectEntidad,
   activos,
   activosLoading = false,
-  onGestionarEntidad,
 }: DesktopDashboardProps) {
   const [busqueda, setBusqueda] = useState("");
   const [ambientes, setAmbientes] = useState<AmbienteConSede[]>([]);
@@ -205,16 +202,6 @@ export function DesktopDashboard({
                 nombre: s.nombre,
                 es_principal: s.es_principal,
               }))}
-              headerExtra={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => onGestionarEntidad(entidadSeleccionada.id)}
-                >
-                  Gestionar entidad
-                </Button>
-              }
             />
           )}
         </>

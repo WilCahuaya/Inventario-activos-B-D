@@ -2,10 +2,15 @@ import type { PanelNavSection } from "@/components/panel/panel-nav-icons";
 import { getProfile } from "@/lib/auth/profile";
 import { createClient } from "@/lib/supabase/server";
 
+import { adminPortalPath, contadorPortalHomePath } from "@inventario/types";
+
 export function contadorNavSections(preregistrados = 0): PanelNavSection[] {
   return [
     {
-      items: [{ href: "/contador", label: "Dashboard", icon: "dashboard" }],
+      items: [
+        { href: contadorPortalHomePath(), label: "Portal", icon: "portal" },
+        { href: "/contador", label: "Dashboard", icon: "dashboard" },
+      ],
     },
     {
       label: "Operación",
@@ -36,6 +41,9 @@ export function adminNavSections(
   preregistroAmbienteHref?: string,
 ): PanelNavSection[] {
   return [
+    {
+      items: [{ href: adminPortalPath(), label: "Portal", icon: "portal" }],
+    },
     {
       label: "Operación",
       items: [

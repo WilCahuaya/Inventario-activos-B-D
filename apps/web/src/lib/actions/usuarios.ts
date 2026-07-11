@@ -1,6 +1,7 @@
 "use server";
 
 import type { Profile } from "@inventario/types";
+import { validarNombreContador } from "@inventario/types";
 import type { AccesoInvitacionEstado } from "@inventario/auth-invite";
 import { getAccesoEstadoByEmails } from "@inventario/auth-invite";
 import { revalidatePath } from "next/cache";
@@ -66,6 +67,9 @@ export async function listUsuarios(): Promise<ProfileConEntidad[]> {
 
 export async function inviteContador(input: { email: string; nombre: string }) {
   await requireProfile("CONTADOR");
+
+  const nombreError = validarNombreContador(input.nombre);
+  if (nombreError) return { error: nombreError };
 
   const result = await inviteContadorAuth(input.email, input.nombre, { mode: "invite" });
   if (result.error) return { error: result.error };

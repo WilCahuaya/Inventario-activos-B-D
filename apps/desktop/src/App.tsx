@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { APP_CLIENT, APP_NAME } from "@inventario/types";
+import { BD_PORTAL_LOGIN_HINT } from "@inventario/types";
 import {
   Button,
   Card,
@@ -9,7 +9,9 @@ import {
   CardTitle,
   ToastProvider,
 } from "@inventario/ui";
-import { ThemeToggle } from "@inventario/ui/theme-toggle";
+import { BdGoogleSignInButton, BdPortalShell } from "@inventario/ui/panel";
+import { DESKTOP_PORTAL_HERO_DARK, DESKTOP_PORTAL_HERO_LIGHT } from "./lib/portal-assets";
+import { ContadorPortalDesktop } from "./components/ContadorPortalDesktop";
 import { buildAmbienteContextBreadcrumbs } from "./lib/ambiente-context-breadcrumbs";
 import { ActivoFormDesktop } from "./components/ActivoFormDesktop";
 import { ActivoEditWithScopeDesktop } from "./components/ActivoEditWithScopeDesktop";
@@ -148,36 +150,31 @@ function LoginForm() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-start bg-gradient-to-br from-background via-muted to-primary/15 px-6 pb-8 pt-12 sm:pt-16">
-      <div className="absolute right-4 top-4">
-        <ThemeToggle />
-      </div>
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-brand">{APP_NAME}</CardTitle>
-          <CardDescription>{APP_CLIENT} — App de escritorio (Fase 3)</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-center text-sm text-muted-foreground">
-            Inicie sesión con su cuenta corporativa de Google (rol Contador). Se abrirá Chrome o
-            Edge para completar el acceso.
+    <BdPortalShell
+      onExit={() => { window.close(); }}
+      exitLabel="SALIR"
+      heroLightSrc={DESKTOP_PORTAL_HERO_LIGHT}
+      heroDarkSrc={DESKTOP_PORTAL_HERO_DARK}
+    >
+      <div className="bd-portal-card">
+        <p className="mb-5 text-center text-sm text-slate-600 dark:text-slate-300/85">
+          {BD_PORTAL_LOGIN_HINT}
+        </p>
+        {loading && (
+          <p className="mb-4 text-center text-sm text-slate-500 dark:text-slate-400">
+            Se abrirá su navegador (Chrome o Edge). Complete el acceso allí y regrese a esta
+            ventana.
           </p>
-          {loading && (
-            <p className="text-center text-sm text-muted-foreground">
-              Se abrirá su navegador (Chrome o Edge). Complete el acceso allí y regrese a esta
-              ventana.
-            </p>
-          )}
-          {error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-          )}
-          <Button type="button" className="w-full" disabled={loading} onClick={handleGoogleLogin}>
-            {loading ? "Esperando autorización en el navegador…" : "Continuar con Google"}
-          </Button>
-          <LoginDebugPanel debug={debug} forceVisible={showDebugOnError} />
-        </CardContent>
-      </Card>
-    </div>
+        )}
+        {error && <p className="bd-portal-error">{error}</p>}
+        <BdGoogleSignInButton
+          loading={loading}
+          loadingLabel="Esperando autorización en el navegador…"
+          onClick={handleGoogleLogin}
+        />
+        <LoginDebugPanel debug={debug} forceVisible={showDebugOnError} />
+      </div>
+    </BdPortalShell>
   );
 }
 
@@ -212,6 +209,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
 
   const [mainNav, setMainNav] = useState<MainNav>("dashboard");
   const [dashboardEntidadId, setDashboardEntidadId] = useState("");
+  const [showEntityPortal, setShowEntityPortal] = useState(true);
   const [entidadesFlow, setEntidadesFlow] = useState<EntidadesFlow>({ type: "list" });
   const [inventarioFlow, setInventarioFlow] = useState<InventarioFlow>({ type: "list" });
   const [printTarget, setPrintTarget] = useState<ActivoConUbicacion | null>(null);
@@ -276,7 +274,14 @@ function MainApp({ userId }: { userId: string; email: string }) {
   }
 
   function handleNavChange(nav: MainNav) {
+    if (nav === "portal") {
+      setMainNav("dashboard");
+      setShowEntityPortal(true);
+      return;
+    }
+
     setMainNav(nav);
+    setShowEntityPortal(false);
     if (nav === "entidades") {
       setEntidadesFlow({ type: "list" });
     } else if (nav === "inventario") {
@@ -284,12 +289,6 @@ function MainApp({ userId }: { userId: string; email: string }) {
     } else if (nav === "catalogo") {
       setCatalogoPrefillDenominacion("");
     }
-  }
-
-  function openEntidadResumen(entidadIdTarget: string) {
-    setEntidadId(entidadIdTarget);
-    setDashboardEntidadId(entidadIdTarget);
-    setMainNav("dashboard");
   }
 
   function goEntidadesList() {
@@ -532,10 +531,25 @@ function MainApp({ userId }: { userId: string; email: string }) {
     (a) => a.estado_registro === "PREREGISTRADO",
   ).length;
 
+  const sidebarActiveNav: MainNav =
+    showEntityPortal && mainNav === "dashboard" ? "portal" : mainNav;
+
+  if (showEntityPortal && mainNav === "dashboard" && profile.rol === "CONTADOR") {
+    return (
+      <ToastProvider>
+        <ContadorPortalDesktop
+          nombre={profile.nombre}
+          email={profile.email}
+          onGestionInventarios={() => setShowEntityPortal(false)}
+        />
+      </ToastProvider>
+    );
+  }
+
   return (
     <ToastProvider>
     <AppShell
-      activeNav={mainNav}
+      activeNav={sidebarActiveNav}
       onNavChange={handleNavChange}
       navSections={desktopNavSections(preregistrados)}
       subheader={subheader}
@@ -544,7 +558,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
       syncing={syncing}
       user={{ nombre: profile.nombre, email: profile.email }}
     >
-      {mainNav === "dashboard" && (
+      {mainNav === "dashboard" && !showEntityPortal && (
         <DesktopDashboard
           entidades={entidades}
           selectedEntidadId={dashboardEntidadId || entidades[0]?.id || ""}
@@ -554,7 +568,6 @@ function MainApp({ userId }: { userId: string; email: string }) {
           }}
           activos={activosCache.activos}
           activosLoading={activosCache.loading}
-          onGestionarEntidad={goAmbientes}
         />
       )}
 
@@ -563,7 +576,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
           entidades={entidades}
           online={online}
           onEntidadesChange={setEntidadesList}
-          onViewAmbientes={openEntidadResumen}
+          onViewAmbientes={goAmbientes}
         />
       )}
 

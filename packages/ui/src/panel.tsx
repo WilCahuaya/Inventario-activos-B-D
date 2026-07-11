@@ -326,3 +326,8 @@ export * from "./sede-nav-cards";
 export * from "./sede-ambiente-filter";
 export * from "./visitas-campo";
 export * from "./entidad-resumen-panel";
+export * from "./bd-portal-shell";
+export * from "./bd-portal-brand-icon";
+export * from "./bd-portal-theme-toggle";
+export * from "./bd-google-sign-in-button";
+export * from "./entity-portal-menu";

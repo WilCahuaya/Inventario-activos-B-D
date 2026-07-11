@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Button, Card, CardContent, CardDescription, CardHeader } from "@inventario/ui";
-import { BrandLogo } from "@/components/public/BrandLogo";
-import { ThemeToggle } from "@/components/public/ThemeToggle";
+import { BD_PORTAL_LOGIN_HINT } from "@inventario/types";
+import { BdGoogleSignInButton, BdPortalShell } from "@inventario/ui/panel";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -53,32 +52,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="public-main-scroll relative flex h-dvh min-h-0 items-center justify-center overflow-x-clip bg-gradient-to-br from-background via-muted to-primary/15 p-4">
-      <div className="absolute right-4 top-4">
-        <ThemeToggle />
+    <BdPortalShell onExit={() => { window.location.href = "/"; }} exitLabel="SALIR">
+      <div className="bd-portal-card">
+        <p className="bd-portal-login-hint">{BD_PORTAL_LOGIN_HINT}</p>
+        {error && <p className="bd-portal-error">{error}</p>}
+        <BdGoogleSignInButton loading={loading} onClick={handleGoogleLogin} />
       </div>
-      <Card className="w-full max-w-md rounded-xl border-border/70 shadow-lg">
-        <CardHeader className="items-center space-y-4 text-center">
-          <BrandLogo size="large" />
-          <CardDescription>Inventario de Activos Fijos</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-center text-sm text-muted-foreground">
-            Inicie sesión con su cuenta corporativa de Google
-          </p>
-          {error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-          )}
-          <Button
-            type="button"
-            className="w-full"
-            disabled={loading}
-            onClick={handleGoogleLogin}
-          >
-            {loading ? "Redirigiendo…" : "Continuar con Google"}
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+    </BdPortalShell>
   );
 }

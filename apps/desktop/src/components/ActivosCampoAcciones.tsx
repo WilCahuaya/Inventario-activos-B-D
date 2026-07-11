@@ -30,6 +30,7 @@ interface ActivosCampoAccionesProps {
   onValidated?: (activo: ActivoConUbicacion) => void;
   onActivoDeleted?: () => void;
   onActivoEliminado?: (activoId: string) => void;
+  puedeEliminarPreregistro?: boolean;
   compact?: boolean;
   variant?: "auto" | "menu" | "icons-and-menu" | "icons";
 }
@@ -46,6 +47,7 @@ export function ActivosCampoAcciones({
   onValidated,
   onActivoDeleted,
   onActivoEliminado,
+  puedeEliminarPreregistro = false,
   compact,
   variant = "auto",
 }: ActivosCampoAccionesProps) {
@@ -195,6 +197,7 @@ export function ActivosCampoAcciones({
         onActivoUpdated={onValidated}
         onActivoDeleted={onActivoDeleted}
         onActivoEliminado={onActivoEliminado}
+        puedeEliminarPreregistro={puedeEliminarPreregistro}
         onPrintLabel={onPrintLabel}
         onPrintBatch={onPrintBatch}
       />

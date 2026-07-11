@@ -43,6 +43,7 @@ interface ActivoDetalleModalProps {
   onActivoEliminado?: (activoId: string) => void;
   onPrintLabel?: (activo: ActivoConUbicacion) => void;
   onPrintBatch?: (activos: ActivoConUbicacion[]) => void;
+  puedeEliminarPreregistro?: boolean;
 }
 
 export function ActivoDetalleModal({
@@ -59,6 +60,7 @@ export function ActivoDetalleModal({
   onActivoEliminado,
   onPrintLabel,
   onPrintBatch,
+  puedeEliminarPreregistro = false,
 }: ActivoDetalleModalProps) {
   const { pushToast } = useToast();
   const [fotoOpen, setFotoOpen] = useState(false);
@@ -200,7 +202,7 @@ export function ActivoDetalleModal({
           <IconValidar />
         </ActivoIconButton>
       )}
-      {esPreregistrado && online && !esPendiente && (
+      {esPreregistrado && online && !esPendiente && puedeEliminarPreregistro && (
         <ActivoIconButton
           label="Eliminar preregistro"
           variant="danger"

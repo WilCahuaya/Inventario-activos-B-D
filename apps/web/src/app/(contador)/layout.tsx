@@ -11,7 +11,7 @@ export default async function ContadorLayout({ children }: { children: React.Rea
   return (
     <PanelLayout
       panelLabel="Panel contador"
-      homeHref="/contador"
+      homeHref="/contador/portal"
       sections={contadorNavSections(preregistrados)}
       user={profile ? { nombre: profile.nombre, email: profile.email } : undefined}
     >

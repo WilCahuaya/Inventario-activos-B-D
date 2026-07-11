@@ -397,14 +397,20 @@ export function ActivosCampoList({
         ? "de la entidad"
         : "del filtro actual";
 
+  const puedeGestionarPreregistros =
+    esAmbientePreregistro || estadoRegistro === "PREREGISTRADO";
+
   const gestionPreregistros = useMemo(
-    () => ({
-      alcanceLabel: gestionPreregistrosAlcance,
-      onDeleteActivos: eliminarPreregistradosActivos,
-      toolbarPlacement: "header" as const,
-      onToolbarStateChange: setPreregistroHeaderToolbar,
-    }),
-    [gestionPreregistrosAlcance],
+    () =>
+      puedeGestionarPreregistros
+        ? {
+            alcanceLabel: gestionPreregistrosAlcance,
+            onDeleteActivos: eliminarPreregistradosActivos,
+            toolbarPlacement: "header" as const,
+            onToolbarStateChange: setPreregistroHeaderToolbar,
+          }
+        : undefined,
+    [puedeGestionarPreregistros, gestionPreregistrosAlcance, eliminarPreregistradosActivos],
   );
 
   const ambienteToolbar = isAmbiente ? (

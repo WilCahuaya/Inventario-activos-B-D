@@ -149,6 +149,7 @@ export function InventarioGlobalPanel({
       : hasFixedEntidad || activeEntidadId
         ? "de la entidad"
         : "del filtro actual";
+  const puedeGestionarPreregistros = estadoRegistro === "PREREGISTRADO";
   const [preregistroHeaderToolbar, setPreregistroHeaderToolbar] =
     useState<PreregistroGestionToolbarState | null>(null);
   const syncPreregistroToolbar = useCallback((state: PreregistroGestionToolbarState | null) => {
@@ -521,8 +522,8 @@ export function InventarioGlobalPanel({
           onIrAmbiente={irAlAmbiente}
           puedeDarDeBaja={!isAdmin}
           puedeValidarPreregistro={!isAdmin}
-          puedeEliminarPreregistro
-          gestionPreregistros={gestionPreregistrosConfig}
+          puedeEliminarPreregistro={puedeGestionarPreregistros}
+          gestionPreregistros={puedeGestionarPreregistros ? gestionPreregistrosConfig : undefined}
           onActivoEliminado={(id) => quitarActivos([id])}
           modoAdmin={isAdmin}
           mostrarEstadoRegistro={isAdmin}

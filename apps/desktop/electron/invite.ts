@@ -1,4 +1,5 @@
 import { sendUserInvitation, type InviteMode } from "@inventario/auth-invite";
+import { validarNombreContador } from "@inventario/types";
 import { getSiteOrigin } from "./env";
 import { createAdminClient } from "./supabase-admin";
 
@@ -76,6 +77,9 @@ export async function inviteEntidadAdmin(
 }
 
 export async function inviteContador(input: InviteContadorInput): Promise<InviteContadorResult> {
+  const nombreError = validarNombreContador(input.nombre);
+  if (nombreError) return { error: nombreError };
+
   const admin = createAdminClient();
   if (!admin) {
     return {

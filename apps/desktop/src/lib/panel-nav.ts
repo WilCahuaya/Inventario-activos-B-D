@@ -1,6 +1,7 @@
 import type { PanelNavSection } from "@inventario/ui/panel";
 
 export type DesktopMainNav =
+  | "portal"
   | "dashboard"
   | "entidades"
   | "inventario"
@@ -11,7 +12,10 @@ export type DesktopMainNav =
 export function desktopNavSections(preregistrados = 0): PanelNavSection[] {
   return [
     {
-      items: [{ href: "dashboard", label: "Dashboard", icon: "dashboard" }],
+      items: [
+        { href: "portal", label: "Portal", icon: "portal" },
+        { href: "dashboard", label: "Dashboard", icon: "dashboard" },
+      ],
     },
     {
       label: "Operación",
@@ -39,6 +43,7 @@ export function desktopNavSections(preregistrados = 0): PanelNavSection[] {
 
 export function isDesktopMainNav(value: string): value is DesktopMainNav {
   return (
+    value === "portal" ||
     value === "dashboard" ||
     value === "entidades" ||
     value === "inventario" ||

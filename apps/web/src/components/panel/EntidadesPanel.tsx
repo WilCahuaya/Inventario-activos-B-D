@@ -190,7 +190,7 @@ function entidadFromForm(form: FormData) {
 }
 
 function entidadPageHref(entidadId: string) {
-  return `/contador?entidad=${encodeURIComponent(entidadId)}`;
+  return `/contador/entidades/${encodeURIComponent(entidadId)}`;
 }
 
 export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConConteo[] }) {

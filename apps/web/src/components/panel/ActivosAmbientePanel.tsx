@@ -397,8 +397,8 @@ export function ActivosAmbientePanel({
           onEditActivo={setEditActivo}
           puedeDarDeBaja={!isAdmin && !esAmbientePreregistro}
           puedeValidarPreregistro={!isAdmin && esAmbientePreregistro}
-          puedeEliminarPreregistro
-          gestionPreregistros={gestionPreregistrosConfig}
+          puedeEliminarPreregistro={esAmbientePreregistro}
+          gestionPreregistros={esAmbientePreregistro ? gestionPreregistrosConfig : undefined}
           onActivoEliminado={(id) => quitarActivos([id])}
           modoAdmin={isAdmin}
           mostrarEstadoRegistro={!esAmbientePreregistro}

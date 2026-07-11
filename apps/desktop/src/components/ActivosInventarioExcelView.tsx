@@ -88,6 +88,7 @@ function ActivosInventarioMobileCards({
   puedeSeleccionar,
   mostrarUbicacion = false,
   ubicacionMultiplesSedes = false,
+  puedeEliminarPreregistro = false,
 }: {
   activos: ActivoConUbicacion[];
   entidadId: string;
@@ -108,6 +109,7 @@ function ActivosInventarioMobileCards({
   puedeSeleccionar?: (activo: ActivoConUbicacion) => boolean;
   mostrarUbicacion?: boolean;
   ubicacionMultiplesSedes?: boolean;
+  puedeEliminarPreregistro?: boolean;
 }) {
   if (activos.length === 0) {
     return (
@@ -235,6 +237,7 @@ function ActivosInventarioMobileCards({
                 onValidated={onActivoUpdated}
                 onActivoDeleted={onActivoDeleted}
                 onActivoEliminado={onActivoEliminado}
+                puedeEliminarPreregistro={puedeEliminarPreregistro}
               />
             </div>
           </article>
@@ -297,6 +300,7 @@ export function ActivosInventarioExcelView({
 }: ActivosInventarioExcelViewProps) {
   const preregistrados = useMemo(() => activos.filter(esActivoPreregistrado), [activos]);
   const gestionEnabled = Boolean(gestionPreregistros && preregistrados.length > 0);
+  const puedeEliminarPreregistro = Boolean(gestionPreregistros);
   const printSelectionEnabled = Boolean(onPrintBatch && !mostrarPosibleAmbiente && !gestionEnabled);
 
   const [printSelectedIds, setPrintSelectedIds] = useState<Set<string>>(() => new Set());
@@ -459,6 +463,7 @@ export function ActivosInventarioExcelView({
         puedeSeleccionar={gestionEnabled ? esActivoPreregistrado : undefined}
         mostrarUbicacion={mostrarUbicacion}
         ubicacionMultiplesSedes={ubicacionMultiplesSedes}
+        puedeEliminarPreregistro={puedeEliminarPreregistro}
       />
     </div>
   );
@@ -511,6 +516,7 @@ export function ActivosInventarioExcelView({
           onValidated={onActivoUpdated}
           onActivoDeleted={onActivoDeleted}
           onActivoEliminado={onActivoEliminado}
+          puedeEliminarPreregistro={puedeEliminarPreregistro}
           compact
           variant="icons"
         />

@@ -5,6 +5,7 @@ import type { Profile, RolUsuario } from "@inventario/types";
 import {
   countContadoresActivos,
   validarDesactivarUsuario,
+  validarNombreContador,
 } from "@inventario/types";
 import { Button, Dialog, Input, Label } from "./components";
 import { ConfirmDialog } from "./confirm-dialog";
@@ -146,6 +147,13 @@ export function UsuariosGestionPanel({
     setPending(true);
     setMessage(null);
     setError(null);
+
+    const nombreError = validarNombreContador(nombre);
+    if (nombreError) {
+      setError(nombreError);
+      setPending(false);
+      return;
+    }
 
     try {
       const result = await onInviteContador({ nombre, email });

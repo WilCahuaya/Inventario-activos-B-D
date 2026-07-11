@@ -17,7 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <PanelLayout
       panelLabel="Panel entidad"
-      homeHref="/admin/inventario"
+      homeHref="/admin/portal"
       sections={adminNavSections(
         preregistrados,
         preregistroAmbiente ? `/admin/ambientes/${preregistroAmbiente.id}` : undefined,

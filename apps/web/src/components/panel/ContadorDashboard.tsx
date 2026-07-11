@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { EntidadConConteo } from "@inventario/types";
 import {
@@ -220,14 +219,6 @@ export function ContadorDashboard({ entidades }: ContadorDashboardProps) {
                 nombre: s.nombre,
                 es_principal: s.es_principal,
               }))}
-              headerExtra={
-                <Link
-                  href={`/contador/entidades/${entidadSeleccionada.id}`}
-                  className="inline-flex h-8 items-center justify-center rounded-md bg-secondary px-3 text-xs font-medium text-secondary-foreground hover:opacity-90"
-                >
-                  Gestionar entidad
-                </Link>
-              }
             />
           )}
         </>

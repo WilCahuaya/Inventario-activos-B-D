@@ -3,6 +3,7 @@ import type { AccesoInvitacionEstado } from "@inventario/auth-invite";
 import {
   validarDesactivarUsuario,
   validarEliminarUsuario,
+  validarNombreContador,
   validarReactivarUsuario,
   type UsuarioGestionResumen,
 } from "@inventario/types";
@@ -142,7 +143,9 @@ export async function inviteContador(input: {
   const email = input.email.trim();
   const nombre = input.nombre.trim();
   if (!email) return { error: "El correo es obligatorio." };
-  if (!nombre) return { error: "El nombre es obligatorio." };
+
+  const nombreError = validarNombreContador(nombre);
+  if (nombreError) return { error: nombreError };
 
   if (!window.electronAPI?.inviteContador) {
     return {

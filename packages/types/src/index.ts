@@ -1503,7 +1503,7 @@ export interface HistorialCambio {
 }
 
 export function homePathForRole(rol: RolUsuario): string {
-  return rol === "ADMIN_ENTIDAD" ? "/admin/inventario" : "/contador";
+  return rol === "ADMIN_ENTIDAD" ? "/admin/portal" : "/contador/portal";
 }
 
 export type UsuarioGestionResumen = Pick<Profile, "id" | "rol" | "activo" | "nombre" | "email">;
@@ -1653,3 +1653,21 @@ export {
   type ClasificacionResumen,
   type ValorizacionTotales,
 } from "./clasificacion-resumen";
+
+export {
+  BD_PORTAL_CONTACTO,
+  BD_PORTAL_ESTUDIO,
+  BD_PORTAL_FOOTER_INSTITUCIONAL,
+  BD_PORTAL_INTRO,
+  BD_PORTAL_LOGIN_HINT,
+  BD_PORTAL_RAZON_SOCIAL,
+  adminPortalPath,
+  contadorGestionInventariosPath,
+  contadorPortalHomePath,
+  contadorPortalPath,
+  BD_PORTAL_HERO_DARK,
+  BD_PORTAL_HERO_LIGHT,
+  displayContadorNombre,
+  isGenericContadorNombre,
+  validarNombreContador,
+} from "./bd-portal";

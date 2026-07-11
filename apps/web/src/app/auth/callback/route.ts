@@ -47,5 +47,6 @@ export async function GET(request: Request) {
   }
 
   const redirectPath = homePathForRole(profile.rol);
+
   return NextResponse.redirect(`${origin}${redirectPath}`);
 }
