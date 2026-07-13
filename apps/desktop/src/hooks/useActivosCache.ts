@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActivoConUbicacion } from "../lib/activos";
 import { listActivosForEntidad } from "../lib/activos";
 import { listCachedActivos, refreshActivosCache } from "../lib/offline";
@@ -14,6 +14,7 @@ export function useActivosCache(entidadId: string, enabled: boolean) {
   const [count, setCount] = useState(0);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const hasDataRef = useRef(false);
 
   const loadFromCache = useCallback(async () => {
     if (!enabled || !entidadId) return;
@@ -21,23 +22,27 @@ export function useActivosCache(entidadId: string, enabled: boolean) {
     const parsed = parseCachedActivos(cached);
     setActivos(parsed);
     setCount(parsed.length);
+    if (parsed.length > 0) hasDataRef.current = true;
   }, [enabled, entidadId]);
 
   const refresh = useCallback(async () => {
     if (!enabled || !entidadId || !online) return;
-    setLoading(true);
+    const showSpinner = !hasDataRef.current;
+    if (showSpinner) setLoading(true);
     try {
       const fetched = await listActivosForEntidad(entidadId);
       await refreshActivosCache(entidadId, fetched);
       setActivos(fetched);
       setCount(fetched.length);
       setUpdatedAt(new Date().toISOString());
+      hasDataRef.current = true;
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, [enabled, entidadId, online]);
 
   useEffect(() => {
+    hasDataRef.current = false;
     if (!enabled || !entidadId) {
       setActivos([]);
       setCount(0);

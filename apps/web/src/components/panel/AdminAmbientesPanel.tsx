@@ -46,6 +46,7 @@ import {
   updateResponsable,
 } from "@/lib/actions/responsables";
 import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
+import { GestionarSucursales } from "./GestionarSucursales";
 import {
   PanelCountLabel,
   PanelEmptyState,
@@ -55,10 +56,11 @@ import {
   panelCardClass,
 } from "./panel-ui";
 
-type AdminEntityTab = "ambientes" | "responsables" | "visitas";
+type AdminEntityTab = "ambientes" | "sucursales" | "responsables" | "visitas";
 
 const ADMIN_ENTITY_TABS: { id: AdminEntityTab; label: string }[] = [
   { id: "ambientes", label: "Ambientes" },
+  { id: "sucursales", label: "Sucursales" },
   { id: "responsables", label: "Responsables" },
   { id: "visitas", label: "Visitas de campo" },
 ];
@@ -80,7 +82,7 @@ function adminActivoHref(ambienteId: string) {
 export function AdminAmbientesPanel({
   entidad,
   ambientes: initial,
-  sedes,
+  sedes: initialSedes,
   responsables: initialResponsables,
   visitasActivas: initialVisitasActivas = [],
   visitasHistorial: initialVisitasHistorial = [],
@@ -89,6 +91,7 @@ export function AdminAmbientesPanel({
   const router = useRouter();
   const [tab, setTab] = useState<AdminEntityTab>(initialTab);
   const [ambientes, setAmbientes] = useState(initial);
+  const [sedes, setSedes] = useState(initialSedes);
   const [responsables, setResponsables] = useState(initialResponsables);
   const [busqueda, setBusqueda] = useState("");
   const [sedeFilterId, setSedeFilterId] = useState("");
@@ -106,6 +109,9 @@ export function AdminAmbientesPanel({
   useEffect(() => {
     setAmbientes(initial);
   }, [initial]);
+  useEffect(() => {
+    setSedes(initialSedes);
+  }, [initialSedes]);
   useEffect(() => {
     setResponsables(initialResponsables);
   }, [initialResponsables]);
@@ -300,8 +306,8 @@ export function AdminAmbientesPanel({
         title={entidad.nombre}
         subtitle={
           entidad.ruc
-            ? `RUC ${entidad.ruc} · Ambientes y responsables`
-            : "Ambientes y responsables"
+            ? `RUC ${entidad.ruc} · Ambientes, sucursales y responsables`
+            : "Ambientes, sucursales y responsables"
         }
         backHref="/admin/inventario"
         backLabel="Inventario global"
@@ -319,6 +325,19 @@ export function AdminAmbientesPanel({
           onCerrarDetalle={() => {
             setDetalleVisita(null);
             setDetalleAmbientes(null);
+          }}
+        />
+      ) : tab === "sucursales" ? (
+        <GestionarSucursales
+          entidadId={entidad.id}
+          sedes={sedes}
+          onViewAmbientes={(sedeId) => {
+            setSedeFilterId(sedeId);
+            setTab("ambientes");
+          }}
+          onSedesChange={(next) => {
+            setSedes(next);
+            void syncAmbientesYResponsables();
           }}
         />
       ) : tab === "responsables" ? (
@@ -350,8 +369,15 @@ export function AdminAmbientesPanel({
 
       {sedes.length === 0 && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
-          No hay sucursales configuradas. Contacte al contador para registrar sucursales antes de
-          crear ambientes.
+          No hay sucursales configuradas. Vaya a la pestaña{" "}
+          <button
+            type="button"
+            className="font-semibold text-primary underline-offset-2 hover:underline"
+            onClick={() => setTab("sucursales")}
+          >
+            Sucursales
+          </button>{" "}
+          para registrar una antes de crear ambientes.
         </p>
       )}
 

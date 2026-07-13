@@ -17,6 +17,7 @@ export function useEstructuraRealtime(options: {
     const supabase = getSupabaseClient();
     return subscribeEstructuraChanges(supabase, {
       entidadId,
+      debounceMs: 1200,
       onChange: () => {
         void onRefreshRef.current();
       },

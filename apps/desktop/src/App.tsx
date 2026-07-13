@@ -272,6 +272,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
   useVisibilityRefresh({
     enabled: Boolean(profile) && online,
     onRefresh: refreshAllRemote,
+    minIntervalMs: 8000,
   });
 
   if (profileLoading) {

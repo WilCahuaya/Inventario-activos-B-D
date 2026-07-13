@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Entidad } from "@inventario/types";
 import type { ActivoConUbicacion } from "../lib/activos";
 import { listActivosGlobal } from "../lib/activos";
@@ -10,6 +10,7 @@ export function useGlobalActivosCache(entidades: Entidad[], enabled: boolean) {
   const [activos, setActivos] = useState<ActivoConUbicacion[]>([]);
   const [loading, setLoading] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const hasDataRef = useRef(false);
 
   const loadFromCache = useCallback(async () => {
     if (!enabled || entidades.length === 0) {
@@ -30,17 +31,20 @@ export function useGlobalActivosCache(entidades: Entidad[], enabled: boolean) {
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
     setActivos(merged);
+    if (merged.length > 0) hasDataRef.current = true;
   }, [enabled, entidades]);
 
   const refresh = useCallback(async () => {
     if (!enabled || !online) return;
-    setLoading(true);
+    const showSpinner = !hasDataRef.current;
+    if (showSpinner) setLoading(true);
     try {
       const fetched = await listActivosGlobal();
       setActivos(fetched);
       setUpdatedAt(new Date().toISOString());
+      hasDataRef.current = true;
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, [enabled, online]);
 

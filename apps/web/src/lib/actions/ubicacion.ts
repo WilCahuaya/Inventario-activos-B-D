@@ -19,6 +19,17 @@ function revalidateEntidad(entidadId: string, sedeId?: string) {
   revalidatePath("/admin");
 }
 
+/** Contador (cualquier entidad) o admin de esa entidad. */
+async function assertPuedeGestionarSedes(entidadId: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." as const };
+  if (profile.rol === "CONTADOR") return { profile };
+  if (profile.rol === "ADMIN_ENTIDAD" && profile.entidad_id === entidadId) {
+    return { profile };
+  }
+  return { error: "No tiene permiso para gestionar sucursales de esta entidad." as const };
+}
+
 export async function getSedePrincipal(entidadId: string): Promise<Sede | null> {
   const supabase = await createClient();
   const sedes = await loadSedesForEntidad(supabase, entidadId);
@@ -213,7 +224,9 @@ export async function getAmbiente(ambienteId: string) {
 }
 
 export async function createSede(entidadId: string, nombre: string, direccion?: string) {
-  await requireProfile("CONTADOR");
+  const auth = await assertPuedeGestionarSedes(entidadId);
+  if (auth.error) return { error: auth.error };
+
   const trimmed = nombre.trim();
   if (!trimmed) return { error: "Nombre de sucursal obligatorio." };
   if (trimmed.toLowerCase() === "principal") {
@@ -238,13 +251,16 @@ export async function createSede(entidadId: string, nombre: string, direccion?: 
 }
 
 export async function updateSede(sedeId: string, nombre: string, direccion?: string) {
-  await requireProfile("CONTADOR");
   const trimmed = nombre.trim();
   if (!trimmed) return { error: "Nombre obligatorio." };
 
   const supabase = await createClient();
   const { data: sede } = await supabase.from("sedes").select("*").eq("id", sedeId).single();
   if (!sede) return { error: "Sucursal no encontrada." };
+
+  const auth = await assertPuedeGestionarSedes((sede as Sede).entidad_id);
+  if (auth.error) return { error: auth.error };
+
   if ((sede as Sede).es_principal) return { error: "La sucursal Principal no se puede editar." };
 
   const { error } = await supabase
@@ -261,10 +277,13 @@ export async function updateSede(sedeId: string, nombre: string, direccion?: str
 }
 
 export async function deleteSede(sedeId: string) {
-  await requireProfile("CONTADOR");
   const supabase = await createClient();
   const { data: sede } = await supabase.from("sedes").select("*").eq("id", sedeId).single();
   if (!sede) return { error: "Sucursal no encontrada." };
+
+  const auth = await assertPuedeGestionarSedes((sede as Sede).entidad_id);
+  if (auth.error) return { error: auth.error };
+
   if ((sede as Sede).es_principal) return { error: "La sucursal Principal no se puede eliminar." };
 
   const { count } = await supabase

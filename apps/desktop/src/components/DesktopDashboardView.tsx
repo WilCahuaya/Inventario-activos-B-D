@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EntidadConConteo } from "@inventario/types";
 import { ESTRUCTURA_REFRESH_EVENT } from "@inventario/realtime";
 import {
@@ -50,6 +50,8 @@ export function DesktopDashboard({
   const [metaLoading, setMetaLoading] = useState(false);
   const [errorDetalle, setErrorDetalle] = useState<string | null>(null);
   const [estructuraTick, setEstructuraTick] = useState(0);
+  const hasDetalleRef = useRef(false);
+  const prevEntidadIdRef = useRef(selectedEntidadId);
 
   const entidadSeleccionada = useMemo(
     () => entidades.find((e) => e.id === selectedEntidadId) ?? null,
@@ -68,14 +70,23 @@ export function DesktopDashboard({
 
   useEffect(() => {
     if (!selectedEntidadId) {
+      hasDetalleRef.current = false;
+      prevEntidadIdRef.current = selectedEntidadId;
       setAmbientes([]);
       setSedes([]);
       setErrorDetalle(null);
+      setMetaLoading(false);
       return;
     }
 
+    if (prevEntidadIdRef.current !== selectedEntidadId) {
+      prevEntidadIdRef.current = selectedEntidadId;
+      hasDetalleRef.current = false;
+    }
+
     let cancelled = false;
-    setMetaLoading(true);
+    const silent = hasDetalleRef.current;
+    if (!silent) setMetaLoading(true);
     setErrorDetalle(null);
 
     void (async () => {
@@ -87,13 +98,14 @@ export function DesktopDashboard({
         if (!cancelled) {
           setAmbientes(listaAmbientes);
           setSedes(listaSedes);
+          hasDetalleRef.current = true;
         }
       } catch {
         if (!cancelled) {
           setErrorDetalle("No se pudo cargar el resumen de la entidad.");
         }
       } finally {
-        if (!cancelled) setMetaLoading(false);
+        if (!cancelled && !silent) setMetaLoading(false);
       }
     })();
 
