@@ -8,15 +8,28 @@ export type SubscribeActivosChangesOptions = {
   onChange: () => void;
 };
 
+export type SubscribeEstructuraChangesOptions = {
+  enabled?: boolean;
+  /** Admin: limita entidades/sedes/responsables a esa entidad. Ambientes van por RLS. */
+  entidadId?: string | null;
+  debounceMs?: number;
+  onChange: () => void;
+};
+
+/** Evento DOM en desktop para que vistas montadas (p. ej. Ambientes) recarguen. */
+export const ESTRUCTURA_REFRESH_EVENT = "inventario:refresh-estructura";
+
 type AnySupabaseClient = SupabaseClient<any, "public", any>;
 
-function postgresChangesConfig(entidadId?: string | null) {
-  const changeConfig: {
-    event: "*";
-    schema: "public";
-    table: "activos";
-    filter?: string;
-  } = {
+type PostgresChangeConfig = {
+  event: "*";
+  schema: "public";
+  table: string;
+  filter?: string;
+};
+
+function activosChangesConfig(entidadId?: string | null): PostgresChangeConfig {
+  const changeConfig: PostgresChangeConfig = {
     event: "*",
     schema: "public",
     table: "activos",
@@ -29,20 +42,51 @@ function postgresChangesConfig(entidadId?: string | null) {
   return changeConfig;
 }
 
+function estructuraTableConfigs(entidadId?: string | null): PostgresChangeConfig[] {
+  return [
+    {
+      event: "*",
+      schema: "public",
+      table: "entidades",
+      ...(entidadId ? { filter: `id=eq.${entidadId}` } : {}),
+    },
+    {
+      event: "*",
+      schema: "public",
+      table: "sedes",
+      ...(entidadId ? { filter: `entidad_id=eq.${entidadId}` } : {}),
+    },
+    {
+      event: "*",
+      schema: "public",
+      table: "responsables",
+      ...(entidadId ? { filter: `entidad_id=eq.${entidadId}` } : {}),
+    },
+    // ambientes no tiene entidad_id; RLS limita lo que llega al cliente.
+    {
+      event: "*",
+      schema: "public",
+      table: "ambientes",
+    },
+  ];
+}
+
 async function syncRealtimeAuth(supabase: AnySupabaseClient, accessToken: string) {
   await supabase.realtime.setAuth(accessToken);
 }
 
-/**
- * Suscripción a INSERT/UPDATE/DELETE en public.activos (Supabase Realtime).
- * Aplica setAuth con el JWT de la sesión (requerido con RLS + @supabase/ssr).
- * Devuelve función para cancelar la suscripción.
- */
-export function subscribeActivosChanges(
+function createDebouncedSubscription(
   supabase: AnySupabaseClient,
-  options: SubscribeActivosChangesOptions,
+  options: {
+    enabled: boolean;
+    channelName: string;
+    debounceMs: number;
+    onChange: () => void;
+    configs: PostgresChangeConfig[];
+    logLabel: string;
+  },
 ): () => void {
-  const { enabled = true, entidadId, debounceMs = 600, onChange } = options;
+  const { enabled, channelName, debounceMs, onChange, configs, logLabel } = options;
 
   if (!enabled) {
     return () => {};
@@ -52,8 +96,6 @@ export function subscribeActivosChanges(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let channel: RealtimeChannel | null = null;
   let authUnsubscribe: (() => void) | null = null;
-
-  const channelName = entidadId ? `activos-rt-${entidadId}` : "activos-rt-global";
 
   const schedule = () => {
     if (timer) clearTimeout(timer);
@@ -73,16 +115,18 @@ export function subscribeActivosChanges(
   const attachChannel = () => {
     if (cancelled || channel) return;
 
-    channel = supabase
-      .channel(channelName)
-      .on("postgres_changes", postgresChangesConfig(entidadId), () => {
+    let next = supabase.channel(channelName);
+    for (const config of configs) {
+      next = next.on("postgres_changes", config, () => {
         schedule();
-      })
-      .subscribe((status, err) => {
-        if (status === "CHANNEL_ERROR") {
-          console.warn("[activos realtime] error de canal:", err?.message ?? err);
-        }
       });
+    }
+
+    channel = next.subscribe((status, err) => {
+      if (status === "CHANNEL_ERROR") {
+        console.warn(`[${logLabel} realtime] error de canal:`, err?.message ?? err);
+      }
+    });
   };
 
   const ensureChannel = async (accessToken: string | undefined) => {
@@ -118,4 +162,52 @@ export function subscribeActivosChanges(
     authUnsubscribe = null;
     removeChannel();
   };
+}
+
+/**
+ * Suscripción a INSERT/UPDATE/DELETE en public.activos (Supabase Realtime).
+ * Aplica setAuth con el JWT de la sesión (requerido con RLS + @supabase/ssr).
+ * Devuelve función para cancelar la suscripción.
+ */
+export function subscribeActivosChanges(
+  supabase: AnySupabaseClient,
+  options: SubscribeActivosChangesOptions,
+): () => void {
+  const { enabled = true, entidadId, debounceMs = 600, onChange } = options;
+  const channelName = entidadId ? `activos-rt-${entidadId}` : "activos-rt-global";
+
+  return createDebouncedSubscription(supabase, {
+    enabled,
+    channelName,
+    debounceMs,
+    onChange,
+    configs: [activosChangesConfig(entidadId)],
+    logLabel: "activos",
+  });
+}
+
+/**
+ * Suscripción a cambios en entidades, sedes, ambientes y responsables.
+ */
+export function subscribeEstructuraChanges(
+  supabase: AnySupabaseClient,
+  options: SubscribeEstructuraChangesOptions,
+): () => void {
+  const { enabled = true, entidadId, debounceMs = 600, onChange } = options;
+  const channelName = entidadId ? `estructura-rt-${entidadId}` : "estructura-rt-global";
+
+  return createDebouncedSubscription(supabase, {
+    enabled,
+    channelName,
+    debounceMs,
+    onChange,
+    configs: estructuraTableConfigs(entidadId),
+    logLabel: "estructura",
+  });
+}
+
+/** Dispara recarga de vistas estructurales en desktop (AmbientesView, etc.). */
+export function dispatchEstructuraRefresh() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(ESTRUCTURA_REFRESH_EVENT));
 }

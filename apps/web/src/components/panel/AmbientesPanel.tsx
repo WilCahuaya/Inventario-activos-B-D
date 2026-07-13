@@ -208,6 +208,23 @@ export function AmbientesPanel({
   const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes", "list");
   const [visitasActivas, setVisitasActivas] = useState(initialVisitasActivas);
   const [visitasHistorial, setVisitasHistorial] = useState(initialVisitasHistorial);
+
+  useEffect(() => {
+    setAmbientes(initial);
+  }, [initial]);
+  useEffect(() => {
+    setSedes(initialSedes);
+  }, [initialSedes]);
+  useEffect(() => {
+    setResponsables(initialResponsables);
+  }, [initialResponsables]);
+  useEffect(() => {
+    setVisitasActivas(initialVisitasActivas);
+  }, [initialVisitasActivas]);
+  useEffect(() => {
+    setVisitasHistorial(initialVisitasHistorial);
+  }, [initialVisitasHistorial]);
+
   const [visitaPending, setVisitaPending] = useState(false);
   const [cerrarPendingId, setCerrarPendingId] = useState<string | null>(null);
   const [visitaError, setVisitaError] = useState<string | null>(null);

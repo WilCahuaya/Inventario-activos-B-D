@@ -9,7 +9,7 @@ import { panelMainScrollClass, panelPageClass } from "@inventario/ui/panel";
 import type { PanelNavSection } from "./panel-nav-icons";
 import { IconMenu } from "./panel-nav-icons";
 import { PanelSidebar } from "./PanelSidebar";
-import { ActivosRealtimeSync } from "./ActivosRealtimeSync";
+import { PanelDataSync } from "./PanelDataSync";
 
 interface PanelLayoutProps {
   panelLabel: string;
@@ -34,7 +34,7 @@ export function PanelLayout({
   return (
     <ToastProvider>
       <div className="panel-shell flex h-dvh w-full max-w-full flex-col overflow-hidden bg-muted/30">
-        <ActivosRealtimeSync entidadId={realtimeEntidadId} />
+        <PanelDataSync entidadId={realtimeEntidadId} />
       <header className="border-b border-border/70 bg-card shadow-sm">
         <div className="panel-shell-header">
           <div className="flex min-w-0 items-center gap-3">

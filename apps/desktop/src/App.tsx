@@ -38,6 +38,9 @@ import { useProfile } from "./hooks/useProfile";
 import { useSelectedEntidad } from "./hooks/useSelectedEntidad";
 import { useSyncQueue } from "./hooks/useSyncQueue";
 import { useActivosRealtime } from "./hooks/useActivosRealtime";
+import { useEstructuraRealtime } from "./hooks/useEstructuraRealtime";
+import { useVisibilityRefresh } from "./hooks/useVisibilityRefresh";
+import { dispatchEstructuraRefresh } from "@inventario/realtime";
 import type { ActivoConUbicacion } from "./lib/activos";
 import { labelZplInputForActivo, labelZplInputsForActivos } from "./lib/label-print";
 import { desktopNavSections } from "./lib/panel-nav";
@@ -204,6 +207,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
     entidadId,
     setEntidadId,
     setEntidadesList,
+    refreshEntidades,
   } = useSelectedEntidad(Boolean(profile));
   const { pending, syncing, lastResult, syncNow } = useSyncQueue(Boolean(profile));
 
@@ -241,10 +245,33 @@ function MainApp({ userId }: { userId: string; email: string }) {
     await globalActivos.refresh();
   }, [activosCache.refresh, globalActivos.refresh]);
 
+  const refreshEstructura = useCallback(async () => {
+    await refreshEntidades();
+    dispatchEstructuraRefresh();
+  }, [refreshEntidades]);
+
+  const refreshAllRemote = useCallback(async () => {
+    await refreshEstructura();
+    await refreshActivos();
+  }, [refreshEstructura, refreshActivos]);
+
+  const realtimeEntidadId = profile?.rol === "ADMIN_ENTIDAD" ? profile.entidad_id : null;
+
   useActivosRealtime({
     enabled: Boolean(profile) && online,
-    entidadId: profile?.rol === "ADMIN_ENTIDAD" ? profile.entidad_id : null,
+    entidadId: realtimeEntidadId,
     onRefresh: refreshActivos,
+  });
+
+  useEstructuraRealtime({
+    enabled: Boolean(profile) && online,
+    entidadId: realtimeEntidadId,
+    onRefresh: refreshEstructura,
+  });
+
+  useVisibilityRefresh({
+    enabled: Boolean(profile) && online,
+    onRefresh: refreshAllRemote,
   });
 
   if (profileLoading) {
@@ -398,7 +425,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
   async function handleSyncNow() {
     void syncNow();
     void catalog.syncNow();
-    await refreshActivos();
+    await refreshAllRemote();
   }
 
   const drillEntidad = entidades.find((e) => e.id === drillEntidadId) ?? entidad;

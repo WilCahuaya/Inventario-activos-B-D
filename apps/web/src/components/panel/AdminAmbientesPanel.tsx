@@ -101,7 +101,18 @@ export function AdminAmbientesPanel({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useStoredViewMode("inventario-view-ambientes", "list");
-  const [visitasHistorial] = useState(initialVisitasHistorial);
+  const [visitasHistorial, setVisitasHistorial] = useState(initialVisitasHistorial);
+
+  useEffect(() => {
+    setAmbientes(initial);
+  }, [initial]);
+  useEffect(() => {
+    setResponsables(initialResponsables);
+  }, [initialResponsables]);
+  useEffect(() => {
+    setVisitasHistorial(initialVisitasHistorial);
+  }, [initialVisitasHistorial]);
+
   const [detalleVisita, setDetalleVisita] = useState<VisitaCampoHistorial | null>(null);
   const [detalleAmbientes, setDetalleAmbientes] = useState<Awaited<ReturnType<typeof getVisitaCampoDetalle>> | null>(null);
   const [detalleLoading, setDetalleLoading] = useState(false);

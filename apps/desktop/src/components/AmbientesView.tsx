@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CreateResponsableInput, Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
 import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
+import { ESTRUCTURA_REFRESH_EVENT } from "@inventario/realtime";
 import { panelFieldsetClass } from "@inventario/ui/panel";
 import { Button, Dialog, ResponsablesPanel, Select } from "@inventario/ui";
 import {
@@ -311,6 +312,17 @@ export function AmbientesView({
       setVisitasActivas([]);
       setVisitasHistorial([]);
     }
+  }, [online, loadData]);
+
+  useEffect(() => {
+    if (!online) return;
+    const onEstructuraRefresh = () => {
+      void loadData();
+    };
+    window.addEventListener(ESTRUCTURA_REFRESH_EVENT, onEstructuraRefresh);
+    return () => {
+      window.removeEventListener(ESTRUCTURA_REFRESH_EVENT, onEstructuraRefresh);
+    };
   }, [online, loadData]);
 
   async function syncVisitaYAmbientes() {

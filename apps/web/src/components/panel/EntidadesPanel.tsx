@@ -196,6 +196,10 @@ function entidadPageHref(entidadId: string) {
 export function EntidadesPanel({ entidades: initial }: { entidades: EntidadConConteo[] }) {
   const router = useRouter();
   const [entidades, setEntidades] = useState(initial);
+
+  useEffect(() => {
+    setEntidades(initial);
+  }, [initial]);
   const [busqueda, setBusqueda] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntidad, setEditEntidad] = useState<EntidadConConteo | null>(null);

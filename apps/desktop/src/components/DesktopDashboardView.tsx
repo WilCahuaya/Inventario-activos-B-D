@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { EntidadConConteo } from "@inventario/types";
+import { ESTRUCTURA_REFRESH_EVENT } from "@inventario/realtime";
 import {
   EntidadResumenPanel,
   PanelCountLabel,
@@ -48,6 +49,7 @@ export function DesktopDashboard({
   const [sedes, setSedes] = useState<SedeConConteo[]>([]);
   const [metaLoading, setMetaLoading] = useState(false);
   const [errorDetalle, setErrorDetalle] = useState<string | null>(null);
+  const [estructuraTick, setEstructuraTick] = useState(0);
 
   const entidadSeleccionada = useMemo(
     () => entidades.find((e) => e.id === selectedEntidadId) ?? null,
@@ -97,6 +99,17 @@ export function DesktopDashboard({
 
     return () => {
       cancelled = true;
+    };
+  }, [selectedEntidadId, estructuraTick]);
+
+  useEffect(() => {
+    if (!selectedEntidadId) return;
+    const onEstructuraRefresh = () => {
+      setEstructuraTick((n) => n + 1);
+    };
+    window.addEventListener(ESTRUCTURA_REFRESH_EVENT, onEstructuraRefresh);
+    return () => {
+      window.removeEventListener(ESTRUCTURA_REFRESH_EVENT, onEstructuraRefresh);
     };
   }, [selectedEntidadId]);
 
