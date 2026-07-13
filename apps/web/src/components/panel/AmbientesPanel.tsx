@@ -250,19 +250,8 @@ export function AmbientesPanel({
   const entidadMultiplesSedes = entidadMuestraSelectorSede(sedes);
   const ocultarSucursalEnLista = !entidadMultiplesSedes || sedeFiltrada;
 
-  const entityTabs = useMemo(
-    () =>
-      entidadMultiplesSedes
-        ? ENTITY_TABS
-        : ENTITY_TABS.filter((t) => t.id !== "sucursales"),
-    [entidadMultiplesSedes],
-  );
-
-  useEffect(() => {
-    if (!entidadMultiplesSedes && tab === "sucursales") {
-      handleTabChange("inventario");
-    }
-  }, [entidadMultiplesSedes, tab]);
+  // Siempre mostrar tab Sucursales: con 0–1 sede también hay que poder crear/gestionar.
+  const entityTabs = ENTITY_TABS;
 
   useEffect(() => {
     setSedeFilterId("");
@@ -558,8 +547,8 @@ export function AmbientesPanel({
           sedeFocus
             ? `Ambientes de la sucursal · ${sedeFocus.nombre}`
             : entidad.ruc
-              ? `RUC ${entidad.ruc} · Inventario, ambientes${entidadMultiplesSedes ? " y sucursales" : ""}`
-              : `Inventario, ambientes${entidadMultiplesSedes ? " y sucursales" : ""}`
+              ? `RUC ${entidad.ruc} · Inventario, ambientes y sucursales`
+              : "Inventario, ambientes y sucursales"
         }
       />
 
