@@ -242,7 +242,9 @@ export async function setEntidadActivo(
   return { success: true, data: data as Entidad };
 }
 
-/** Elimina la entidad de forma permanente. Solo si no tiene activos. */
+/** Elimina la entidad de forma permanente. Solo si no tiene activos (cualquier estado).
+ *  En cascada se borran sedes, ambientes (incluido el de preregistros), responsables, etc.
+ */
 export async function deleteEntidad(
   entidadId: string,
 ): Promise<{ success?: true; error?: string }> {
@@ -256,12 +258,21 @@ export async function deleteEntidad(
   if ((count ?? 0) > 0) {
     return {
       error:
-        "No puede eliminar una entidad que tiene activos. Desactívela o elimine los activos primero.",
+        "No puede eliminar una entidad que tiene activos (registrados, preregistrados o dados de baja). Elimine o dé de baja los bienes primero, o desactive la entidad.",
     };
   }
 
   const { error } = await supabase.from("entidades").delete().eq("id", entidadId);
 
-  if (error) return { error: error.message };
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("preregistro") || msg.includes("preregistros")) {
+      return {
+        error:
+          "No se pudo eliminar por el ambiente de preregistros. Actualice la base de datos (migración de cascada) e intente de nuevo.",
+      };
+    }
+    return { error: error.message };
+  }
   return { success: true };
 }

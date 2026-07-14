@@ -395,7 +395,7 @@ export function EntidadesView({
             <ActivateIcon />
           </PanelIconAction>
         )}
-        {entidad.activo ? (
+        {entidad.activo && entidad.activo_count > 0 && (
           <PanelIconAction
             label="Desactivar"
             variant="danger"
@@ -407,20 +407,19 @@ export function EntidadesView({
           >
             <DeleteIcon />
           </PanelIconAction>
-        ) : (
-          entidad.activo_count === 0 && (
-            <PanelIconAction
-              label="Eliminar definitivamente"
-              variant="danger"
-              disabled={pending}
-              onClick={() => {
-                setError(null);
-                setConfirmAction({ type: "delete", item: entidad });
-              }}
-            >
-              <DeleteIcon />
-            </PanelIconAction>
-          )
+        )}
+        {entidad.activo_count === 0 && (
+          <PanelIconAction
+            label="Eliminar definitivamente"
+            variant="danger"
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              setConfirmAction({ type: "delete", item: entidad });
+            }}
+          >
+            <DeleteIcon />
+          </PanelIconAction>
         )}
       </div>
     );
@@ -663,7 +662,7 @@ export function EntidadesView({
         }
         description={
           confirmAction?.type === "delete"
-            ? `¿Eliminar definitivamente «${confirmAction.item.nombre}»? Esta acción no se puede deshacer. Solo es posible si no tiene activos.`
+            ? `¿Eliminar definitivamente «${confirmAction.item.nombre}»? Se borrarán también sus sucursales, ambientes (incluido el de preregistros) y responsables. Esta acción no se puede deshacer.`
             : confirmAction
               ? `¿Desactivar «${confirmAction.item.nombre}»? Dejará de aparecer en el inventario operativo; podrá reactivarla después.`
               : undefined
