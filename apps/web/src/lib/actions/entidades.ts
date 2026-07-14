@@ -76,6 +76,7 @@ export async function createEntidad(input: CreateEntidadInput) {
   };
 }
 
+/** Devuelve la entidad aunque esté inactiva (útil para gestión y bloqueo de admin). */
 export async function getEntidad(entidadId: string): Promise<Entidad | null> {
   const profile = await getProfile();
   if (!profile) return null;
@@ -85,7 +86,6 @@ export async function getEntidad(entidadId: string): Promise<Entidad | null> {
     .from("entidades")
     .select("*")
     .eq("id", entidadId)
-    .eq("activo", true)
     .maybeSingle();
 
   if (error || !data) return null;

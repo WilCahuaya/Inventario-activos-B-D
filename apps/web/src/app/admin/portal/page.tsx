@@ -1,23 +1,27 @@
 import { redirect } from "next/navigation";
 import { EntityPortalView } from "@/components/portal/EntityPortalView";
-import { getEntidad } from "@/lib/actions/entidades";
-import { requireProfile } from "@/lib/auth/profile";
+import { EntidadInactivaBlockedView } from "@/components/portal/EntidadInactivaBlockedView";
+import { resolveAdminEntidadAccess } from "@/lib/auth/admin-entidad-access";
 
 export default async function AdminPortalPage() {
-  try {
-    const profile = await requireProfile("ADMIN_ENTIDAD");
-    if (!profile.entidad_id) redirect("/login?error=no_profile");
+  const access = await resolveAdminEntidadAccess();
 
-    const entidad = await getEntidad(profile.entidad_id);
-    if (!entidad) redirect("/login?error=no_profile");
+  if (access.status === "unauth") redirect("/login");
 
+  if (access.status === "inactive") {
     return (
-      <EntityPortalView
-        entidad={entidad}
-        gestionHref="/admin/inventario"
+      <EntidadInactivaBlockedView
+        reason="inactive"
+        entidadNombre={access.entidad.nombre}
       />
     );
-  } catch {
-    redirect("/login");
   }
+
+  if (access.status === "missing") {
+    return <EntidadInactivaBlockedView reason="missing" />;
+  }
+
+  return (
+    <EntityPortalView entidad={access.entidad} gestionHref="/admin/inventario" />
+  );
 }
