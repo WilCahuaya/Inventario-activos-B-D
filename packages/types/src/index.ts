@@ -177,10 +177,7 @@ export function validarCreateResponsableInput(input: CreateResponsableInput): st
     return "El nombre del responsable es obligatorio.";
   }
   const dni = normalizeResponsableDni(input.dni ?? "");
-  if (!dni) {
-    return "El DNI del responsable es obligatorio.";
-  }
-  if (dni.length !== 8) {
+  if (dni && dni.length !== 8) {
     return "El DNI debe tener 8 dígitos.";
   }
   return null;
@@ -1578,6 +1575,7 @@ export {
   IMPORT_AMBIENTES_HEADERS,
   buildExistingAmbienteKeys,
   buildResponsableDniLookup,
+  buildResponsableNombreLookup,
   buildSedeLookup,
   emptyImportAmbienteFila,
   findPrincipalSede,

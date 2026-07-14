@@ -35,13 +35,11 @@ export function ResponsableFormFields({
         <Input
           id={`${idPrefix}_dni`}
           name="dni"
-          required
           inputMode="numeric"
           autoComplete="off"
           maxLength={8}
-          pattern="[0-9]{8}"
-          title="8 dígitos"
-          placeholder="12345678"
+          title="8 dígitos (opcional)"
+          placeholder="Opcional"
           defaultValue={responsable?.dni ?? ""}
         />
       </div>

@@ -120,7 +120,7 @@ export async function createResponsable(
     .insert({
       entidad_id: entidadId,
       nombre,
-      dni: normalizeResponsableDni(input.dni),
+      dni: normalizeResponsableDni(input.dni) || null,
       email: trimOrNull(input.email),
       telefono: trimOrNull(input.telefono),
       cargo: RESPONSABLE_CARGO_DEFAULT,
@@ -169,7 +169,7 @@ export async function updateResponsable(
     .from("responsables")
     .update({
       nombre: normalizeResponsableNombre(input.nombre),
-      dni: normalizeResponsableDni(input.dni),
+      dni: normalizeResponsableDni(input.dni) || null,
       email: trimOrNull(input.email),
       telefono: trimOrNull(input.telefono),
       ...(input.activo !== undefined ? { activo: input.activo } : {}),

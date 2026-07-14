@@ -5,6 +5,7 @@ import {
   RESPONSABLE_CARGO_DEFAULT,
   buildExistingAmbienteKeys,
   buildResponsableDniLookup,
+  buildResponsableNombreLookup,
   buildSedeLookup,
   findPrincipalSede,
   isPrincipalSedeNombre,
@@ -99,17 +100,23 @@ async function resolveResponsableId(
   entidadId: string,
   data: ImportAmbienteRowData,
   responsableByDni: Map<string, string>,
+  responsableByNombre: Map<string, string>,
   responsablesCreados: { count: number },
 ): Promise<{ id: string | null } | { error: string }> {
   if (!data.responsableNombre && !data.responsableDni) {
     return { id: null };
   }
 
-  const dni = normalizeResponsableDni(data.responsableDni ?? "");
-  const existingId = responsableByDni.get(dni);
-  if (existingId) {
-    return { id: existingId };
+  const dni = normalizeResponsableDni(data.responsableDni ?? "") || null;
+  if (dni) {
+    const existingByDni = responsableByDni.get(dni);
+    if (existingByDni) return { id: existingByDni };
   }
+
+  const nombre = normalizeResponsableNombre(data.responsableNombre!);
+  const nombreKey = normalizeImportKey(nombre);
+  const existingByNombre = responsableByNombre.get(nombreKey);
+  if (existingByNombre) return { id: existingByNombre };
 
   const trimOrNull = (value: string | null) => {
     const trimmed = value?.trim();
@@ -120,7 +127,7 @@ async function resolveResponsableId(
     .from("responsables")
     .insert({
       entidad_id: entidadId,
-      nombre: normalizeResponsableNombre(data.responsableNombre!),
+      nombre,
       dni,
       email: trimOrNull(data.responsableEmail),
       telefono: trimOrNull(data.responsableTelefono),
@@ -133,10 +140,14 @@ async function resolveResponsableId(
     if (error.code === "23505" && error.message.includes("dni")) {
       return { error: `Ya existe un responsable con DNI ${dni} en esta entidad.` };
     }
+    if (error.code === "23505") {
+      return { error: `Ya existe un responsable llamado «${nombre}» en esta entidad.` };
+    }
     return { error: error.message };
   }
 
-  responsableByDni.set(dni, row.id as string);
+  if (dni) responsableByDni.set(dni, row.id as string);
+  responsableByNombre.set(nombreKey, row.id as string);
   responsablesCreados.count += 1;
   return { id: row.id as string };
 }
@@ -163,6 +174,7 @@ export async function importAmbientes(
 
   const sedeLookup = buildSedeLookup(context.sedes);
   const responsableByDni = buildResponsableDniLookup(context.responsables);
+  const responsableByNombre = buildResponsableNombreLookup(context.responsables);
   const existingKeys = buildExistingAmbienteKeys(context.ambientes);
   const batchKeys = new Set<string>();
   const sedesCreadas = { count: 0 };
@@ -205,6 +217,7 @@ export async function importAmbientes(
       entidadId,
       parsed.data,
       responsableByDni,
+      responsableByNombre,
       responsablesCreados,
     );
     if ("error" in responsableResult) {

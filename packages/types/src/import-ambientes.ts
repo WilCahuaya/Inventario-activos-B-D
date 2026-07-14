@@ -8,15 +8,12 @@ function normalizeResponsableDni(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-function validarResponsableImport(nombre: string, dni: string): string | null {
+function validarResponsableImport(nombre: string, dni: string | null): string | null {
   if (!normalizeResponsableNombre(nombre)) {
     return "El nombre del responsable es obligatorio.";
   }
-  const dniNorm = normalizeResponsableDni(dni);
-  if (!dniNorm) {
-    return "El DNI del responsable es obligatorio.";
-  }
-  if (dniNorm.length !== 8) {
+  const dniNorm = normalizeResponsableDni(dni ?? "");
+  if (dniNorm && dniNorm.length !== 8) {
     return "El DNI debe tener 8 dígitos.";
   }
   return null;
@@ -174,6 +171,17 @@ export function buildResponsableDniLookup(
   return map;
 }
 
+export function buildResponsableNombreLookup(
+  responsables: ImportAmbienteResponsableRef[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const responsable of responsables) {
+    const key = normalizeImportKey(responsable.nombre);
+    if (key) map.set(key, responsable.responsableId);
+  }
+  return map;
+}
+
 export function buildExistingAmbienteKeys(ambientes: ImportAmbienteExistingRef[]): Set<string> {
   const keys = new Set<string>();
   for (const ambiente of ambientes) {
@@ -225,9 +233,6 @@ export function parseImportAmbienteFila(
 
   if (!data.responsableNombre) {
     return { ok: false, motivo: "Indique el nombre del responsable o deje vacíos todos sus datos." };
-  }
-  if (!data.responsableDni) {
-    return { ok: false, motivo: "El DNI del responsable es obligatorio (8 dígitos)." };
   }
 
   const validationError = validarResponsableImport(data.responsableNombre, data.responsableDni);
