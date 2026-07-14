@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EntidadConConteo } from "@inventario/types";
 import { listEntidades } from "../lib/entidades";
 
@@ -10,16 +10,22 @@ export function useSelectedEntidad(enabled: boolean) {
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
+  const entidadesActivas = useMemo(
+    () => entidades.filter((e) => e.activo),
+    [entidades],
+  );
+
   const loadEntidades = useCallback(async () => {
     const items = await listEntidades();
     setEntidades(items);
+    const activas = items.filter((e) => e.activo);
     setEntidadIdState((current) => {
-      const valid = items.find((e) => e.id === current);
+      const valid = activas.find((e) => e.id === current);
       if (valid) return current;
       const saved = localStorage.getItem(STORAGE_KEY);
-      const fromStorage = items.find((e) => e.id === saved);
+      const fromStorage = activas.find((e) => e.id === saved);
       if (fromStorage) return fromStorage.id;
-      if (items.length === 1) return items[0].id;
+      if (activas.length === 1) return activas[0].id;
       return "";
     });
     return items;
@@ -55,9 +61,11 @@ export function useSelectedEntidad(enabled: boolean) {
 
   function setEntidadesList(items: EntidadConConteo[]) {
     setEntidades(items);
+    const activas = items.filter((e) => e.activo);
     setEntidadIdState((current) => {
-      if (current && items.some((e) => e.id === current)) return current;
-      if (items.length === 1) return items[0].id;
+      if (current && activas.some((e) => e.id === current)) return current;
+      if (activas.length === 1) return activas[0].id;
+      if (current) localStorage.removeItem(STORAGE_KEY);
       return "";
     });
   }
@@ -65,7 +73,10 @@ export function useSelectedEntidad(enabled: boolean) {
   const entidad = entidades.find((e) => e.id === entidadId) ?? null;
 
   return {
+    /** Todas las entidades (activas e inactivas) para gestión. */
     entidades,
+    /** Solo activas: selectores, dashboard e inventario operativo. */
+    entidadesActivas,
     entidad,
     entidadId,
     setEntidadId,

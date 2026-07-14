@@ -15,7 +15,7 @@ export default async function ContadorDashboardPage() {
 
   return (
     <Suspense fallback={<p className="text-sm text-muted-foreground">Cargando dashboard…</p>}>
-      <ContadorDashboard entidades={entidades} />
+      <ContadorDashboard entidades={entidades.filter((e) => e.activo)} />
     </Suspense>
   );
 }

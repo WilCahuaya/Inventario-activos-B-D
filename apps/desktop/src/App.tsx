@@ -203,6 +203,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
   useAtributoVocabSync(Boolean(profile), online);
   const {
     entidades,
+    entidadesActivas,
     entidad,
     entidadId,
     setEntidadId,
@@ -232,13 +233,16 @@ function MainApp({ userId }: { userId: string; email: string }) {
   const globalActivos = useGlobalActivosCache(entidades, Boolean(profile));
 
   useEffect(() => {
-    if (entidades.length === 0) return;
-    if (!dashboardEntidadId || !entidades.some((e) => e.id === dashboardEntidadId)) {
-      const firstId = entidades[0].id;
+    if (entidadesActivas.length === 0) {
+      if (dashboardEntidadId) setDashboardEntidadId("");
+      return;
+    }
+    if (!dashboardEntidadId || !entidadesActivas.some((e) => e.id === dashboardEntidadId)) {
+      const firstId = entidadesActivas[0].id;
       setDashboardEntidadId(firstId);
       setEntidadId(firstId);
     }
-  }, [entidades, dashboardEntidadId, setEntidadId]);
+  }, [entidadesActivas, dashboardEntidadId, setEntidadId]);
 
   const refreshActivos = useCallback(async () => {
     await activosCache.refresh();
@@ -588,8 +592,8 @@ function MainApp({ userId }: { userId: string; email: string }) {
     >
       {mainNav === "dashboard" && !showEntityPortal && (
         <DesktopDashboard
-          entidades={entidades}
-          selectedEntidadId={dashboardEntidadId || entidades[0]?.id || ""}
+          entidades={entidadesActivas}
+          selectedEntidadId={dashboardEntidadId || entidadesActivas[0]?.id || ""}
           onSelectEntidad={(id) => {
             setDashboardEntidadId(id);
             setEntidadId(id);
@@ -769,7 +773,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
 
       {mainNav === "reportes" && (
         <ReportesView
-          entidades={entidades}
+          entidades={entidadesActivas}
           usuarioNombre={profile.nombre}
           usuarioEmail={profile.email}
           online={online}

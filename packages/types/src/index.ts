@@ -96,6 +96,8 @@ export interface Entidad {
 
 export interface EntidadConConteo extends Entidad {
   ambiente_count: number;
+  /** Cantidad de activos de la entidad (cualquier estado). */
+  activo_count: number;
 }
 
 export interface Sede {

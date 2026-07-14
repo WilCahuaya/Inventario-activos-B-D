@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CreateResponsableInput, Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
 import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { ESTRUCTURA_REFRESH_EVENT } from "@inventario/realtime";
@@ -262,8 +262,18 @@ export function AmbientesView({
     setBusqueda("");
   }, [entidadId, sedeFocus?.id]);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const hasLoadedRef = useRef(false);
+  const prevEntidadKeyRef = useRef(`${entidad.id}:${sedeFocus?.id ?? ""}`);
+
+  const loadData = useCallback(async (opts?: { silent?: boolean }) => {
+    const entidadKey = `${entidad.id}:${sedeFocus?.id ?? ""}`;
+    if (prevEntidadKeyRef.current !== entidadKey) {
+      prevEntidadKeyRef.current = entidadKey;
+      hasLoadedRef.current = false;
+    }
+
+    const silent = opts?.silent ?? hasLoadedRef.current;
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [ambList, sedeList, respList, visitas, historial] = await Promise.all([
@@ -279,11 +289,12 @@ export function AmbientesView({
       setResponsables(respList.data ?? []);
       setVisitasActivas(visitas);
       setVisitasHistorial(historial);
+      hasLoadedRef.current = true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "No se pudieron cargar los ambientes";
       setError(msg);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [entidad.id, sedeFocus?.id]);
 
@@ -294,6 +305,7 @@ export function AmbientesView({
   useEffect(() => {
     if (online) void loadData();
     else {
+      hasLoadedRef.current = false;
       setLoading(false);
       setAmbientes([]);
       setSedes([]);
@@ -305,11 +317,17 @@ export function AmbientesView({
 
   useEffect(() => {
     if (!online) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const onEstructuraRefresh = () => {
-      void loadData();
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        void loadData({ silent: true });
+      }, 400);
     };
     window.addEventListener(ESTRUCTURA_REFRESH_EVENT, onEstructuraRefresh);
     return () => {
+      if (timer) clearTimeout(timer);
       window.removeEventListener(ESTRUCTURA_REFRESH_EVENT, onEstructuraRefresh);
     };
   }, [online, loadData]);

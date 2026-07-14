@@ -5,12 +5,12 @@ import {
   entidadNombreRequiereEtiquetaOverride,
   suggestNombreEtiqueta,
 } from "@inventario/types";
-import { Button, Dialog, Input, Label } from "@inventario/ui";
+import { Button, ConfirmDialog, Dialog, Input, Label } from "@inventario/ui";
 import {
+  ActivateIcon,
   DeleteIcon,
   PanelDataTable,
   PanelIconAction,
-  PanelTableActions,
   PanelTableColgroup,
   PanelTableTd,
   PanelTableTh,
@@ -31,14 +31,25 @@ import {
   panelTableStickyHeadClass,
   useStoredViewMode,
 } from "@inventario/ui/panel";
-import { ConfirmDialog } from "@inventario/ui";
 import {
   createEntidad,
   deleteEntidad,
   inviteEntidadAdminInBackground,
+  setEntidadActivo,
   updateEntidad,
   type CreateEntidadInput,
 } from "../lib/entidades";
+
+function sortEntidades(items: EntidadConConteo[]) {
+  return [...items].sort((a, b) => {
+    if (a.activo !== b.activo) return a.activo ? -1 : 1;
+    return a.nombre.localeCompare(b.nombre);
+  });
+}
+
+type ConfirmAction =
+  | { type: "deactivate"; item: EntidadConConteo }
+  | { type: "delete"; item: EntidadConConteo };
 
 function EntidadFields({ entidad, requireAdmin = false }: { entidad?: EntidadConConteo; requireAdmin?: boolean }) {
   const [nombre, setNombre] = useState(entidad?.nombre ?? "");
@@ -205,7 +216,7 @@ export function EntidadesView({
   const [busqueda, setBusqueda] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntidad, setEditEntidad] = useState<EntidadConConteo | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<EntidadConConteo | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -213,13 +224,15 @@ export function EntidadesView({
 
   const filtradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return entidades;
-    return entidades.filter(
-      (e) =>
-        e.nombre.toLowerCase().includes(q) ||
-        (e.ruc?.toLowerCase().includes(q) ?? false) ||
-        (e.admin_nombre?.toLowerCase().includes(q) ?? false),
-    );
+    const base = !q
+      ? entidades
+      : entidades.filter(
+          (e) =>
+            e.nombre.toLowerCase().includes(q) ||
+            (e.ruc?.toLowerCase().includes(q) ?? false) ||
+            (e.admin_nombre?.toLowerCase().includes(q) ?? false),
+        );
+    return sortEntidades(base);
   }, [entidades, busqueda]);
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
@@ -238,9 +251,7 @@ export function EntidadesView({
       }
 
       onEntidadesChange(
-        [...entidades, { ...result.data!, ambiente_count: 0 }].sort((a, b) =>
-          a.nombre.localeCompare(b.nombre),
-        ),
+        sortEntidades([...entidades, { ...result.data!, ambiente_count: 0, activo_count: 0 }]),
       );
       setCreateOpen(false);
       form.reset();
@@ -269,13 +280,17 @@ export function EntidadesView({
       if (result.inviteMessage) setSuccess(result.inviteMessage);
 
       onEntidadesChange(
-        entidades
-          .map((e) =>
+        sortEntidades(
+          entidades.map((e) =>
             e.id === editEntidad.id
-              ? { ...result.data!, ambiente_count: e.ambiente_count }
+              ? {
+                  ...result.data!,
+                  ambiente_count: e.ambiente_count,
+                  activo_count: e.activo_count,
+                }
               : e,
-          )
-          .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+          ),
+        ),
       );
       setEditEntidad(null);
       inviteEntidadAdminInBackground(
@@ -289,23 +304,126 @@ export function EntidadesView({
     }
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
+  async function handleActivate(entidad: EntidadConConteo) {
     setPending(true);
     setError(null);
-
     try {
-      const result = await deleteEntidad(deleteTarget.id);
+      const result = await setEntidadActivo(entidad.id, true);
       if (result.error) {
         setError(result.error);
         return;
       }
-
-      onEntidadesChange(entidades.filter((e) => e.id !== deleteTarget.id));
-      setDeleteTarget(null);
+      onEntidadesChange(
+        sortEntidades(
+          entidades.map((e) =>
+            e.id === entidad.id
+              ? {
+                  ...e,
+                  ...result.data!,
+                  ambiente_count: e.ambiente_count,
+                  activo_count: e.activo_count,
+                }
+              : e,
+          ),
+        ),
+      );
     } finally {
       setPending(false);
     }
+  }
+
+  async function handleConfirmAction() {
+    if (!confirmAction) return;
+    setPending(true);
+    setError(null);
+
+    try {
+      if (confirmAction.type === "deactivate") {
+        const result = await setEntidadActivo(confirmAction.item.id, false);
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        onEntidadesChange(
+          sortEntidades(
+            entidades.map((e) =>
+              e.id === confirmAction.item.id
+                ? {
+                    ...e,
+                    ...result.data!,
+                    ambiente_count: e.ambiente_count,
+                    activo_count: e.activo_count,
+                  }
+                : e,
+            ),
+          ),
+        );
+      } else {
+        const result = await deleteEntidad(confirmAction.item.id);
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        onEntidadesChange(entidades.filter((e) => e.id !== confirmAction.item.id));
+      }
+      setConfirmAction(null);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function renderEntidadActions(entidad: EntidadConConteo) {
+    return (
+      <div className="flex flex-nowrap items-center justify-end gap-1">
+        <PanelIconAction
+          label="Editar"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            setEditEntidad(entidad);
+          }}
+        >
+          <EditIcon />
+        </PanelIconAction>
+        {!entidad.activo && (
+          <PanelIconAction
+            label="Reactivar"
+            variant="success"
+            disabled={pending}
+            onClick={() => void handleActivate(entidad)}
+          >
+            <ActivateIcon />
+          </PanelIconAction>
+        )}
+        {entidad.activo ? (
+          <PanelIconAction
+            label="Desactivar"
+            variant="danger"
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              setConfirmAction({ type: "deactivate", item: entidad });
+            }}
+          >
+            <DeleteIcon />
+          </PanelIconAction>
+        ) : (
+          entidad.activo_count === 0 && (
+            <PanelIconAction
+              label="Eliminar definitivamente"
+              variant="danger"
+              disabled={pending}
+              onClick={() => {
+                setError(null);
+                setConfirmAction({ type: "delete", item: entidad });
+              }}
+            >
+              <DeleteIcon />
+            </PanelIconAction>
+          )
+        )}
+      </div>
+    );
   }
 
   return (
@@ -350,7 +468,7 @@ export function EntidadesView({
             </p>
           )}
 
-          {error && !createOpen && !editEntidad && !deleteTarget && (
+          {error && !createOpen && !editEntidad && !confirmAction && (
             <p className="text-sm text-destructive">{error}</p>
           )}
 
@@ -420,23 +538,16 @@ export function EntidadesView({
                       {entidad.ambiente_count}
                     </PanelTableTd>
                     <PanelTableTd className={panelTableNowrapCellClass}>
-                      <StatusBadge variant="active">Activa</StatusBadge>
+                      <StatusBadge variant={entidad.activo ? "active" : "default"}>
+                        {entidad.activo ? "Activa" : "Inactiva"}
+                      </StatusBadge>
                     </PanelTableTd>
                     <PanelTableTd
                       align="right"
                       className={`overflow-visible ${panelTableNowrapCellClass}`}
                     >
                       <div onClick={(event) => event.stopPropagation()}>
-                        <PanelTableActions
-                          onEdit={() => {
-                            setError(null);
-                            setEditEntidad(entidad);
-                          }}
-                          onDelete={() => {
-                            setError(null);
-                            setDeleteTarget(entidad);
-                          }}
-                        />
+                        {renderEntidadActions(entidad)}
                       </div>
                     </PanelTableTd>
                   </tr>
@@ -454,7 +565,9 @@ export function EntidadesView({
                   >
                     <div className="flex items-start justify-between gap-2 border-b border-border/50 px-4 py-3">
                       <h3 className="font-semibold leading-snug text-primary">{entidad.nombre}</h3>
-                      <StatusBadge variant="active">Activa</StatusBadge>
+                      <StatusBadge variant={entidad.activo ? "active" : "default"}>
+                        {entidad.activo ? "Activa" : "Inactiva"}
+                      </StatusBadge>
                     </div>
 
                     <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
@@ -472,30 +585,15 @@ export function EntidadesView({
                       <p className="text-muted-foreground">
                         {entidad.ambiente_count}{" "}
                         {entidad.ambiente_count === 1 ? "ambiente" : "ambientes"}
+                        {entidad.activo_count > 0
+                          ? ` · ${entidad.activo_count} ${entidad.activo_count === 1 ? "activo" : "activos"}`
+                          : ""}
                       </p>
                     </div>
                   </button>
 
                   <div className="flex flex-wrap items-center gap-2 border-t border-border/50 bg-muted/20 px-3 py-2.5">
-                    <PanelIconAction
-                      label="Editar"
-                      onClick={() => {
-                        setError(null);
-                        setEditEntidad(entidad);
-                      }}
-                    >
-                      <EditIcon />
-                    </PanelIconAction>
-                    <PanelIconAction
-                      label="Eliminar"
-                      variant="danger"
-                      onClick={() => {
-                        setError(null);
-                        setDeleteTarget(entidad);
-                      }}
-                    >
-                      <DeleteIcon />
-                    </PanelIconAction>
+                    {renderEntidadActions(entidad)}
                   </div>
                 </article>
               ))}
@@ -555,22 +653,28 @@ export function EntidadesView({
       </Dialog>
 
       <ConfirmDialog
-        open={!!deleteTarget}
+        open={!!confirmAction}
         onClose={() => {
-          setDeleteTarget(null);
+          setConfirmAction(null);
           setError(null);
         }}
-        title="Eliminar entidad"
-        description={
-          deleteTarget
-            ? `¿Eliminar la entidad «${deleteTarget.nombre}»? Solo es posible si no tiene activos registrados.`
-            : undefined
+        title={
+          confirmAction?.type === "delete" ? "Eliminar entidad" : "Desactivar entidad"
         }
-        confirmLabel="Eliminar"
-        confirmVariant="destructive"
+        description={
+          confirmAction?.type === "delete"
+            ? `¿Eliminar definitivamente «${confirmAction.item.nombre}»? Esta acción no se puede deshacer. Solo es posible si no tiene activos.`
+            : confirmAction
+              ? `¿Desactivar «${confirmAction.item.nombre}»? Dejará de aparecer en el inventario operativo; podrá reactivarla después.`
+              : undefined
+        }
+        confirmLabel={
+          confirmAction?.type === "delete" ? "Eliminar definitivamente" : "Desactivar"
+        }
+        confirmVariant={confirmAction?.type === "delete" ? "destructive" : "default"}
         pending={pending}
-        error={deleteTarget ? error : null}
-        onConfirm={() => void confirmDelete()}
+        error={confirmAction ? error : null}
+        onConfirm={() => void handleConfirmAction()}
       />
     </div>
   );

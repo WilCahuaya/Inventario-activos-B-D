@@ -62,7 +62,7 @@ export async function listEntidades(): Promise<EntidadConConteo[]> {
   const { data, error } = await supabase
     .from("entidades")
     .select("*")
-    .eq("activo", true)
+    .order("activo", { ascending: false })
     .order("nombre");
 
   if (error) throw new Error(error.message);
@@ -84,9 +84,17 @@ export async function listEntidades(): Promise<EntidadConConteo[]> {
     ambienteCountByEntidad.set(entidadId, (ambienteCountByEntidad.get(entidadId) ?? 0) + 1);
   }
 
+  const { data: activosRows } = await supabase.from("activos").select("entidad_id");
+  const activoCountByEntidad = new Map<string, number>();
+  for (const row of activosRows ?? []) {
+    const entidadId = row.entidad_id as string;
+    activoCountByEntidad.set(entidadId, (activoCountByEntidad.get(entidadId) ?? 0) + 1);
+  }
+
   return ((data ?? []) as Entidad[]).map((entidad) => ({
     ...entidad,
     ambiente_count: ambienteCountByEntidad.get(entidad.id) ?? 0,
+    activo_count: activoCountByEntidad.get(entidad.id) ?? 0,
   }));
 }
 
@@ -217,6 +225,24 @@ export async function updateEntidad(
   };
 }
 
+export async function setEntidadActivo(
+  entidadId: string,
+  activo: boolean,
+): Promise<{ data?: Entidad; success?: true; error?: string }> {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("entidades")
+    .update({ activo })
+    .eq("id", entidadId)
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+  return { success: true, data: data as Entidad };
+}
+
+/** Elimina la entidad de forma permanente. Solo si no tiene activos. */
 export async function deleteEntidad(
   entidadId: string,
 ): Promise<{ success?: true; error?: string }> {
@@ -228,13 +254,13 @@ export async function deleteEntidad(
     .eq("entidad_id", entidadId);
 
   if ((count ?? 0) > 0) {
-    return { error: "No puede eliminar una entidad que tiene activos registrados." };
+    return {
+      error:
+        "No puede eliminar una entidad que tiene activos. Desactívela o elimine los activos primero.",
+    };
   }
 
-  const { error } = await supabase
-    .from("entidades")
-    .update({ activo: false })
-    .eq("id", entidadId);
+  const { error } = await supabase.from("entidades").delete().eq("id", entidadId);
 
   if (error) return { error: error.message };
   return { success: true };
