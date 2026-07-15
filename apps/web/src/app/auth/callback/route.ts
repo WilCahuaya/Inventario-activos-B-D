@@ -1,22 +1,60 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { homePathForRole } from "@inventario/types";
+import { cookies } from "next/headers";
+import { NextResponse, type NextRequest } from "next/server";
 import { provisionProfileFromContador } from "@/lib/auth/contador-invite";
 import { provisionProfileFromEntidad } from "@/lib/auth/entidad-admin";
-import { homePathForRole } from "@inventario/types";
-import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Parameters<NextResponse["cookies"]["set"]>[2];
+};
+
+/**
+ * Intercambia el code OAuth y adjunta las cookies de sesión al redirect.
+ * Sin esto, Next puede devolver el redirect sin Set-Cookie y el 1.er login falla.
+ */
+export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const oauthError = searchParams.get("error");
 
-  if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+  // Cancelación / error del proveedor o callback sin code → login limpio para reintentar.
+  if (oauthError || !code) {
+    return NextResponse.redirect(`${origin}/login`);
   }
 
-  const supabase = await createClient();
+  const cookieStore = await cookies();
+  const pendingCookies: CookieToSet[] = [];
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            pendingCookies.push({ name, value, options });
+            try {
+              cookieStore.set(name, value, options);
+            } catch {
+              // El store puede ser de solo lectura en algunos contextos; igual van al response.
+            }
+          });
+        },
+      },
+    },
+  );
+
   const { error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
 
   if (sessionError) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    // Code ya usado, PKCE inválido, etc. → login sin mensaje agresivo (reintento suele funcionar).
+    return NextResponse.redirect(`${origin}/login`);
   }
 
   const {
@@ -24,7 +62,7 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    return NextResponse.redirect(`${origin}/login`);
   }
 
   let { data: profile } = await supabase
@@ -43,10 +81,19 @@ export async function GET(request: Request) {
 
   if (!profile?.activo) {
     await supabase.auth.signOut();
-    return NextResponse.redirect(`${origin}/login?error=no_profile`);
+    return applyCookies(
+      NextResponse.redirect(`${origin}/login?error=no_profile`),
+      pendingCookies,
+    );
   }
 
   const redirectPath = homePathForRole(profile.rol);
+  return applyCookies(NextResponse.redirect(`${origin}${redirectPath}`), pendingCookies);
+}
 
-  return NextResponse.redirect(`${origin}${redirectPath}`);
+function applyCookies(response: NextResponse, pending: CookieToSet[]) {
+  for (const { name, value, options } of pending) {
+    response.cookies.set(name, value, options);
+  }
+  return response;
 }

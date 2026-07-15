@@ -1,30 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BD_PORTAL_LOGIN_HINT } from "@inventario/types";
 import { BdGoogleSignInButton, BdPortalShell } from "@inventario/ui/panel";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const err = searchParams.get("error");
-    if (err === "auth") {
-      setError("No se pudo completar el inicio de sesión con Google. Intente nuevamente.");
-    } else if (err === "no_profile") {
+    if (err === "no_profile") {
       setError(
         "Su cuenta de Google no está autorizada. Debe ser invitado como administrador al crear una entidad, o tener un perfil de contador.",
       );
+      return;
     }
-  }, [searchParams]);
+    if (err === "auth") {
+      // Mensaje legado (callbacks antiguos). Limpiamos la URL; el reintento suele bastar.
+      setError(null);
+      router.replace("/login");
+    }
+  }, [searchParams, router]);
 
   async function handleGoogleLogin() {
     setLoading(true);
     setError(null);
+    if (searchParams.get("error")) {
+      router.replace("/login");
+    }
 
     const supabase = createClient();
     const { error: authError } = await supabase.auth.signInWithOAuth({
@@ -56,7 +64,7 @@ export default function LoginPage() {
       <div className="bd-portal-card">
         <p className="bd-portal-login-hint">{BD_PORTAL_LOGIN_HINT}</p>
         {error && <p className="bd-portal-error">{error}</p>}
-        <BdGoogleSignInButton loading={loading} onClick={handleGoogleLogin} />
+        <BdGoogleSignInButton loading={loading} onClick={() => void handleGoogleLogin()} />
       </div>
     </BdPortalShell>
   );
