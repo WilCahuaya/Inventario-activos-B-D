@@ -159,7 +159,7 @@ export function searchCatalog(query: string, limit = 20): CatalogoRow[] {
       exact: trimmed,
       prefix,
       pattern,
-      limit: Math.min(Math.max(limit, 1), 50),
+      limit: Math.min(Math.max(limit, 1), 500),
     }) as CatalogoRow[];
 }
 

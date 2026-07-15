@@ -16,6 +16,7 @@ import {
   buildCreateCatalogoNacionalExtensionPayload,
   buildUpdateCatalogoPropioPayload,
   buildUpdateCatalogoNacionalContabilidadPayload,
+  CATALOGO_CONSULTA_MAX_RESULTS,
   CATALOGO_PROPIO_CODIGO_RE,
   isCatalogoNacionalOficial,
   minCatalogoQueryLength,
@@ -95,7 +96,7 @@ export async function searchCatalogo(query: string, limit = 20): Promise<Catalog
 
 export async function searchCatalogoNacionalOficial(
   query: string,
-  limit = 50,
+  limit = CATALOGO_CONSULTA_MAX_RESULTS,
 ): Promise<CatalogoNacional[]> {
   const items = await searchCatalogo(query, limit);
   return items.filter(isCatalogoNacionalOficial);

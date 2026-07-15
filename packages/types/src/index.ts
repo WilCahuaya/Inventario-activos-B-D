@@ -1032,8 +1032,11 @@ export function minCatalogoQueryLength(query: string): number {
   return /^\d+$/.test(query.trim()) ? 1 : 2;
 }
 
-/** Tope de resultados en búsqueda de catálogo (coincide con search_catalogo_nacional en BD). */
+/** Tope de resultados en búsqueda de catálogo del picker (coincide con tope histórico RPC). */
 export const CATALOGO_SEARCH_MAX_RESULTS = 50;
+
+/** Tope de resultados en consulta de catálogo nacional (paginación UI de 25). */
+export const CATALOGO_CONSULTA_MAX_RESULTS = 500;
 
 /** Ítem del catálogo nacional SBN (tabla catalogo_nacional) */
 export interface CuentaContable {

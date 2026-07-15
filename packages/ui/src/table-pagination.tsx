@@ -102,6 +102,7 @@ export function TablePagination({
   onPageChange,
   onPageSizeChange,
   legend,
+  unitLabel = "activos",
 }: {
   page: number;
   totalPages: number;
@@ -113,6 +114,8 @@ export function TablePagination({
   onPageChange: (page: number) => void;
   onPageSizeChange?: (pageSize: TablePageSize) => void;
   legend?: ReactNode;
+  /** Texto de unidad en el rango (ej. activos, resultados, ítems). */
+  unitLabel?: string;
 }) {
   if (total === 0) return null;
 
@@ -122,13 +125,13 @@ export function TablePagination({
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 bg-muted/30 px-3 py-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
         <p className="shrink-0 text-xs text-muted-foreground">
-          {rangeStart}–{rangeEnd} de {total.toLocaleString("es-PE")} activos
+          {rangeStart}–{rangeEnd} de {total.toLocaleString("es-PE")} {unitLabel}
         </p>
         {onPageSizeChange && (
           <div className="flex shrink-0 items-center gap-1.5">
             <span className="text-xs text-muted-foreground">Mostrar</span>
             <Select
-              aria-label="Activos por página"
+              aria-label={`${unitLabel} por página`}
               size="compact"
               value={String(pageSize)}
               onChange={(value) => {

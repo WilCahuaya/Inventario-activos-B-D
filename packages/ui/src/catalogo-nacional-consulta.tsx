@@ -7,7 +7,11 @@ import type {
   UpdateCatalogoNacionalContabilidadInput,
   UpsertCuentaContableInput,
 } from "@inventario/types";
-import { CATALOGO_ORIGEN_LABELS, minCatalogoQueryLength } from "@inventario/types";
+import {
+  CATALOGO_CONSULTA_MAX_RESULTS,
+  CATALOGO_ORIGEN_LABELS,
+  minCatalogoQueryLength,
+} from "@inventario/types";
 import { Button, Dialog, Input, Label } from "./components";
 import { PorcentajeInput } from "./porcentaje-input";
 import { CuentaContableFields } from "./cuenta-contable-fields";
@@ -20,6 +24,8 @@ import {
   PanelSearchInput,
   PanelToolbar,
   StatusBadge,
+  TablePagination,
+  useTablePagination,
 } from "./panel";
 import {
   panelTableBodyRowClass,
@@ -105,6 +111,18 @@ export function CatalogoNacionalConsulta({
   }, [busqueda, searchItems]);
 
   const filtrados = useMemo(() => items, [items]);
+  const {
+    paginated,
+    page,
+    setPage,
+    setPageSize,
+    totalPages,
+    total,
+    rangeStart,
+    rangeEnd,
+    pageSize,
+    pageSizeOptions,
+  } = useTablePagination(filtrados, busqueda.trim(), { initialPageSize: 25 });
 
   function openEdit(item: CatalogoNacional) {
     setEditTarget(item);
@@ -189,46 +207,68 @@ export function CatalogoNacionalConsulta({
       )}
 
       {!loading && filtrados.length > 0 && (
-        <div className={`${panelCardClass} ${scrollbarThemedClass} min-w-0 max-w-full overflow-x-auto`}>
-          <table className="w-full min-w-[1080px] table-auto text-left text-sm">
-            <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
-            <thead className={panelTableStickyHeadClass}>
-              <tr className={panelTableHeadRowClass}>
-                <CatalogoItemTableHead
-                  actionsLabel={canEditContabilidad ? "Acciones" : "Ver"}
-                />
-              </tr>
-            </thead>
-            <tbody>
-              {filtrados.map((item) => (
-                <tr key={item.codigo} className={panelTableBodyRowClass}>
-                  <CatalogoItemTableCells
-                    item={item}
-                    estadoBadge={
-                      <StatusBadge variant={item.estado === "ACTIVO" ? "active" : "default"}>
-                        {item.estado ?? "—"}
-                      </StatusBadge>
-                    }
-                    actions={
-                      <div className="flex flex-nowrap items-center justify-end gap-1">
-                        <PanelIconAction label="Ver detalle" onClick={() => setViewTarget(item)}>
-                          <ViewIcon />
-                        </PanelIconAction>
-                        {canEditContabilidad && (
-                          <PanelIconAction
-                            label="Editar datos contables"
-                            onClick={() => openEdit(item)}
-                          >
-                            <EditIcon />
-                          </PanelIconAction>
-                        )}
-                      </div>
-                    }
+        <div className={`${panelCardClass} min-w-0 max-w-full overflow-hidden`}>
+          <div className={`${scrollbarThemedClass} overflow-x-auto`}>
+            <table className="w-full min-w-[1080px] table-auto text-left text-sm">
+              <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
+              <thead className={panelTableStickyHeadClass}>
+                <tr className={panelTableHeadRowClass}>
+                  <CatalogoItemTableHead
+                    actionsLabel={canEditContabilidad ? "Acciones" : "Ver"}
                   />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {paginated.map((item) => (
+                  <tr key={item.codigo} className={panelTableBodyRowClass}>
+                    <CatalogoItemTableCells
+                      item={item}
+                      estadoBadge={
+                        <StatusBadge variant={item.estado === "ACTIVO" ? "active" : "default"}>
+                          {item.estado ?? "—"}
+                        </StatusBadge>
+                      }
+                      actions={
+                        <div className="flex flex-nowrap items-center justify-end gap-1">
+                          <PanelIconAction label="Ver detalle" onClick={() => setViewTarget(item)}>
+                            <ViewIcon />
+                          </PanelIconAction>
+                          {canEditContabilidad && (
+                            <PanelIconAction
+                              label="Editar datos contables"
+                              onClick={() => openEdit(item)}
+                            >
+                              <EditIcon />
+                            </PanelIconAction>
+                          )}
+                        </div>
+                      }
+                    />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            unitLabel="resultados"
+            legend={
+              filtrados.length >= CATALOGO_CONSULTA_MAX_RESULTS ? (
+                <span className="text-xs text-muted-foreground">
+                  Mostrando hasta {CATALOGO_CONSULTA_MAX_RESULTS} coincidencias. Afine la búsqueda
+                  para ver otros resultados.
+                </span>
+              ) : undefined
+            }
+          />
         </div>
       )}
 

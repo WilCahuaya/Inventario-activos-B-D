@@ -25,6 +25,8 @@ import {
   PanelSearchInput,
   PanelToolbar,
   StatusBadge,
+  TablePagination,
+  useTablePagination,
 } from "./panel";
 import {
   panelTableBodyRowClass,
@@ -166,6 +168,19 @@ export function CatalogoPropioPanel({
     );
   }, [busqueda, items]);
 
+  const {
+    paginated,
+    page,
+    setPage,
+    setPageSize,
+    totalPages,
+    total,
+    rangeStart,
+    rangeEnd,
+    pageSize,
+    pageSizeOptions,
+  } = useTablePagination(filtrados, busqueda.trim(), { initialPageSize: 25 });
+
   function openEdit(item: CatalogoNacional) {
     setEditTarget(item);
     setEditDenominacion(item.denominacion);
@@ -271,51 +286,65 @@ export function CatalogoPropioPanel({
           }
         />
       ) : (
-        <div className={`${panelCardClass} ${scrollbarThemedClass} min-w-0 max-w-full overflow-x-auto`}>
-          <table className="w-full min-w-[1080px] table-auto text-left text-sm">
-            <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
-            <thead className={panelTableStickyHeadClass}>
-              <tr className={panelTableHeadRowClass}>
-                <CatalogoItemTableHead actionsLabel={readOnly ? "Ver" : "Acciones"} />
-              </tr>
-            </thead>
-            <tbody>
-              {filtrados.map((item) => (
-                <tr key={item.codigo} className={panelTableBodyRowClass}>
-                  <CatalogoItemTableCells
-                    item={item}
-                    estadoBadge={
-                      <StatusBadge variant="default">{item.estado ?? "EXCLUIDO"}</StatusBadge>
-                    }
-                    actions={
-                      <div className="flex flex-nowrap items-center justify-end gap-1">
-                        <PanelIconAction label="Ver" onClick={() => setViewTarget(item)}>
-                          <ViewIcon />
-                        </PanelIconAction>
-                        {!readOnly && (
-                          <>
-                            <PanelIconAction label="Editar" onClick={() => openEdit(item)}>
-                              <EditIcon />
-                            </PanelIconAction>
-                            <PanelIconAction
-                              label="Eliminar"
-                              variant="danger"
-                              onClick={() => {
-                                setConfirmError(null);
-                                setDeleteTarget(item);
-                              }}
-                            >
-                              <DeleteIcon />
-                            </PanelIconAction>
-                          </>
-                        )}
-                      </div>
-                    }
-                  />
+        <div className={`${panelCardClass} min-w-0 max-w-full overflow-hidden`}>
+          <div className={`${scrollbarThemedClass} overflow-x-auto`}>
+            <table className="w-full min-w-[1080px] table-auto text-left text-sm">
+              <PanelTableColgroup cols={CATALOGO_ITEM_TABLE_COLS} />
+              <thead className={panelTableStickyHeadClass}>
+                <tr className={panelTableHeadRowClass}>
+                  <CatalogoItemTableHead actionsLabel={readOnly ? "Ver" : "Acciones"} />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {paginated.map((item) => (
+                  <tr key={item.codigo} className={panelTableBodyRowClass}>
+                    <CatalogoItemTableCells
+                      item={item}
+                      estadoBadge={
+                        <StatusBadge variant="default">{item.estado ?? "EXCLUIDO"}</StatusBadge>
+                      }
+                      actions={
+                        <div className="flex flex-nowrap items-center justify-end gap-1">
+                          <PanelIconAction label="Ver" onClick={() => setViewTarget(item)}>
+                            <ViewIcon />
+                          </PanelIconAction>
+                          {!readOnly && (
+                            <>
+                              <PanelIconAction label="Editar" onClick={() => openEdit(item)}>
+                                <EditIcon />
+                              </PanelIconAction>
+                              <PanelIconAction
+                                label="Eliminar"
+                                variant="danger"
+                                onClick={() => {
+                                  setConfirmError(null);
+                                  setDeleteTarget(item);
+                                }}
+                              >
+                                <DeleteIcon />
+                              </PanelIconAction>
+                            </>
+                          )}
+                        </div>
+                      }
+                    />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            unitLabel="ítems"
+          />
         </div>
       )}
 
