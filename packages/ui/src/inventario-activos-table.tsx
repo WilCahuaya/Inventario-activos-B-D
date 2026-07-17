@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { Activo } from "@inventario/types";
-import { formatMonedaPE } from "@inventario/types";
+import { formatMonedaPE, formatPosibleAmbienteLabel } from "@inventario/types";
 import {
   INVENTARIO_TABLE_ADMIN_COL_COUNT,
   INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_COUNT,
@@ -136,10 +136,13 @@ export interface ActivosInventarioTableProps<T extends Activo> {
   embeddedInParentScroll?: boolean;
 }
 
-type ActivoConPosible = Activo & { posible_ambiente_nombre?: string };
+type ActivoConPosible = Activo & {
+  posible_ambiente_nombre?: string;
+  posible_sede_nombre?: string;
+};
 
-function posibleAmbienteNombre(activo: Activo): string {
-  return (activo as ActivoConPosible).posible_ambiente_nombre?.trim() || "—";
+function posibleAmbienteLabel(activo: Activo): string {
+  return formatPosibleAmbienteLabel(activo as ActivoConPosible);
 }
 
 const inventarioActivosTableClass = "inventario-activos-table";
@@ -268,8 +271,8 @@ function FullTableBody<T extends Activo>({
               />
             </InventarioTextCell>
             {modoPreregistro && (
-              <InventarioTextCell title={posibleAmbienteNombre(activo)} lineClamp2>
-                {posibleAmbienteNombre(activo)}
+              <InventarioTextCell title={posibleAmbienteLabel(activo)} lineClamp2>
+                {posibleAmbienteLabel(activo)}
               </InventarioTextCell>
             )}
             <InventarioTextCell title={descripcion} lineClamp2>

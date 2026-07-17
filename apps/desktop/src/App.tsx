@@ -219,12 +219,6 @@ function MainApp({ userId }: { userId: string; email: string }) {
   const [inventarioFlow, setInventarioFlow] = useState<InventarioFlow>({ type: "list" });
   const [printTarget, setPrintTarget] = useState<ActivoConUbicacion | null>(null);
   const [batchPrintTargets, setBatchPrintTargets] = useState<ActivoConUbicacion[] | null>(null);
-  const [catalogoPrefillDenominacion, setCatalogoPrefillDenominacion] = useState("");
-
-  function openCatalogoFromSearch(query: string) {
-    setCatalogoPrefillDenominacion(query);
-    setMainNav("catalogo");
-  }
 
   const drillEntidadId = entidadIdFromFlow(mainNav, dashboardEntidadId, entidadesFlow);
   const activosEntidadId = drillEntidadId || entidadId;
@@ -705,7 +699,6 @@ function MainApp({ userId }: { userId: string; email: string }) {
           }
           modoPreregistro={entidadesFlow.context.esAmbientePreregistro}
           initialCatalogoCodigo={entidadesFlow.initialCodigo}
-          onAddCatalogoMissing={openCatalogoFromSearch}
           onSuccess={() => goActivosListFromContext(entidadesFlow.context)}
           onCancel={() => goActivosListFromContext(entidadesFlow.context)}
         />
@@ -719,7 +712,6 @@ function MainApp({ userId }: { userId: string; email: string }) {
           fixedSedeId={entidadesFlow.context.sedeId}
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           activo={entidadesFlow.activo}
-          onAddCatalogoMissing={openCatalogoFromSearch}
           onSuccess={() => returnFromEntidadesEdit()}
           onCancel={() => returnFromEntidadesEdit()}
         />
@@ -759,15 +751,12 @@ function MainApp({ userId }: { userId: string; email: string }) {
           fixedSedeId={inventarioFlow.activo.sede_id ?? undefined}
           fixedAmbienteId={inventarioFlow.activo.ambiente_id ?? undefined}
           activo={inventarioFlow.activo}
-          onAddCatalogoMissing={openCatalogoFromSearch}
           onSuccess={() => setInventarioFlow({ type: "list" })}
           onCancel={() => setInventarioFlow({ type: "list" })}
         />
       )}
 
-      {mainNav === "catalogo" && (
-        <CatalogoView initialDenominacion={catalogoPrefillDenominacion} />
-      )}
+      {mainNav === "catalogo" && <CatalogoView />}
 
       {mainNav === "usuarios" && <UsuariosView />}
 

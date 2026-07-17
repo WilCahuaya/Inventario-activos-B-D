@@ -25,7 +25,7 @@ export interface CatalogoNacionalAltaPrefill {
   denominacion?: string;
 }
 
-function parseCatalogoNacionalAltaPrefill(query: string): CatalogoNacionalAltaPrefill {
+export function parseCatalogoNacionalAltaPrefill(query: string): CatalogoNacionalAltaPrefill {
   const trimmed = query.trim();
   if (!trimmed) return {};
   if (/^\d[\d\s]*$/.test(trimmed)) {
@@ -144,14 +144,14 @@ export function CatalogoPage({
     setShowAltaNacionalForm(true);
   }
 
-  function handleNacionalItemCreated() {
+  function handleNacionalItemCreated(_item: CatalogoNacional) {
     setCuentasReloadKey((k) => k + 1);
     setShowAltaNacionalForm(false);
     setAltaNacionalCodigo("");
     setAltaNacionalDenominacion("");
   }
 
-  function handleItemCreated() {
+  function handleItemCreated(_item: CatalogoNacional) {
     setPropioReloadKey((k) => k + 1);
     setCuentasReloadKey((k) => k + 1);
     setShowAltaForm(false);

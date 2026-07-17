@@ -10,6 +10,7 @@ import {
   formatCuentaContableDisplay,
   formatFechaISOToCortoES,
   formatMonedaPE,
+  formatPosibleAmbienteLabel,
 } from "@inventario/types";
 import { cn } from "./components";
 import { EstadoBienBadge, inventarioDepreciacionFila } from "./inventario-table-cells";
@@ -21,6 +22,7 @@ export type ActivoDetalle = Activo & {
   sede_nombre?: string;
   ambiente_nombre?: string;
   posible_ambiente_nombre?: string;
+  posible_sede_nombre?: string;
   cuenta_codigo?: string | null;
   contabilidad?: string | null;
   catalogo_grupo?: string | null;
@@ -279,7 +281,7 @@ export function ActivoDetalleSheet({
             {preregistrado && (
               <DetalleField
                 label="Posible ambiente"
-                value={activo.posible_ambiente_nombre}
+                value={formatPosibleAmbienteLabel(activo)}
                 className="col-span-2"
                 hideIfEmpty={false}
               />

@@ -37,8 +37,11 @@ export interface CatalogoAltaPanelProps {
   onSubmit: (
     input: CreateCatalogoNacionalInput,
   ) => Promise<{ data?: CatalogoNacional; error?: string }>;
-  onItemCreated?: () => void | Promise<void>;
+  /** Se invoca tras crear con éxito; recibe el ítem para seleccionarlo en el formulario del activo. */
+  onItemCreated?: (item: CatalogoNacional) => void | Promise<void>;
   onClose?: () => void;
+  /** Oculta el título introductorio (útil dentro de un Dialog que ya tiene título). */
+  hideIntro?: boolean;
   onCreateCuentaContable?: (
     input: UpsertCuentaContableInput,
   ) => Promise<{ data?: CuentaContable; error?: string }>;
@@ -59,6 +62,7 @@ export function CatalogoAltaPanel({
   onSubmit,
   onItemCreated,
   onClose,
+  hideIntro = false,
   onCreateCuentaContable,
 }: CatalogoAltaPanelProps) {
   const esNacional = variant === "nacional";
@@ -126,16 +130,20 @@ export function CatalogoAltaPanel({
         setError(result.error);
         return;
       }
+      if (!result.data) {
+        setError("No se pudo crear el ítem del catálogo.");
+        return;
+      }
 
-      setCreated(result.data ?? null);
+      setCreated(result.data);
       setSuccess(
         esNacional
-          ? `Ítem ${result.data?.codigo} agregado al catálogo nacional. Ya puede usarlo al registrar activos.${successSuffix ? ` ${successSuffix}` : ""}`
-          : `Ítem ${result.data?.codigo} agregado. Ya puede usarlo al registrar activos de cuenta de orden.${successSuffix ? ` ${successSuffix}` : ""}`,
+          ? `Ítem ${result.data.codigo} agregado al catálogo nacional. Ya puede usarlo al registrar activos.${successSuffix ? ` ${successSuffix}` : ""}`
+          : `Ítem ${result.data.codigo} agregado. Ya puede usarlo al registrar activos de cuenta de orden.${successSuffix ? ` ${successSuffix}` : ""}`,
       );
       setFormKey((k) => k + 1);
       void refreshMeta();
-      void onItemCreated?.();
+      await onItemCreated?.(result.data);
     } finally {
       setPending(false);
     }
@@ -144,23 +152,25 @@ export function CatalogoAltaPanel({
   return (
     <div className="space-y-4">
       <div className="overflow-visible rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm sm:p-6 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="font-semibold">
-              {esNacional ? "Nuevo ítem del catálogo nacional" : "Nuevo bien de cuenta de orden"}
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {esNacional
-                ? "Registre un bien del catálogo oficial SBN que no figure en la consulta. Indique el código de 8 dígitos y complete los datos contables."
-                : "Registre artículos menores que no figuran en el catálogo oficial. El código se asigna automáticamente; complete cuenta contable y contabilidad según corresponda."}
-            </p>
+        {!hideIntro && (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">
+                {esNacional ? "Nuevo ítem del catálogo nacional" : "Nuevo bien de cuenta de orden"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {esNacional
+                  ? "Registre un bien del catálogo oficial SBN que no figure en la consulta. Indique el código de 8 dígitos y complete los datos contables."
+                  : "Registre artículos menores que no figuran en el catálogo oficial. El código se asigna automáticamente; complete cuenta contable y contabilidad según corresponda."}
+              </p>
+            </div>
+            {onClose && (
+              <Button type="button" variant="outline" size="sm" onClick={onClose}>
+                Cancelar
+              </Button>
+            )}
           </div>
-          {onClose && (
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              Cancelar
-            </Button>
-          )}
-        </div>
+        )}
 
         <CatalogoNacionalForm
           key={formKey}
@@ -201,7 +211,7 @@ export function CatalogoAltaPanel({
         )}
       </div>
 
-      {!onClose && !esNacional && (
+      {!onClose && !hideIntro && !esNacional && (
         <div className={`${panelCardClass} p-4 text-sm text-muted-foreground`}>
           <p className="font-medium text-foreground">Cómo funciona</p>
           <ul className="mt-2 list-inside list-disc space-y-1">
@@ -218,7 +228,7 @@ export function CatalogoAltaPanel({
         </div>
       )}
 
-      {!onClose && esNacional && (
+      {!onClose && !hideIntro && esNacional && (
         <div className={`${panelCardClass} p-4 text-sm text-muted-foreground`}>
           <p className="font-medium text-foreground">Cómo funciona</p>
           <ul className="mt-2 list-inside list-disc space-y-1">

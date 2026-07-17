@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import type { Activo, Ambiente, CatalogoNacional, CategoriaBien, Entidad, Sede } from "@inventario/types";
 import {
   CATEGORIA_BIEN_AYUDA,
@@ -38,14 +37,17 @@ import {
 import {
   ActivoAtributoAutocomplete,
   Button,
+  CatalogoAltaPanel,
   CatalogoPicker,
   CategoriaBienSelector,
   ConfirmDialog,
   CuentaContableFields,
+  Dialog,
   FileInput,
   Input,
   Label,
   LabelPrintTextPreview,
+  parseCatalogoNacionalAltaPrefill,
   PorcentajeInput,
   Select,
   Textarea,
@@ -59,12 +61,30 @@ import {
   type UpdateActivoInput,
 } from "@/lib/actions/activos";
 import { suggestActivoAtributo } from "@/lib/actions/atributo-vocab";
-import { getCatalogoByCodigo, searchCatalogo, searchCuentasContables, upsertCuentaContable } from "@/lib/actions/catalogo";
-import { createAmbiente, createSede, getAmbiente, listAmbientes, listSedes } from "@/lib/actions/ubicacion";
+import {
+  createCatalogoNacional,
+  createCatalogoNacionalExtension,
+  deleteCatalogoOpcionPersonalizada,
+  getCatalogoByCodigo,
+  getNextCodigoCatalogoPropio,
+  listCatalogoClases,
+  listCatalogoGrupos,
+  registerCatalogoOpcionPersonalizada,
+  searchCatalogo,
+  searchCuentasContables,
+  suggestCatalogoGrupo,
+  upsertCuentaContable,
+} from "@/lib/actions/catalogo";
+import { createAmbiente, createSede, listAmbientes, listAmbientesPorEntidad, listSedes } from "@/lib/actions/ubicacion";
 import { uploadActivoFile } from "@/lib/upload-activo-file";
 import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
 import type { ActivoEditScope } from "@inventario/ui/panel";
-import { panelFieldsetClass, panelLegendClass } from "./panel-ui";
+import { panelFieldsetClass, panelLegendClass, panelModalClass } from "./panel-ui";
+
+type CatalogoAltaInline = {
+  variant: "nacional" | "propio";
+  query: string;
+};
 
 interface ActivoFormProps {
   entidades: Entidad[];
@@ -157,9 +177,16 @@ export function ActivoForm({
   const [ambientes, setAmbientes] = useState<Ambiente[]>([]);
   const [sedeId, setSedeId] = useState("");
   const [ambienteId, setAmbienteId] = useState("");
-  const [posibleSedeId, setPosibleSedeId] = useState("");
-  const [posibleAmbienteId, setPosibleAmbienteId] = useState("");
-  const [posibleAmbientes, setPosibleAmbientes] = useState<Ambiente[]>([]);
+  const [posibleSedeId, setPosibleSedeId] = useState(() => {
+    const a = activo as (Activo & { posible_sede_id?: string | null }) | undefined;
+    return a?.posible_sede_id ?? "";
+  });
+  const [posibleAmbienteId, setPosibleAmbienteId] = useState(
+    () => activo?.posible_ambiente_id ?? "",
+  );
+  const [posibleAmbientes, setPosibleAmbientes] = useState<
+    Array<Ambiente & { sede_nombre?: string }>
+  >([]);
   const [nuevaSede, setNuevaSede] = useState("");
   const [nuevoAmbiente, setNuevoAmbiente] = useState("");
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
@@ -168,6 +195,7 @@ export function ActivoForm({
   const [cuentaNombre, setCuentaNombre] = useState("");
   const cuentaReferenciaRef = useRef({ codigo: "", nombre: "" });
   const [serieDialogOpen, setSerieDialogOpen] = useState(false);
+  const [catalogoAlta, setCatalogoAlta] = useState<CatalogoAltaInline | null>(null);
 
   const searchAtributo = useCallback(
     (campo: ActivoAtributoCampo, query: string) => suggestActivoAtributo(campo, query),
@@ -178,7 +206,7 @@ export function ActivoForm({
   const [labelWarnOpen, setLabelWarnOpen] = useState(false);
   const [labelWarnText, setLabelWarnText] = useState("");
 
-  const entidadEfectiva = fixedEntidadId ?? entidadId;
+  const entidadEfectiva = fixedEntidadId || entidadId || activo?.entidad_id || "";
   const entidadSeleccionada = useMemo(
     () => entidades.find((e) => e.id === entidadEfectiva),
     [entidades, entidadEfectiva],
@@ -237,14 +265,17 @@ export function ActivoForm({
     setCodigoBarrasPreview(activo.codigo_barras);
     if (activo.sede_id) setSedeId(activo.sede_id);
     if (activo.ambiente_id) setAmbienteId(activo.ambiente_id);
-    if (activo.posible_ambiente_id) {
-      void getAmbiente(activo.posible_ambiente_id).then((data) => {
-        if (!data) return;
-        setPosibleSedeId(data.ambiente.sede_id);
-        setPosibleAmbienteId(data.ambiente.id);
-      });
-    }
+    setPosibleAmbienteId(activo.posible_ambiente_id ?? "");
+    const posibleSede =
+      (activo as Activo & { posible_sede_id?: string | null }).posible_sede_id ?? "";
+    setPosibleSedeId(posibleSede);
   }, [activo, isEdit]);
+
+  useEffect(() => {
+    if (!mostrarPosibleAmbiente || !posibleAmbienteId || posibleSedeId) return;
+    const match = posibleAmbientes.find((a) => a.id === posibleAmbienteId);
+    if (match?.sede_id) setPosibleSedeId(match.sede_id);
+  }, [mostrarPosibleAmbiente, posibleAmbienteId, posibleAmbientes, posibleSedeId]);
 
   useEffect(() => {
     if (isEdit || !posibleAmbientePreset) return;
@@ -346,22 +377,33 @@ export function ActivoForm({
   useEffect(() => {
     if (fixedSedeId && !soloUbicacionEdit) {
       setSedeId(fixedSedeId);
-      return;
     }
     if (!entidadEfectiva) {
       setSedes([]);
-      if (!soloUbicacionEdit) setSedeId("");
+      if (!soloUbicacionEdit && !fixedSedeId) setSedeId("");
       return;
     }
-    void listSedes(entidadEfectiva).then((data) => {
-      setSedes(data);
-      if (!soloUbicacionEdit) {
-        setSedeId(sedeIdSinSelector(data) ?? "");
-        const implicitId = sedeIdSinSelector(data);
-        if (implicitId && !posibleSedeId) setPosibleSedeId(implicitId);
-      }
-    });
-  }, [entidadEfectiva, fixedSedeId, soloUbicacionEdit]);
+    let cancelled = false;
+    void listSedes(entidadEfectiva)
+      .then((data) => {
+        if (cancelled) return;
+        setSedes(data);
+        if (!soloUbicacionEdit && !fixedSedeId) {
+          setSedeId(sedeIdSinSelector(data) ?? "");
+        }
+        // Solo en alta: precargar la única sede. En edición respetar posible_sede_id.
+        if (!isEdit) {
+          const implicitId = sedeIdSinSelector(data);
+          if (implicitId) setPosibleSedeId((prev) => prev || implicitId);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSedes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entidadEfectiva, fixedSedeId, soloUbicacionEdit, isEdit]);
 
   useEffect(() => {
     if (fixedAmbienteId && !soloUbicacionEdit) setAmbienteId(fixedAmbienteId);
@@ -382,13 +424,60 @@ export function ActivoForm({
   }, [sedeId, soloUbicacionEdit, ambienteId]);
 
   useEffect(() => {
-    const sedePosible = posibleSedeId || sedeIdSinSelector(sedes);
-    if (!sedePosible) {
+    const entidadPosible = entidadEfectiva || activo?.entidad_id || "";
+    if (!mostrarPosibleAmbiente || !entidadPosible) {
       setPosibleAmbientes([]);
       return;
     }
-    void listAmbientes(sedePosible).then(setPosibleAmbientes);
-  }, [posibleSedeId, sedes]);
+    void listAmbientesPorEntidad(entidadPosible).then((data) => {
+      const reales = data.filter((a) => !a.es_preregistro);
+      setPosibleAmbientes(reales);
+    });
+  }, [mostrarPosibleAmbiente, entidadEfectiva, activo?.entidad_id]);
+
+  const posibleAmbientesOpciones = useMemo(() => {
+    const sedeFiltroValida =
+      Boolean(posibleSedeId) && sedes.some((s) => s.id === posibleSedeId);
+    const filtrados = sedeFiltroValida
+      ? posibleAmbientes.filter((a) => a.sede_id === posibleSedeId)
+      : posibleAmbientes;
+    // Si el valor actual quedó fuera del filtro (p. ej. al editar), inclúyelo igual.
+    const seleccion = posibleAmbienteId
+      ? posibleAmbientes.find((a) => a.id === posibleAmbienteId)
+      : undefined;
+    let lista =
+      seleccion && !filtrados.some((a) => a.id === seleccion.id)
+        ? [seleccion, ...filtrados]
+        : filtrados;
+    if (
+      posibleAmbienteId &&
+      !lista.some((a) => a.id === posibleAmbienteId) &&
+      (activo as Activo & { posible_ambiente_nombre?: string })?.posible_ambiente_nombre
+    ) {
+      lista = [
+        {
+          id: posibleAmbienteId,
+          nombre: (activo as Activo & { posible_ambiente_nombre?: string })
+            .posible_ambiente_nombre!,
+          sede_id: posibleSedeId,
+          sede_nombre: (activo as Activo & { posible_sede_nombre?: string })
+            ?.posible_sede_nombre,
+        } as Ambiente & { sede_nombre?: string },
+        ...lista,
+      ];
+    }
+    const conSedeEnLabel = sedes.length > 1 && !sedeFiltroValida;
+    return [
+      { value: "", label: "Sin sugerencia…" },
+      ...lista.map((a) => ({
+        value: a.id,
+        label:
+          conSedeEnLabel && a.sede_nombre
+            ? `${a.nombre} (${a.sede_nombre})`
+            : a.nombre,
+      })),
+    ];
+  }, [posibleAmbientes, posibleSedeId, sedes, posibleAmbienteId, activo]);
 
   const fechaAdquisicionIso = useMemo(
     () => (fechaAdquisicion.trim() ? parseFechaDDMMYYYY(fechaAdquisicion) : null),
@@ -1035,8 +1124,14 @@ export function ActivoForm({
           resolveCodigo={getCatalogoByCodigo}
           selectedCodigo={catalogo?.codigo}
           selectedDenominacion={catalogo?.denominacion}
-          disabled={pending || esEdicionMasiva}
-          onSelect={setCatalogo}
+          disabled={pending || esEdicionMasiva || Boolean(catalogoAlta)}
+          onSelect={(item) => {
+            setCatalogoAlta(null);
+            if (item.origen === "PROPIO") {
+              setCategoria("CUENTA_ORDEN");
+            }
+            setCatalogo(item);
+          }}
           onClear={() => {
             if (esEdicionMasiva) return;
             setCatalogo(null);
@@ -1048,12 +1143,22 @@ export function ActivoForm({
             setCuentaNombre("");
           }}
           renderAddMissing={(q) => (
-            <Link
-              href={`/contador/catalogo?q=${encodeURIComponent(q)}`}
-              className="font-medium text-primary underline-offset-2 hover:underline"
-            >
-              Agregar «{q}» al catálogo
-            </Link>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              <button
+                type="button"
+                className="font-medium text-primary underline-offset-2 hover:underline"
+                onClick={() => setCatalogoAlta({ variant: "nacional", query: q })}
+              >
+                Crear en catálogo nacional
+              </button>
+              <button
+                type="button"
+                className="font-medium text-primary underline-offset-2 hover:underline"
+                onClick={() => setCatalogoAlta({ variant: "propio", query: q })}
+              >
+                Crear en catálogo propio
+              </button>
+            </div>
           )}
         />
 
@@ -1409,8 +1514,8 @@ export function ActivoForm({
             Indique dónde podría ubicarse el bien (opcional). Al validar el preregistro se podrá
             confirmar o elegir otro ambiente.
           </p>
-          <div className={mostrarSelectorSede ? "space-y-2" : "hidden"}>
-            <Label htmlFor="posible_sede_id">Sede</Label>
+          <div className="space-y-2">
+            <Label htmlFor="posible_sede_id">Sucursal</Label>
             <Select
               id="posible_sede_id"
               value={posibleSedeId}
@@ -1419,25 +1524,36 @@ export function ActivoForm({
                 setPosibleAmbienteId("");
               }}
               options={[
-                { value: "", label: "Sin sugerencia…" },
+                { value: "", label: "Todas las sucursales…" },
                 ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+                ...(posibleSedeId &&
+                !sedes.some((s) => s.id === posibleSedeId) &&
+                (activo as Activo & { posible_sede_nombre?: string })?.posible_sede_nombre
+                  ? [
+                      {
+                        value: posibleSedeId,
+                        label: (activo as Activo & { posible_sede_nombre?: string })
+                          .posible_sede_nombre!,
+                      },
+                    ]
+                  : []),
               ]}
             />
           </div>
-          {(posibleSedeId || !mostrarSelectorSede) && (
-            <div className="mt-3 space-y-2">
-              <Label htmlFor="posible_ambiente_id">Ambiente</Label>
-              <Select
-                id="posible_ambiente_id"
-                value={posibleAmbienteId}
-                onChange={setPosibleAmbienteId}
-                options={[
-                  { value: "", label: "Sin sugerencia…" },
-                  ...posibleAmbientes.map((a) => ({ value: a.id, label: a.nombre })),
-                ]}
-              />
-            </div>
-          )}
+          <div className="mt-3 space-y-2">
+            <Label htmlFor="posible_ambiente_id">Ambiente</Label>
+            <Select
+              id="posible_ambiente_id"
+              value={posibleAmbienteId}
+              onChange={(nextAmbienteId) => {
+                setPosibleAmbienteId(nextAmbienteId);
+                if (!nextAmbienteId) return;
+                const match = posibleAmbientes.find((a) => a.id === nextAmbienteId);
+                if (match?.sede_id) setPosibleSedeId(match.sede_id);
+              }}
+              options={posibleAmbientesOpciones}
+            />
+          </div>
         </fieldset>
       )}
 
@@ -1572,6 +1688,61 @@ export function ActivoForm({
       </div>
       )}
     </form>
+
+    <Dialog
+      open={Boolean(catalogoAlta)}
+      onClose={() => setCatalogoAlta(null)}
+      title={
+        catalogoAlta?.variant === "nacional"
+          ? "Nuevo ítem del catálogo nacional"
+          : "Nuevo bien de cuenta de orden"
+      }
+      description={
+        catalogoAlta?.variant === "nacional"
+          ? "Se agregará al catálogo SBN y quedará seleccionado en este activo."
+          : "Se agregará al catálogo propio y quedará seleccionado en este activo."
+      }
+      className={panelModalClass}
+    >
+      {catalogoAlta && (
+        <CatalogoAltaPanel
+          variant={catalogoAlta.variant}
+          hideIntro
+          initialDenominacion={
+            catalogoAlta.variant === "nacional"
+              ? parseCatalogoNacionalAltaPrefill(catalogoAlta.query).denominacion ?? ""
+              : catalogoAlta.query
+          }
+          initialCodigo={
+            catalogoAlta.variant === "nacional"
+              ? parseCatalogoNacionalAltaPrefill(catalogoAlta.query).codigo ?? ""
+              : ""
+          }
+          loadNextCodigo={
+            catalogoAlta.variant === "propio" ? getNextCodigoCatalogoPropio : undefined
+          }
+          loadGrupos={listCatalogoGrupos}
+          loadClases={listCatalogoClases}
+          searchCuentasContables={searchCuentasContables}
+          suggestGrupo={suggestCatalogoGrupo}
+          onRegisterOpcionPersonalizada={registerCatalogoOpcionPersonalizada}
+          onDeleteOpcionPersonalizada={deleteCatalogoOpcionPersonalizada}
+          onSubmit={
+            catalogoAlta.variant === "nacional"
+              ? createCatalogoNacionalExtension
+              : createCatalogoNacional
+          }
+          onCreateCuentaContable={upsertCuentaContable}
+          onItemCreated={(item) => {
+            if (item.origen === "PROPIO") {
+              setCategoria("CUENTA_ORDEN");
+            }
+            setCatalogo(item);
+            setCatalogoAlta(null);
+          }}
+        />
+      )}
+    </Dialog>
 
     <ComprobanteSerieDialog
       open={serieDialogOpen}

@@ -101,10 +101,7 @@ export function Select({
   }
 
   const selectedOption = options.find(
-    (option) =>
-      option.value === currentValue &&
-      option.kind !== "section-header" &&
-      option.kind !== "placeholder",
+    (option) => option.value === currentValue && option.kind !== "section-header",
   );
   const displayLabel = selectedOption?.label ?? "Seleccionar…";
 

@@ -74,6 +74,9 @@ export interface ActivoListRow {
   sede_nombre?: string;
   ambiente_nombre?: string;
   posible_ambiente_nombre?: string;
+  /** Sede del posible ambiente (sugerencia de preregistro). */
+  posible_sede_nombre?: string;
+  posible_sede_id?: string | null;
   cuenta_codigo?: string | null;
   contabilidad?: string | null;
   catalogo_grupo?: string | null;
@@ -83,11 +86,13 @@ export interface ActivoListRow {
 const CATALOGO_ACTIVO_SELECT =
   "catalogo_nacional:codigo_catalogo(cuenta_codigo, contabilidad, grupo, clase)";
 
+const POSIBLE_AMBIENTE_SELECT = "posible_ambiente:posible_ambiente_id(nombre, sede_id, sedes(nombre))";
+
 const ACTIVO_SELECT =
-  `*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre), ${CATALOGO_ACTIVO_SELECT}`;
+  `*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), ${POSIBLE_AMBIENTE_SELECT}, ${CATALOGO_ACTIVO_SELECT}`;
 
 const ACTIVO_SELECT_SIN_ENTIDAD =
-  `*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre), posible_ambiente:posible_ambiente_id(nombre), ${CATALOGO_ACTIVO_SELECT}`;
+  `*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre), ${POSIBLE_AMBIENTE_SELECT}, ${CATALOGO_ACTIVO_SELECT}`;
 
 export async function previewCodigoBarras(entidadId: string, codigoCatalogo: string) {
   const profile = await getProfile();
@@ -798,7 +803,11 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
     const entidades = row.entidades as { nombre: string } | null;
     const sedes = row.sedes as { nombre: string } | null;
     const ambientes = row.ambientes as { nombre: string } | null;
-    const posibleAmbiente = row.posible_ambiente as { nombre: string } | null;
+    const posibleAmbiente = row.posible_ambiente as {
+      nombre: string;
+      sede_id?: string;
+      sedes?: { nombre: string } | null;
+    } | null;
     const catalogo = row.catalogo_nacional as
       | {
           cuenta_codigo: string | null;
@@ -824,6 +833,8 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
       sede_nombre: sedes?.nombre,
       ambiente_nombre: ambientes?.nombre,
       posible_ambiente_nombre: posibleAmbiente?.nombre,
+      posible_sede_nombre: posibleAmbiente?.sedes?.nombre,
+      posible_sede_id: posibleAmbiente?.sede_id ?? null,
       cuenta_codigo: cuenta.cuenta_codigo,
       contabilidad: cuenta.contabilidad,
       catalogo_grupo: cat?.grupo?.trim() || null,

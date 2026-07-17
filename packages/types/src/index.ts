@@ -350,6 +350,17 @@ export function formatEjemplaresEnAmbienteTexto(resumen: EjemplaresSimilaresResu
   return total === 1 ? "1 ejemplar en este lote" : `${total} ejemplares en este lote`;
 }
 
+/** Etiqueta de posible ambiente en listados: «Sucursal · Ambiente». */
+export function formatPosibleAmbienteLabel(input: {
+  posible_ambiente_nombre?: string | null;
+  posible_sede_nombre?: string | null;
+}): string {
+  const ambiente = input.posible_ambiente_nombre?.trim();
+  if (!ambiente) return "—";
+  const sede = input.posible_sede_nombre?.trim();
+  return sede ? `${sede} · ${ambiente}` : ambiente;
+}
+
 /** @deprecated Usar formatEjemplaresEnAmbienteTexto en la ficha. */
 export function formatEjemplaresSimilaresTexto(resumen: EjemplaresSimilaresResumen): string {
   const { total, registrados, preregistrados } = resumen;

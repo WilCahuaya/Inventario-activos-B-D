@@ -185,6 +185,7 @@ export function CatalogoNacionalForm({
       className="grid gap-4 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         const err = validarCuentaContableParaCatalogo(cuentaCodigo, contabilidad, {
           codigosEnMaestra: codigosCuentaMaestra,
         });

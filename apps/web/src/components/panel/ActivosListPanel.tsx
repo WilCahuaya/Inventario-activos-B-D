@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Activo } from "@inventario/types";
-import { matchesCodigoBarrasQuery } from "@inventario/types";
+import { formatPosibleAmbienteLabel, matchesCodigoBarrasQuery } from "@inventario/types";
 import { ActivoUpload } from "./ActivoUpload";
 import { RegistrarActivoButton } from "./RegistrarActivoButton";
 import {
@@ -15,6 +15,8 @@ import {
 
 export interface ActivoListItem extends Activo {
   entidad_nombre?: string;
+  posible_ambiente_nombre?: string;
+  posible_sede_nombre?: string;
 }
 
 interface ActivosListPanelProps {
@@ -118,11 +120,10 @@ export function ActivosListPanel({
                     nombre={activo.nombre}
                     codigoCatalogo={activo.codigo_catalogo}
                     posibleAmbienteId={activo.posible_ambiente_id}
-                    posibleAmbienteNombre={
-                      "posible_ambiente_nombre" in activo
-                        ? (activo as { posible_ambiente_nombre?: string }).posible_ambiente_nombre
-                        : undefined
-                    }
+                    posibleAmbienteNombre={(() => {
+                      const label = formatPosibleAmbienteLabel(activo);
+                      return label === "—" ? undefined : label;
+                    })()}
                   />
                 )}
               </div>

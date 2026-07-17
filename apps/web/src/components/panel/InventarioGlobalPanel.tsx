@@ -37,6 +37,9 @@ interface InventarioItem extends Activo {
   entidad_nombre?: string;
   sede_nombre?: string;
   ambiente_nombre?: string;
+  posible_ambiente_nombre?: string;
+  posible_sede_nombre?: string;
+  posible_sede_id?: string | null;
 }
 
 interface InventarioGlobalPanelProps {
