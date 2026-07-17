@@ -1,6 +1,6 @@
 "use client";
 
-import type { ButtonHTMLAttributes, DragEvent, InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, DragEvent, InputHTMLAttributes, TextareaHTMLAttributes, ReactNode } from "react";
 import { forwardRef, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 
@@ -436,6 +436,7 @@ export function Dialog({
   description,
   children,
   className,
+  style,
 }: {
   open: boolean;
   onClose: () => void;
@@ -443,6 +444,7 @@ export function Dialog({
   description?: string;
   children: ReactNode;
   className?: string;
+  style?: CSSProperties;
 }) {
   const [mounted, setMounted] = useState(false);
 
@@ -469,6 +471,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="dialog-title"
+        style={style}
         className={cn(
           "flex max-h-[92vh] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-lg sm:max-h-[90vh]",
           className ?? "max-w-lg",
@@ -492,7 +495,7 @@ export function Dialog({
             </button>
           </div>
         </div>
-        <div className="scrollbar-none min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
+        <div className="scrollbar-none flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
           {children}
         </div>
       </div>

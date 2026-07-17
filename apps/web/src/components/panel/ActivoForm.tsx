@@ -549,8 +549,19 @@ export function ActivoForm({
     setSerieDialogOpen(true);
   }
 
-  function confirmComprobanteSerie(serie: string) {
-    setComprobanteSerie(formatComprobanteSerieInput(serie));
+  function confirmComprobanteSerie(datos: {
+    serie: string;
+    fecha: string;
+    monto: string;
+  }) {
+    setComprobanteSerie(formatComprobanteSerieInput(datos.serie));
+    if (datos.fecha.trim()) {
+      setFechaAdquisicion(formatFechaInputDDMMYYYY(datos.fecha));
+      setFechaAdquisicionError(validarFechaDDMMYYYY(datos.fecha));
+    }
+    if (datos.monto.trim()) {
+      setValor(datos.monto.trim());
+    }
     if (pendingComprobanteFile) {
       setComprobanteFile(pendingComprobanteFile);
     }
@@ -1746,8 +1757,11 @@ export function ActivoForm({
 
     <ComprobanteSerieDialog
       open={serieDialogOpen}
+      file={pendingComprobanteFile}
       fileName={pendingComprobanteFile?.name}
       initialSerie={comprobanteSerie}
+      initialFecha={fechaAdquisicion}
+      initialMonto={valor}
       onConfirm={confirmComprobanteSerie}
       onCancel={cancelComprobanteSerie}
     />
