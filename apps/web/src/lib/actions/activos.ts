@@ -86,7 +86,7 @@ export interface ActivoListRow {
 const CATALOGO_ACTIVO_SELECT =
   "catalogo_nacional:codigo_catalogo(cuenta_codigo, contabilidad, grupo, clase)";
 
-const POSIBLE_AMBIENTE_SELECT = "posible_ambiente:posible_ambiente_id(nombre, sede_id, sedes(nombre))";
+const POSIBLE_AMBIENTE_SELECT = "posible_ambiente:posible_ambiente_id(nombre, sede_id)";
 
 const ACTIVO_SELECT =
   `*, entidades(nombre), sedes:sede_id(nombre), ambientes:ambiente_id(nombre), ${POSIBLE_AMBIENTE_SELECT}, ${CATALOGO_ACTIVO_SELECT}`;
@@ -793,7 +793,10 @@ export async function listActivosPorAmbiente(ambienteId: string) {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return mapActivoRows(data as Record<string, unknown>[]);
+  return enrichPosibleSedeNombres(
+    supabase,
+    mapActivoRows(data as Record<string, unknown>[]),
+  );
 }
 
 export type ActivoConUbicacion = Activo & ActivoListRow;
@@ -806,7 +809,6 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
     const posibleAmbiente = row.posible_ambiente as {
       nombre: string;
       sede_id?: string;
-      sedes?: { nombre: string } | null;
     } | null;
     const catalogo = row.catalogo_nacional as
       | {
@@ -833,13 +835,37 @@ function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicaci
       sede_nombre: sedes?.nombre,
       ambiente_nombre: ambientes?.nombre,
       posible_ambiente_nombre: posibleAmbiente?.nombre,
-      posible_sede_nombre: posibleAmbiente?.sedes?.nombre,
+      posible_sede_nombre: undefined,
       posible_sede_id: posibleAmbiente?.sede_id ?? null,
       cuenta_codigo: cuenta.cuenta_codigo,
       contabilidad: cuenta.contabilidad,
       catalogo_grupo: cat?.grupo?.trim() || null,
       catalogo_clase: cat?.clase?.trim() || null,
     };
+  });
+}
+
+async function enrichPosibleSedeNombres(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: ActivoConUbicacion[],
+): Promise<ActivoConUbicacion[]> {
+  const sedeIds = [
+    ...new Set(
+      rows
+        .map((r) => r.posible_sede_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (sedeIds.length === 0) return rows;
+
+  const { data } = await supabase.from("sedes").select("id, nombre").in("id", sedeIds);
+  const nombreById = new Map((data ?? []).map((s) => [s.id as string, s.nombre as string]));
+
+  return rows.map((row) => {
+    if (!row.posible_sede_id) return row;
+    const sedeNombre = nombreById.get(row.posible_sede_id);
+    if (!sedeNombre) return row;
+    return { ...row, posible_sede_nombre: sedeNombre };
   });
 }
 
@@ -872,7 +898,7 @@ export async function listActivos(entidadId?: string, filters?: ListActivosFilte
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return mapActivoRows(data as Record<string, unknown>[]);
+  return enrichPosibleSedeNombres(supabase, mapActivoRows(data as Record<string, unknown>[]));
 }
 
 export async function registrarActivo(

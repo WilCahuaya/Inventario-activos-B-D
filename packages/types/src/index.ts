@@ -351,10 +351,13 @@ export function formatEjemplaresEnAmbienteTexto(resumen: EjemplaresSimilaresResu
 }
 
 /** Etiqueta de posible ambiente en listados: «Sucursal · Ambiente». */
-export function formatPosibleAmbienteLabel(input: {
-  posible_ambiente_nombre?: string | null;
-  posible_sede_nombre?: string | null;
-}): string {
+export function formatPosibleAmbienteLabel(
+  input?: {
+    posible_ambiente_nombre?: string | null;
+    posible_sede_nombre?: string | null;
+  } | null,
+): string {
+  if (!input) return "—";
   const ambiente = input.posible_ambiente_nombre?.trim();
   if (!ambiente) return "—";
   const sede = input.posible_sede_nombre?.trim();

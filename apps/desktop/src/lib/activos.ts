@@ -36,7 +36,7 @@ export type ActivoConUbicacion = Activo & {
 const CATALOGO_ACTIVO_SELECT =
   "catalogo_nacional:codigo_catalogo(cuenta_codigo, contabilidad, grupo, clase)";
 
-const POSIBLE_AMBIENTE_SELECT = "posible_ambiente:posible_ambiente_id(nombre, sede_id, sedes(nombre))";
+const POSIBLE_AMBIENTE_SELECT = "posible_ambiente:posible_ambiente_id(nombre, sede_id)";
 
 const ACTIVO_SELECT_SIN_ENTIDAD =
   `*, sedes:sede_id(nombre), ambientes:ambiente_id(nombre), ${POSIBLE_AMBIENTE_SELECT}, ${CATALOGO_ACTIVO_SELECT}`;
@@ -82,7 +82,6 @@ function mapActivoRow(row: Record<string, unknown>): ActivoConUbicacion {
   const posibleAmbiente = row.posible_ambiente as {
     nombre: string;
     sede_id?: string;
-    sedes?: { nombre: string } | null;
   } | null;
   const catalogo = row.catalogo_nacional as
     | {
@@ -109,7 +108,7 @@ function mapActivoRow(row: Record<string, unknown>): ActivoConUbicacion {
     sede_nombre: sedes?.nombre,
     ambiente_nombre: ambientes?.nombre,
     posible_ambiente_nombre: posibleAmbiente?.nombre,
-    posible_sede_nombre: posibleAmbiente?.sedes?.nombre,
+    posible_sede_nombre: undefined,
     posible_sede_id: posibleAmbiente?.sede_id ?? null,
     cuenta_codigo: cuenta.cuenta_codigo,
     contabilidad: cuenta.contabilidad,
@@ -190,7 +189,7 @@ export async function listActivosForEntidad(entidadId: string): Promise<ActivoCo
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return mapActivoRows(data as Record<string, unknown>[]);
+  return mapActivoRowsEnriched(data as Record<string, unknown>[]);
 }
 
 export async function listActivosPorAmbiente(ambienteId: string): Promise<ActivoConUbicacion[]> {
@@ -202,7 +201,7 @@ export async function listActivosPorAmbiente(ambienteId: string): Promise<Activo
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return mapActivoRows(data as Record<string, unknown>[]);
+  return mapActivoRowsEnriched(data as Record<string, unknown>[]);
 }
 
 export async function listActivosGlobal(): Promise<ActivoConUbicacion[]> {
@@ -213,11 +212,41 @@ export async function listActivosGlobal(): Promise<ActivoConUbicacion[]> {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return mapActivoRows(data as Record<string, unknown>[]);
+  return mapActivoRowsEnriched(data as Record<string, unknown>[]);
 }
 
 function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicacion[] {
   return (data ?? []).map((row) => mapActivoRow(row));
+}
+
+async function enrichPosibleSedeNombres(
+  rows: ActivoConUbicacion[],
+): Promise<ActivoConUbicacion[]> {
+  const sedeIds = [
+    ...new Set(
+      rows
+        .map((r) => r.posible_sede_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (sedeIds.length === 0) return rows;
+
+  const supabase = getSupabaseClient();
+  const { data } = await supabase.from("sedes").select("id, nombre").in("id", sedeIds);
+  const nombreById = new Map((data ?? []).map((s) => [s.id as string, s.nombre as string]));
+
+  return rows.map((row) => {
+    if (!row.posible_sede_id) return row;
+    const sedeNombre = nombreById.get(row.posible_sede_id);
+    if (!sedeNombre) return row;
+    return { ...row, posible_sede_nombre: sedeNombre };
+  });
+}
+
+async function mapActivoRowsEnriched(
+  data: Record<string, unknown>[] | null,
+): Promise<ActivoConUbicacion[]> {
+  return enrichPosibleSedeNombres(mapActivoRows(data));
 }
 
 export async function getActivoById(activoId: string): Promise<ActivoConUbicacion | null> {
@@ -230,7 +259,9 @@ export async function getActivoById(activoId: string): Promise<ActivoConUbicacio
 
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return mapActivoRow(data as Record<string, unknown>);
+  const mapped = mapActivoRow(data as Record<string, unknown>);
+  const [enriched] = await enrichPosibleSedeNombres([mapped]);
+  return enriched ?? mapped;
 }
 
 export async function createActivo(
@@ -733,7 +764,7 @@ export async function listActivosSimilaresParaEtiquetas(
     .order("correlativo", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return mapActivoRows(data as Record<string, unknown>[]);
+  return mapActivoRowsEnriched(data as Record<string, unknown>[]);
 }
 
 function mapPreviewDeleteActivos(data: unknown): PreviewDeleteActivosPorCodigosResult {
