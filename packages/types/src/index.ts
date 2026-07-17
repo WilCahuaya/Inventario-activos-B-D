@@ -16,9 +16,22 @@ export type EstadoBien = "BUENO" | "REGULAR" | "MALO";
 export type CategoriaBien = "ACTIVO" | "CUENTA_ORDEN";
 
 /** Campos con vocabulario global para autocompletado */
-export type ActivoAtributoCampo = "marca" | "modelo" | "serie" | "color" | "medidas";
+export type ActivoAtributoCampo =
+  | "marca"
+  | "modelo"
+  | "serie"
+  | "color"
+  | "medidas"
+  | "detalle";
 
-export const ACTIVO_ATRIBUTO_CAMPOS = ["marca", "modelo", "serie", "color"] as const;
+export const ACTIVO_ATRIBUTO_CAMPOS = [
+  "marca",
+  "modelo",
+  "serie",
+  "color",
+  "medidas",
+  "detalle",
+] as const;
 
 /** Estado de una ronda de visita de campo en la entidad */
 export type EstadoVisitaCampo = "ABIERTO" | "CERRADO";
@@ -617,7 +630,7 @@ export function formatActivoCodigoDisplay(activo: {
   return activo.codigo_catalogo?.trim() || "—";
 }
 
-/** Etiqueta de cuenta contable (ej. 3362 Equipo de comunicación). */
+/** Código de cuenta contable: 1 a 6 dígitos. */
 export const CUENTA_CONTABLE_CODIGO_RE = /^\d{1,6}$/;
 const CUENTA_CONTA_COMBINADA_RE = /^(\d{1,6})\s+(.+)$/;
 
@@ -705,7 +718,7 @@ export function buildActivoCuentaContablePayload(
 ): { cuenta_contable_codigo: string | null; cuenta_contable_nombre: string | null } {
   if (categoria === "CUENTA_ORDEN") {
     const normalized = normalizeCuentaContableFields(
-      cuentaCodigo?.trim() || "2524",
+      cuentaCodigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
       cuentaNombre,
     );
     return {
@@ -1053,8 +1066,8 @@ export interface UpsertCuentaContableInput {
 
 export function validarUpsertCuentaContableInput(input: UpsertCuentaContableInput): string | null {
   const codigo = normalizeCuentaCodigo(input.codigo);
-  if (!codigo || !/^\d{4,5}$/.test(codigo)) {
-    return "El código de cuenta contable debe tener 4 o 5 dígitos.";
+  if (!codigo) {
+    return "El código de cuenta contable debe tener entre 1 y 6 dígitos.";
   }
   if (!input.nombre?.trim()) {
     return "El nombre de la cuenta contable es obligatorio.";
@@ -1273,7 +1286,7 @@ export function validarCuentaContableParaCatalogo(
 
   const cuenta = normalizeCuentaContableFields(cuentaCodigo, nombre);
   if (!cuenta.cuenta_codigo) {
-    return "El código de cuenta contable debe tener entre 4 y 6 dígitos.";
+    return "El código de cuenta contable debe tener entre 1 y 6 dígitos.";
   }
 
   const codigos = options?.codigosEnMaestra;

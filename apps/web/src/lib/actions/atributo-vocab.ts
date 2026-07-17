@@ -13,7 +13,6 @@ export async function suggestActivoAtributo(
   if (!profile) return [];
 
   const trimmed = query.trim();
-  if (trimmed.length < 1) return [];
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("suggest_activo_atributo", {

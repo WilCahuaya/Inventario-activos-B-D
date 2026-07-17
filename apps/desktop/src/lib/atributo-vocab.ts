@@ -7,7 +7,6 @@ export async function suggestActivoAtributo(
   limit = 10,
 ): Promise<string[]> {
   const trimmed = query.trim();
-  if (trimmed.length < 1) return [];
 
   if (window.electronAPI?.searchAtributoVocabLocal) {
     const local = await window.electronAPI.searchAtributoVocabLocal(campo, trimmed, limit);
@@ -35,6 +34,7 @@ export function upsertLocalAtributosFromActivo(values: {
   serie?: string | null;
   color?: string | null;
   medidas?: string | null;
+  caracteristicas?: string | null;
 }): void {
   const upsert = window.electronAPI?.upsertAtributoVocabLocal;
   if (!upsert) return;
@@ -44,4 +44,5 @@ export function upsertLocalAtributosFromActivo(values: {
   if (values.serie?.trim()) upsert("serie", values.serie);
   if (values.color?.trim()) upsert("color", values.color);
   if (values.medidas?.trim()) upsert("medidas", values.medidas);
+  if (values.caracteristicas?.trim()) upsert("detalle", values.caracteristicas);
 }

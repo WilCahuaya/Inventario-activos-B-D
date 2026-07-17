@@ -1197,12 +1197,14 @@ export function ActivoForm({
               placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
             />
           </div>
-          <div className="col-span-2 min-w-0 space-y-2">
-            <Label htmlFor="detalle">Detalle</Label>
-            <Input
+          <div className="col-span-2 min-w-0">
+            <ActivoAtributoAutocomplete
               id="detalle"
+              label="Detalle"
+              campo="detalle"
               value={detalle}
-              onChange={(e) => setDetalle(e.target.value)}
+              onChange={setDetalle}
+              onSearch={searchAtributo}
               placeholder="Ej. con respaldo, tapizado en cuero…"
             />
           </div>

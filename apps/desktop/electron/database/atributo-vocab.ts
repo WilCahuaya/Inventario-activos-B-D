@@ -55,7 +55,22 @@ export function searchAtributoVocab(
 ): string[] {
   const db = getCatalogDb();
   const trimmed = query.trim();
-  if (trimmed.length < 1) return [];
+  const safeLimit = Math.min(Math.max(limit, 1), 10);
+
+  if (trimmed.length < 1) {
+    const top = db
+      .prepare(
+        `
+        SELECT valor
+        FROM activo_atributos_vocab
+        WHERE campo = @campo
+        ORDER BY uso_count DESC, valor
+        LIMIT @limit
+      `,
+      )
+      .all({ campo, limit: safeLimit }) as Array<{ valor: string }>;
+    return top.map((row) => row.valor);
+  }
 
   const pattern = `%${trimmed.toLowerCase()}%`;
   const prefix = `${trimmed.toLowerCase()}%`;
@@ -78,7 +93,7 @@ export function searchAtributoVocab(
       campo,
       pattern,
       prefix,
-      limit: Math.min(Math.max(limit, 1), 10),
+      limit: safeLimit,
     }) as Array<{ valor: string }>;
 
   return rows.map((row) => row.valor);
@@ -88,7 +103,7 @@ export function upsertAtributoVocabLocal(campo: string, valor: string): void {
   const db = getCatalogDb();
   const trimmed = valor.trim();
   if (!trimmed) return;
-  if (!["marca", "modelo", "serie", "color", "medidas"].includes(campo)) return;
+  if (!["marca", "modelo", "serie", "color", "medidas", "detalle"].includes(campo)) return;
 
   const valorNormalizado = trimmed.toLowerCase();
 

@@ -627,7 +627,7 @@ export async function deleteCuentaContable(codigo: string): Promise<{ error?: st
   if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
 
   const normalizado = normalizeCuentaCodigo(codigo.trim());
-  if (!normalizado || !/^\d{4,5}$/.test(normalizado)) {
+  if (!normalizado || !/^\d{1,6}$/.test(normalizado)) {
     return { error: "Código de cuenta contable inválido." };
   }
 

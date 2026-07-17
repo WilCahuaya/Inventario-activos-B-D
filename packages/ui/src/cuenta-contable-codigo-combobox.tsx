@@ -216,7 +216,7 @@ export function CuentaContableCodigoCombobox({
     const normalizado = normalizeCuentaCodigo(customCodigo);
     const nombreTrim = customNombre.trim();
     if (!normalizado) {
-      setCustomError("El código debe tener entre 4 y 6 dígitos.");
+      setCustomError("El código debe tener entre 1 y 6 dígitos.");
       return;
     }
     if (!nombreTrim) {
@@ -286,9 +286,13 @@ export function CuentaContableCodigoCombobox({
               disabled={disabled}
               value={customCodigo}
               placeholder="3361"
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]{1,6}"
+              title="Hasta 6 dígitos"
               className="font-mono"
               onChange={(e) => {
-                setCustomCodigo(e.target.value);
+                setCustomCodigo(e.target.value.replace(/\D/g, "").slice(0, 6));
                 setCustomError(null);
               }}
             />

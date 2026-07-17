@@ -545,7 +545,7 @@ export async function deleteCuentaContable(codigo: string): Promise<{ error?: st
 
   const trimmed = codigo.trim();
   const normalizado = normalizeCuentaCodigo(trimmed);
-  if (!normalizado || !/^\d{4,5}$/.test(normalizado)) {
+  if (!normalizado || !/^\d{1,6}$/.test(normalizado)) {
     return { error: "Código de cuenta contable inválido." };
   }
 

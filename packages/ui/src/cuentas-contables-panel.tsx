@@ -253,8 +253,12 @@ export function CuentasContablesPanel({
               readOnly={Boolean(editTarget)}
               disabled={pending || Boolean(editTarget)}
               placeholder="3361"
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]{1,6}"
+              title="Hasta 6 dígitos"
               className="font-mono"
-              onChange={(e) => setFormCodigo(e.target.value)}
+              onChange={(e) => setFormCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
             />
             {editTarget && (
               <p className="text-xs text-muted-foreground">

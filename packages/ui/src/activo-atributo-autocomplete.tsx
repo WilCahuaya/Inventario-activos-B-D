@@ -6,7 +6,6 @@ import type { ActivoAtributoCampo } from "@inventario/types";
 import { computeFloatingMenuLayout, type FloatingMenuLayout } from "./dropdown-position";
 import { Input, Label } from "./components";
 
-const MIN_QUERY_LENGTH = 1;
 const DEBOUNCE_MS = 250;
 
 interface ActivoAtributoAutocompleteProps {
@@ -34,35 +33,39 @@ export function ActivoAtributoAutocomplete({
   const [results, setResults] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [menuLayout, setMenuLayout] = useState<FloatingMenuLayout | null>(null);
+  const [focused, setFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const onSearchRef = useRef(onSearch);
   onSearchRef.current = onSearch;
+  const requestIdRef = useRef(0);
 
   const showList = open && (loading || results.length > 0);
 
   useEffect(() => {
-    const trimmed = value.trim();
-    if (trimmed.length < MIN_QUERY_LENGTH) {
-      setResults([]);
-      setOpen(false);
-      return;
-    }
+    if (!focused) return;
 
+    const trimmed = value.trim();
     const timer = setTimeout(() => {
+      const requestId = ++requestIdRef.current;
       setLoading(true);
+      setOpen(true);
       void onSearchRef
         .current(campo, trimmed)
         .then((items) => {
-          setResults(items);
-          setOpen(items.length > 0);
+          if (requestId !== requestIdRef.current) return;
+          const next = items.filter((item) => item.trim().toLowerCase() !== trimmed.toLowerCase());
+          setResults(next);
+          setOpen(next.length > 0);
         })
-        .finally(() => setLoading(false));
-    }, DEBOUNCE_MS);
+        .finally(() => {
+          if (requestId === requestIdRef.current) setLoading(false);
+        });
+    }, trimmed ? DEBOUNCE_MS : 0);
 
     return () => clearTimeout(timer);
-  }, [campo, value]);
+  }, [campo, value, focused]);
 
   useLayoutEffect(() => {
     if (!showList || !anchorRef.current) {
@@ -121,7 +124,7 @@ export function ActivoAtributoAutocomplete({
           maxWidth: menuLayout.maxWidth,
           maxHeight: menuLayout.maxHeight,
           width: "max-content",
-          zIndex: 300,
+          zIndex: 400,
         }}
       >
         {loading && results.length === 0 && (
@@ -155,7 +158,12 @@ export function ActivoAtributoAutocomplete({
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => {
+            setFocused(true);
             if (results.length > 0) setOpen(true);
+          }}
+          onBlur={() => {
+            // Retraso para permitir click en una sugerencia (mousedown + blur).
+            window.setTimeout(() => setFocused(false), 150);
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
