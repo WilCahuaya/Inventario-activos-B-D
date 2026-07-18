@@ -726,7 +726,9 @@ export async function updateActivosSimilares(
 ): Promise<{ data?: UpdateActivosSimilaresResult; error?: string }> {
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
-  if (profile.rol !== "CONTADOR") return { error: "No autorizado." };
+  if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
+    return { error: "No autorizado." };
+  }
 
   const patch = buildActivosSimilaresPatch(input);
   if (Object.keys(patch).length === 0) {

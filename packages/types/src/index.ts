@@ -279,10 +279,20 @@ export interface EjemplaresSimilaresResumen {
   preregistrados: number;
 }
 
-/** Campos permitidos en edición masiva de un lote (contador). */
+/** Campos permitidos en edición masiva de un lote (según rol y estado de registro). */
 export interface UpdateActivosSimilaresInput {
   categoria?: CategoriaBien;
+  marca?: string | null;
+  modelo?: string | null;
+  color?: string | null;
+  medidas?: string | null;
+  caracteristicas?: string | null;
+  estado_bien?: EstadoBien;
   depreciacion?: string | null;
+  vida_util_meses?: number | null;
+  /** Solo contador: cuenta contable propia del lote. */
+  cuenta_contable_codigo?: string | null;
+  cuenta_contable_nombre?: string | null;
   valor_adquisicion?: number | null;
   valor_es_mercado?: boolean;
   fecha_adquisicion?: string | null;
@@ -290,6 +300,8 @@ export interface UpdateActivosSimilaresInput {
   comprobante_path?: string | null;
   foto_path?: string | null;
   observacion?: string | null;
+  /** Solo admin en bien REGISTRADO: se fusiona con la observación del contador. */
+  observacion_admin?: string | null;
   /** Solo admin: mover todo el lote de ubicación. */
   sede_id?: string | null;
   ambiente_id?: string | null;

@@ -11,6 +11,7 @@ import {
   activoTieneCuentaContablePropia,
   applyCuentaContableToPayloadIfProvided,
   assessLabelPrintWarnings,
+  buildActivoCuentaContablePayload,
   buildNombreConsolidado,
   calcDepreciacionAcumulada,
   calcPeriodoMeses,
@@ -103,11 +104,8 @@ interface ActivoFormProps {
   posibleAmbientePreset?: { sedeId: string; ambienteId: string };
   /** Admin entidad: en edición solo puede cambiar sede/ambiente */
   soloUbicacion?: boolean;
-  /**
-   * Admin en edición masiva de preregistrados: solo posible ambiente
-   * (alineado con update_activos_similares).
-   */
-  soloPosibleAmbiente?: boolean;
+  /** Rol del usuario actual: admin de entidad. Afecta los campos disponibles en edición masiva. */
+  modoAdmin?: boolean;
   /** Alcance de edición cuando hay ejemplares similares */
   editScope?: ActivoEditScope;
   ejemplaresTotal?: number;
@@ -134,7 +132,7 @@ export function ActivoForm({
   asignaCodigoInmediato = true,
   posibleAmbientePreset,
   soloUbicacion = false,
-  soloPosibleAmbiente = false,
+  modoAdmin = false,
   editScope = "single",
   ejemplaresTotal = 0,
   variant = "page",
@@ -153,10 +151,12 @@ export function ActivoForm({
   /** Preregistro admin (crear o editar PREREGISTRADO): sin depreciación ni vida útil */
   const esPreregistroAdmin =
     !asignaCodigoInmediato && (!isEdit || activo?.estado_registro === "PREREGISTRADO");
-  /** Admin en lote preregistrado: solo posible ambiente. */
-  const esEdicionMasivaAdminPreregistro = Boolean(
-    esEdicionMasiva && soloPosibleAmbiente,
-  );
+  /** Admin en edición masiva de un lote REGISTRADO: mueve ubicación + estado/observación admin. */
+  const esBulkAdminRegistrado = esEdicionMasiva && soloUbicacionEdit;
+  /** Admin en edición masiva de un lote PREREGISTRADO: datos físicos + posible ambiente. */
+  const esBulkAdminPreregistro = esEdicionMasiva && modoAdmin && !soloUbicacionEdit;
+  /** Contador en edición masiva (registrado o preregistrado): incluye cuenta y depreciación. */
+  const esBulkContador = esEdicionMasiva && !modoAdmin && !soloUbicacionEdit;
   const mostrarPosibleAmbiente =
     (!isEdit && !asignaCodigoInmediato) ||
     (isEdit && activo?.estado_registro === "PREREGISTRADO");
@@ -169,6 +169,9 @@ export function ActivoForm({
   const mostrarDepreciacion = categoria !== "CUENTA_ORDEN" && !esPreregistroAdmin;
   const mostrarCuentaContable =
     asignaCodigoInmediato && !soloUbicacionEdit && !esEdicionMasiva;
+  /** Bulk: contador siempre ve cuenta/depreciación/vida útil (incluso en preregistro). */
+  const mostrarCuentaContableBulk = esBulkContador;
+  const mostrarDepreciacionBulk = esBulkContador && categoria !== "CUENTA_ORDEN";
   const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">("BUENO");
   const [marca, setMarca] = useState("");
   const [modelo, setModelo] = useState("");
@@ -184,6 +187,9 @@ export function ActivoForm({
   const [fechaAdquisicionError, setFechaAdquisicionError] = useState<string | null>(null);
   const [observacion, setObservacion] = useState("");
   const [observacionAdmin, setObservacionAdmin] = useState("");
+  /** Edición en grupo: por defecto NO se sobrescribe la observación de cada ejemplar. */
+  const [aplicarObservacionLote, setAplicarObservacionLote] = useState(false);
+  const [aplicarObservacionAdminLote, setAplicarObservacionAdminLote] = useState(false);
   const [entidadId, setEntidadId] = useState(fixedEntidadId ?? "");
   const [codigoBarrasPreview, setCodigoBarrasPreview] = useState<string | null>(null);
   const [sedes, setSedes] = useState<Sede[]>([]);
@@ -631,23 +637,6 @@ export function ActivoForm({
     const form = event.currentTarget;
     setMessage(null);
 
-    if (esEdicionMasivaAdminPreregistro && activo) {
-      setPending(true);
-      const result = await updateActivosSimilares(activo.id, {
-        posible_ambiente_id: posibleAmbienteId || null,
-      });
-      setPending(false);
-      if (result.error) {
-        setMessage(result.error);
-        return;
-      }
-      setMessage(
-        `${"data" in result && result.data ? (result.data as { actualizados?: number }).actualizados : ejemplaresTotal} ejemplares actualizados.`,
-      );
-      onSuccess?.();
-      return;
-    }
-
     if (soloUbicacionEdit && activo) {
       setPending(true);
       if (!sedeId || !ambienteId) {
@@ -660,6 +649,10 @@ export function ActivoForm({
         ? await updateActivosSimilares(activo.id, {
             sede_id: sedeId,
             ambiente_id: ambienteId,
+            estado_bien: estadoBien,
+            ...(aplicarObservacionAdminLote
+              ? { observacion_admin: observacionAdmin.trim() || null }
+              : {}),
           })
         : await updateActivo(activo.id, {
             codigo_catalogo: activo.codigo_catalogo,
@@ -800,13 +793,44 @@ export function ActivoForm({
     if (isEdit && activo && esEdicionMasiva) {
       bulkPatch = {
         categoria: payload.categoria,
+        marca: marca.trim() || null,
+        modelo: modelo.trim() || null,
+        color: color.trim() || null,
+        medidas: medidas.trim() || null,
+        caracteristicas: detalle.trim() || null,
+        estado_bien: estadoBien,
         valor_adquisicion: payload.valor_adquisicion ?? null,
         valor_es_mercado: payload.valor_es_mercado,
         fecha_adquisicion: payload.fecha_adquisicion ?? null,
-        observacion: observacion.trim() || null,
       };
-      if (mostrarDepreciacion) {
-        bulkPatch.depreciacion = depreciacion.trim() || null;
+      if (aplicarObservacionLote) {
+        bulkPatch.observacion = observacion.trim() || null;
+      }
+      if (mostrarPosibleAmbiente) {
+        bulkPatch.posible_ambiente_id = posibleAmbienteId || null;
+      }
+      if (esBulkContador) {
+        if (mostrarDepreciacionBulk) {
+          bulkPatch.depreciacion = depreciacion.trim() || null;
+          bulkPatch.vida_util_meses = vidaUtilMeses ? Number(vidaUtilMeses) : null;
+        } else if (categoria === "CUENTA_ORDEN") {
+          bulkPatch.depreciacion = null;
+          bulkPatch.vida_util_meses = null;
+        }
+        if (
+          debePersistirCuentaContableEnActivo({
+            esEdicion: true,
+            activoTienePropia: activoTieneCuentaContablePropia(activo),
+            cuentaCodigo,
+            cuentaNombre,
+            referenciaCodigo: cuentaReferenciaRef.current.codigo,
+            referenciaNombre: cuentaReferenciaRef.current.nombre,
+          })
+        ) {
+          const cuentaPayload = buildActivoCuentaContablePayload(cuentaCodigo, cuentaNombre, categoria);
+          bulkPatch.cuenta_contable_codigo = cuentaPayload.cuenta_contable_codigo;
+          bulkPatch.cuenta_contable_nombre = cuentaPayload.cuenta_contable_nombre;
+        }
       }
       if (valorEsMercado) {
         bulkPatch.comprobante_path = null;
@@ -951,9 +975,7 @@ export function ActivoForm({
     <div className="flex flex-wrap justify-end gap-2">
       <Button
         type="submit"
-        disabled={
-          pending || (!catalogo && !soloUbicacionEdit && !esEdicionMasivaAdminPreregistro)
-        }
+        disabled={pending || (!catalogo && !soloUbicacionEdit)}
       >
         {pending
           ? "Guardando…"
@@ -989,24 +1011,18 @@ export function ActivoForm({
         </p>
       )}
 
-      {esEdicionMasivaAdminPreregistro && (
-        <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
-          Solo puede actualizar el <strong>posible ambiente</strong> de los{" "}
-          <strong>{ejemplaresTotal} ejemplares</strong> de este lote. El resto de datos del
-          preregistro se edita unidad por unidad o lo gestiona el contador.
-        </div>
-      )}
-      {esEdicionMasiva && !soloUbicacionEdit && !esEdicionMasivaAdminPreregistro && (
+      {(esBulkContador || esBulkAdminPreregistro) && (
         <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
           Los cambios se aplicarán a los{" "}
           <strong>{ejemplaresTotal} ejemplares</strong> de este lote de compra. Cada unidad
           conserva su código de barras y serie propios.
         </div>
       )}
-      {esEdicionMasiva && soloUbicacionEdit && (
+      {esBulkAdminRegistrado && (
         <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
           Se moverán los <strong>{ejemplaresTotal} ejemplares</strong> de este lote a la nueva
-          ubicación.
+          ubicación. También puede actualizar el estado del bien y agregar una observación del
+          administrador para todo el lote.
         </div>
       )}
 
@@ -1024,21 +1040,7 @@ export function ActivoForm({
         </div>
       )}
 
-      {esEdicionMasivaAdminPreregistro && activo && (
-        <div className="col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 lg:col-span-2">
-          <p className="font-semibold text-foreground">{activo.nombre}</p>
-          <p className="font-mono text-xs text-muted-foreground">
-            {activo.codigo_catalogo}
-            {activo.codigo_barras ? ` · ${activo.codigo_barras}` : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {[activo.marca, activo.modelo, activo.color, activo.medidas].filter(Boolean).join(" · ") ||
-              "Sin detalle físico adicional"}
-          </p>
-        </div>
-      )}
-
-      {esEdicionMasiva && !soloUbicacionEdit && !esEdicionMasivaAdminPreregistro && activo && (
+      {(esBulkContador || esBulkAdminPreregistro) && activo && (
       <>
       <div className="col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 lg:col-span-2">
         <p className="font-semibold text-foreground">{activo.nombre}</p>
@@ -1052,139 +1054,305 @@ export function ActivoForm({
         </p>
       </div>
 
-      <fieldset className={fieldsetCompact}>
-        <legend className={panelLegendClass}>Categoría</legend>
-        <CategoriaBienSelector
-          value={categoria}
-          onChange={setCategoria}
-          ayuda={CATEGORIA_BIEN_AYUDA}
-          opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
-            key,
-            ...CATEGORIA_BIEN_LABELS[key],
-          }))}
-        />
-      </fieldset>
-
-      <fieldset className={fieldsetCompact}>
-        <legend className={panelLegendClass}>Valoración y documentación</legend>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="valor_bulk">
-              {valorEsMercado ? "Valor de mercado (S/)" : "Precio de adquisición (S/)"}
-            </Label>
-            <Input
-              id="valor_bulk"
-              type="number"
-              step="0.01"
-              min="0"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
+      <div className="col-span-1 grid gap-4 lg:col-span-2 lg:grid-cols-2 lg:items-start lg:gap-5">
+        <div className="flex min-w-0 flex-col gap-4">
+          <fieldset className={panelFieldsetClass}>
+            <legend className={panelLegendClass}>Categoría</legend>
+            <CategoriaBienSelector
+              value={categoria}
+              onChange={setCategoria}
+              ayuda={CATEGORIA_BIEN_AYUDA}
+              opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
+                key,
+                ...CATEGORIA_BIEN_LABELS[key],
+              }))}
             />
-          </div>
-          <div className="flex items-end gap-2 pb-2">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
+          </fieldset>
+
+          {mostrarCuentaContableBulk && (
+            <fieldset className={panelFieldsetClass}>
+              <legend className={panelLegendClass}>Cuenta contable</legend>
+              <CuentaContableFields
+                codigo={cuentaCodigo}
+                nombre={cuentaNombre}
+                onCodigoChange={setCuentaCodigo}
+                onNombreChange={setCuentaNombre}
+                searchCuentas={searchCuentasContables}
+                onCreateCuenta={upsertCuentaContable}
+                disabled={pending || categoria === "CUENTA_ORDEN"}
+                codigoId="activo_cuenta_codigo_bulk"
+                allowCreateNew={categoria !== "CUENTA_ORDEN"}
+              />
+            </fieldset>
+          )}
+
+          <fieldset className={panelFieldsetClass}>
+            <legend className={panelLegendClass}>Detalle del bien</legend>
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+              <ActivoAtributoAutocomplete
+                id="marca_bulk"
+                label="Marca"
+                campo="marca"
+                value={marca}
+                onChange={setMarca}
+                onSearch={searchAtributo}
+              />
+              <ActivoAtributoAutocomplete
+                id="modelo_bulk"
+                label="Modelo"
+                campo="modelo"
+                value={modelo}
+                onChange={setModelo}
+                onSearch={searchAtributo}
+              />
+              <ActivoAtributoAutocomplete
+                id="color_bulk"
+                label="Color"
+                campo="color"
+                value={color}
+                onChange={setColor}
+                onSearch={searchAtributo}
+              />
+            </div>
+            <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+              <ActivoAtributoAutocomplete
+                id="medidas_bulk"
+                label="Medidas"
+                campo="medidas"
+                value={medidas}
+                onChange={setMedidas}
+                onSearch={searchAtributo}
+                placeholder='Ej. 65", 120 cm, 2.5 m, 20 L'
+              />
+              <ActivoAtributoAutocomplete
+                id="detalle_bulk"
+                label="Detalle"
+                campo="detalle"
+                value={detalle}
+                onChange={setDetalle}
+                onSearch={searchAtributo}
+                placeholder="Ej. con respaldo, tapizado en cuero…"
+              />
+            </div>
+          </fieldset>
+
+          <fieldset className={panelFieldsetClass}>
+            <legend className={panelLegendClass}>Valoración y documentación</legend>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="valor_bulk">
+                  {valorEsMercado ? "Valor de mercado (S/)" : "Precio de adquisición (S/)"}
+                </Label>
+                <Input
+                  id="valor_bulk"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={valor}
+                  onChange={(e) => setValor(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end gap-2 pb-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={valorEsMercado}
+                    onChange={(e) => handleValorEsMercadoChange(e.target.checked)}
+                  />
+                  Usar valor de mercado (sin factura)
+                </label>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="fecha_adquisicion_bulk">Fecha de adquisición</Label>
+              <Input
+                id="fecha_adquisicion_bulk"
+                inputMode="numeric"
+                value={fechaAdquisicion}
+                onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
+                onBlur={handleFechaAdquisicionBlur}
+                placeholder="DD/MM/AAAA"
+                maxLength={10}
+                aria-invalid={Boolean(fechaAdquisicionError)}
+              />
+              {fechaAdquisicionError && (
+                <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+              )}
+            </div>
+            {!valorEsMercado && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="comprobante_serie_bulk">Serie del comprobante</Label>
+                  <Input
+                    id="comprobante_serie_bulk"
+                    spellCheck={false}
+                    value={comprobanteSerie}
+                    onChange={(e) =>
+                      setComprobanteSerie(formatComprobanteSerieInput(e.target.value))
+                    }
+                    placeholder="Ej. E001 - 1"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="comprobante_bulk">PDF del comprobante</Label>
+                  <FileInput
+                    id="comprobante_bulk"
+                    accept={ACTIVO_COMPROBANTE_ACCEPT}
+                    file={comprobanteFile}
+                    onFileChange={handleComprobanteFileSelect}
+                    buttonLabel="Seleccionar PDF"
+                    emptyLabel="Sin archivo adjunto"
+                    hint={
+                      activo.comprobante_path && !comprobanteFile
+                        ? "Ya hay un PDF en el lote"
+                        : "Se aplicará a todas las unidades del lote"
+                    }
+                    canPreview={Boolean(comprobanteFile || activo.comprobante_path)}
+                    previewLabel="Previsualizar comprobante"
+                    onPreview={() => setComprobantePreviewOpen(true)}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="foto_bulk">Foto del activo</Label>
+              <FileInput
+                id="foto_bulk"
+                accept={ACTIVO_FOTO_ACCEPT}
+                file={fotoFile}
+                onFileChange={setFotoFile}
+                buttonLabel={
+                  activo.foto_path && !fotoFile ? "Cambiar foto" : "Seleccionar foto"
+                }
+                emptyLabel="Sin foto adjunta"
+                hint={
+                  activo.foto_path && !fotoFile
+                    ? "Ya hay una foto en el lote. Puede elegir otra imagen para reemplazarla en todas las unidades."
+                    : "Se aplicará a todas las unidades. Formatos: JPG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF."
+                }
+                canPreview={Boolean(fotoFile || activo.foto_path)}
+                previewLabel="Previsualizar foto"
+                onPreview={() => setFotoPreviewOpen(true)}
+              />
+            </div>
+            {mostrarDepreciacionBulk && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="depreciacion_bulk">Depreciación anual</Label>
+                  <PorcentajeInput
+                    id="depreciacion_bulk"
+                    value={depreciacion}
+                    onChange={handleDepreciacionChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vida_util_meses_bulk">Vida útil (meses)</Label>
+                  <Input
+                    id="vida_util_meses_bulk"
+                    type="number"
+                    min="1"
+                    value={vidaUtilMeses}
+                    onChange={(e) => handleVidaUtilChange(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </fieldset>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          <fieldset className={panelFieldsetClass}>
+            <legend className={panelLegendClass}>Estado del bien</legend>
+            <div className="space-y-2">
+              <Label htmlFor="estado_bien_bulk">Estado</Label>
+              <Select
+                id="estado_bien_bulk"
+                value={estadoBien}
+                onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+                options={[
+                  { value: "BUENO", label: "Bueno" },
+                  { value: "REGULAR", label: "Regular" },
+                  { value: "MALO", label: "Malo" },
+                ]}
+              />
+            </div>
+          </fieldset>
+
+          <fieldset className={panelFieldsetClass}>
+            <legend className={panelLegendClass}>Observaciones</legend>
+            <div className="space-y-2">
+              <Textarea
+                id="observacion_bulk"
+                className="min-h-[120px]"
+                value={observacion}
+                onChange={(e) => setObservacion(e.target.value)}
+                placeholder="Notas adicionales, incidencias, condiciones especiales…"
+              />
+            </div>
+            <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={valorEsMercado}
-                onChange={(e) => handleValorEsMercadoChange(e.target.checked)}
+                checked={aplicarObservacionLote}
+                onChange={(e) => setAplicarObservacionLote(e.target.checked)}
               />
-              Usar valor de mercado (sin factura)
+              Aplicar observación a todos los ejemplares
             </label>
-          </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Si no marca esta opción, no se modificará la observación de cada unidad del lote.
+            </p>
+          </fieldset>
+
+          {mostrarPosibleAmbiente && (
+            <fieldset className={panelFieldsetClass}>
+              <legend className={panelLegendClass}>Posible ambiente</legend>
+              <p className="mb-3 text-sm text-muted-foreground">
+                Indique dónde podría ubicarse el bien (opcional). Al validar el preregistro se
+                podrá confirmar o elegir otro ambiente.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="posible_sede_id_bulk">Sucursal</Label>
+                <Select
+                  id="posible_sede_id_bulk"
+                  value={posibleSedeId}
+                  onChange={(nextSede) => {
+                    setPosibleSedeId(nextSede);
+                    setPosibleAmbienteId("");
+                  }}
+                  options={[
+                    { value: "", label: "Todas las sucursales…" },
+                    ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+                    ...(posibleSedeId &&
+                    !sedes.some((s) => s.id === posibleSedeId) &&
+                    (activo as Activo & { posible_sede_nombre?: string })?.posible_sede_nombre
+                      ? [
+                          {
+                            value: posibleSedeId,
+                            label: (activo as Activo & { posible_sede_nombre?: string })
+                              .posible_sede_nombre!,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </div>
+              <div className="mt-3 space-y-2">
+                <Label htmlFor="posible_ambiente_id_bulk">Ambiente</Label>
+                <Select
+                  id="posible_ambiente_id_bulk"
+                  value={posibleAmbienteId}
+                  onChange={(nextAmbienteId) => {
+                    setPosibleAmbienteId(nextAmbienteId);
+                    if (!nextAmbienteId) return;
+                    const match = posibleAmbientes.find((a) => a.id === nextAmbienteId);
+                    if (match?.sede_id) setPosibleSedeId(match.sede_id);
+                  }}
+                  options={posibleAmbientesOpciones}
+                />
+              </div>
+            </fieldset>
+          )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="fecha_adquisicion_bulk">Fecha de adquisición</Label>
-            <Input
-              id="fecha_adquisicion_bulk"
-              inputMode="numeric"
-              value={fechaAdquisicion}
-              onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
-              onBlur={handleFechaAdquisicionBlur}
-              placeholder="DD/MM/AAAA"
-              maxLength={10}
-              aria-invalid={Boolean(fechaAdquisicionError)}
-            />
-            {fechaAdquisicionError && (
-              <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
-            )}
-          </div>
-        </div>
-        {!valorEsMercado && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="comprobante_serie_bulk">Serie del comprobante</Label>
-              <Input
-                id="comprobante_serie_bulk"
-                spellCheck={false}
-                value={comprobanteSerie}
-                onChange={(e) => setComprobanteSerie(formatComprobanteSerieInput(e.target.value))}
-                placeholder="Ej. E001 - 1"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="comprobante_bulk">PDF del comprobante</Label>
-              <FileInput
-                id="comprobante_bulk"
-                accept={ACTIVO_COMPROBANTE_ACCEPT}
-                file={comprobanteFile}
-                onFileChange={handleComprobanteFileSelect}
-                buttonLabel="Seleccionar PDF"
-                emptyLabel="Sin archivo adjunto"
-                hint={
-                  activo.comprobante_path && !comprobanteFile
-                    ? "Ya hay un PDF en el lote"
-                    : "Se aplicará a todas las unidades del lote"
-                }
-                canPreview={Boolean(comprobanteFile || activo.comprobante_path)}
-                previewLabel="Previsualizar comprobante"
-                onPreview={() => setComprobantePreviewOpen(true)}
-              />
-            </div>
-          </div>
-        )}
-        <div className="space-y-2">
-          <Label htmlFor="foto_bulk">Foto del activo</Label>
-          <FileInput
-            id="foto_bulk"
-            accept={ACTIVO_FOTO_ACCEPT}
-            file={fotoFile}
-            onFileChange={setFotoFile}
-            buttonLabel={
-              activo.foto_path && !fotoFile ? "Cambiar foto" : "Seleccionar foto"
-            }
-            emptyLabel="Sin foto adjunta"
-            hint={
-              activo.foto_path && !fotoFile
-                ? "Ya hay una foto en el lote. Puede elegir otra imagen para reemplazarla en todas las unidades."
-                : "Se aplicará a todas las unidades. Formatos: JPG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF."
-            }
-            canPreview={Boolean(fotoFile || activo.foto_path)}
-            previewLabel="Previsualizar foto"
-            onPreview={() => setFotoPreviewOpen(true)}
-          />
-        </div>
-        {mostrarDepreciacion && (
-          <div className="space-y-2">
-            <Label htmlFor="depreciacion_bulk">Depreciación anual</Label>
-            <PorcentajeInput
-              id="depreciacion_bulk"
-              value={depreciacion}
-              onChange={handleDepreciacionChange}
-            />
-          </div>
-        )}
-        <div className="space-y-2">
-          <Label htmlFor="observacion_bulk">Observaciones</Label>
-          <Textarea
-            id="observacion_bulk"
-            className="min-h-[80px]"
-            value={observacion}
-            onChange={(e) => setObservacion(e.target.value)}
-            placeholder="Notas adicionales, incidencias, condiciones especiales…"
-          />
-        </div>
-      </fieldset>
+      </div>
       </>
       )}
 
@@ -1607,8 +1775,8 @@ export function ActivoForm({
       </>
       )}
 
-      {/* Posible ambiente (preregistro) */}
-      {mostrarPosibleAmbiente && !soloUbicacionEdit && (
+      {/* Posible ambiente (preregistro) — en edición masiva va a la columna derecha */}
+      {mostrarPosibleAmbiente && !soloUbicacionEdit && !esEdicionMasiva && (
         <fieldset className={fieldsetWide}>
           <legend className={panelLegendClass}>Posible ambiente</legend>
           <p className="mb-3 text-sm text-muted-foreground">
@@ -1726,7 +1894,7 @@ export function ActivoForm({
       </fieldset>
       )}
 
-      {soloUbicacionEdit && !esEdicionMasiva && (
+      {soloUbicacionEdit && (
         <>
           <fieldset className={fieldsetCompact}>
             <legend className={panelLegendClass}>Estado del bien</legend>
@@ -1748,13 +1916,13 @@ export function ActivoForm({
           <fieldset className={fieldsetWide}>
             <legend className={panelLegendClass}>Observaciones</legend>
             <div className={`grid gap-4 ${soloUbicacionEdit ? "md:grid-cols-2" : "lg:grid-cols-2"}`}>
-              {observacionPartes.contador ? (
+              {observacionPartes.contador && !esEdicionMasiva ? (
                 <div className="space-y-1 rounded-md border border-border/50 bg-muted/20 p-3">
                   <p className="text-xs font-medium text-muted-foreground">Contador</p>
                   <p className="whitespace-pre-wrap text-sm text-foreground">{observacionPartes.contador}</p>
                 </div>
               ) : null}
-              <div className={`space-y-2 ${observacionPartes.contador ? "" : soloUbicacionEdit ? "md:col-span-2" : "lg:col-span-2"}`}>
+              <div className={`space-y-2 ${observacionPartes.contador && !esEdicionMasiva ? "" : soloUbicacionEdit ? "md:col-span-2" : "lg:col-span-2"}`}>
               <Label htmlFor="observacion_admin">Observación (administrador)</Label>
               <Textarea
                 id="observacion_admin"
@@ -1763,9 +1931,25 @@ export function ActivoForm({
                 onChange={(e) => setObservacionAdmin(e.target.value)}
                 placeholder="Notas del administrador. Si cambia el estado sin escribir nada, se registrará automáticamente."
               />
-              <p className="text-xs text-muted-foreground">
-                No puede modificar las observaciones del contador. Su texto se muestra en azul.
-              </p>
+              {esEdicionMasiva ? (
+                <>
+                  <label className="mt-1 flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={aplicarObservacionAdminLote}
+                      onChange={(e) => setAplicarObservacionAdminLote(e.target.checked)}
+                    />
+                    Aplicar observación a todos los ejemplares
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Si no marca esta opción, no se modificará la observación de cada unidad del lote.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No puede modificar las observaciones del contador. Su texto se muestra en azul.
+                </p>
+              )}
               </div>
             </div>
           </fieldset>
