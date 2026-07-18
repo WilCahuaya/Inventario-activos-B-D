@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Activo, Ambiente, CatalogoNacional, CategoriaBien, Entidad, Sede } from "@inventario/types";
 import {
+  ACTIVO_COMPROBANTE_ACCEPT,
+  ACTIVO_FOTO_ACCEPT,
   CATEGORIA_BIEN_AYUDA,
   CATEGORIA_BIEN_LABELS,
   CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
@@ -77,6 +79,7 @@ import {
 } from "@/lib/actions/catalogo";
 import { createAmbiente, createSede, listAmbientes, listAmbientesPorEntidad, listSedes } from "@/lib/actions/ubicacion";
 import { uploadActivoFile } from "@/lib/upload-activo-file";
+import { FotoPreviewDialog, PdfPreviewDialog } from "./ActivoMediaDialogs";
 import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
 import type { ActivoEditScope } from "@inventario/ui/panel";
 import { panelFieldsetClass, panelLegendClass, panelModalClass } from "./panel-ui";
@@ -203,6 +206,8 @@ export function ActivoForm({
   );
   const [pendingComprobanteFile, setPendingComprobanteFile] = useState<File | null>(null);
   const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [fotoPreviewOpen, setFotoPreviewOpen] = useState(false);
+  const [comprobantePreviewOpen, setComprobantePreviewOpen] = useState(false);
   const [labelWarnOpen, setLabelWarnOpen] = useState(false);
   const [labelWarnText, setLabelWarnText] = useState("");
 
@@ -787,6 +792,7 @@ export function ActivoForm({
             activo.id,
             comprobanteFile,
             "comprobante",
+            activo.comprobante_path,
           );
           if (upload.path) bulkPatch.comprobante_path = upload.path;
         }
@@ -797,6 +803,7 @@ export function ActivoForm({
           activo.id,
           fotoFile,
           "foto",
+          activo.foto_path,
         );
         if (uploadFoto.path) bulkPatch.foto_path = uploadFoto.path;
       }
@@ -829,7 +836,13 @@ export function ActivoForm({
           });
         }
       } else if (comprobanteFile) {
-        const upload = await uploadActivoFile(entidadEfectiva, activoId, comprobanteFile, "comprobante");
+        const upload = await uploadActivoFile(
+          entidadEfectiva,
+          activoId,
+          comprobanteFile,
+          "comprobante",
+          activo?.comprobante_path,
+        );
         if (upload.path) {
           await updateActivoPaths(activoId, {
             comprobante_path: upload.path,
@@ -841,7 +854,13 @@ export function ActivoForm({
       }
 
       if (fotoFile) {
-        const uploadFoto = await uploadActivoFile(entidadEfectiva, activoId, fotoFile, "foto");
+        const uploadFoto = await uploadActivoFile(
+          entidadEfectiva,
+          activoId,
+          fotoFile,
+          "foto",
+          activo?.foto_path,
+        );
         if (uploadFoto.path) {
           await updateActivoPaths(activoId, { foto_path: uploadFoto.path });
         }
@@ -1054,7 +1073,7 @@ export function ActivoForm({
               <Label htmlFor="comprobante_bulk">PDF del comprobante</Label>
               <FileInput
                 id="comprobante_bulk"
-                accept="application/pdf,image/jpeg,image/png"
+                accept={ACTIVO_COMPROBANTE_ACCEPT}
                 file={comprobanteFile}
                 onFileChange={handleComprobanteFileSelect}
                 buttonLabel="Seleccionar PDF"
@@ -1064,6 +1083,9 @@ export function ActivoForm({
                     ? "Ya hay un PDF en el lote"
                     : "Se aplicará a todas las unidades del lote"
                 }
+                canPreview={Boolean(comprobanteFile || activo.comprobante_path)}
+                previewLabel="Previsualizar comprobante"
+                onPreview={() => setComprobantePreviewOpen(true)}
               />
             </div>
           </div>
@@ -1072,16 +1094,21 @@ export function ActivoForm({
           <Label htmlFor="foto_bulk">Foto del activo</Label>
           <FileInput
             id="foto_bulk"
-            accept="image/jpeg,image/png,image/webp"
+            accept={ACTIVO_FOTO_ACCEPT}
             file={fotoFile}
             onFileChange={setFotoFile}
-            buttonLabel="Seleccionar foto"
+            buttonLabel={
+              activo.foto_path && !fotoFile ? "Cambiar foto" : "Seleccionar foto"
+            }
             emptyLabel="Sin foto adjunta"
             hint={
               activo.foto_path && !fotoFile
-                ? "Ya hay una foto en el lote"
-                : "Se aplicará a todas las unidades del lote"
+                ? "Ya hay una foto en el lote. Puede elegir otra imagen para reemplazarla en todas las unidades."
+                : "Se aplicará a todas las unidades. Formatos: JPG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF."
             }
+            canPreview={Boolean(fotoFile || activo.foto_path)}
+            previewLabel="Previsualizar foto"
+            onPreview={() => setFotoPreviewOpen(true)}
           />
         </div>
         {mostrarDepreciacion && (
@@ -1433,7 +1460,7 @@ export function ActivoForm({
               <Label htmlFor="comprobante">PDF del comprobante</Label>
               <FileInput
                 id="comprobante"
-                accept="application/pdf,image/jpeg,image/png"
+                accept={ACTIVO_COMPROBANTE_ACCEPT}
                 file={comprobanteFile}
                 onFileChange={handleComprobanteFileSelect}
                 buttonLabel="Seleccionar PDF"
@@ -1443,6 +1470,9 @@ export function ActivoForm({
                     ? "Ya hay un PDF adjunto"
                     : undefined
                 }
+                canPreview={Boolean(comprobanteFile || (isEdit && activo?.comprobante_path))}
+                previewLabel="Previsualizar comprobante"
+                onPreview={() => setComprobantePreviewOpen(true)}
               />
             </div>
           </div>
@@ -1452,14 +1482,21 @@ export function ActivoForm({
           <Label htmlFor="foto_activo">Foto del activo</Label>
           <FileInput
             id="foto_activo"
-            accept="image/jpeg,image/png,image/webp"
+            accept={ACTIVO_FOTO_ACCEPT}
             file={fotoFile}
             onFileChange={setFotoFile}
-            buttonLabel="Seleccionar foto"
+            buttonLabel={
+              isEdit && activo?.foto_path && !fotoFile ? "Cambiar foto" : "Seleccionar foto"
+            }
             emptyLabel="Sin foto adjunta"
             hint={
-              isEdit && activo?.foto_path && !fotoFile ? "Ya hay una foto adjunta" : undefined
+              isEdit && activo?.foto_path && !fotoFile
+                ? "Ya hay una foto. Puede elegir otra imagen (JPG, PNG, WebP, GIF, HEIC, etc.) para reemplazarla."
+                : "Formatos: JPG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF."
             }
+            canPreview={Boolean(fotoFile || (isEdit && activo?.foto_path))}
+            previewLabel="Previsualizar foto"
+            onPreview={() => setFotoPreviewOpen(true)}
           />
         </div>
         )}
@@ -1764,6 +1801,26 @@ export function ActivoForm({
       initialMonto={valor}
       onConfirm={confirmComprobanteSerie}
       onCancel={cancelComprobanteSerie}
+    />
+
+    <FotoPreviewDialog
+      open={fotoPreviewOpen}
+      onClose={() => setFotoPreviewOpen(false)}
+      file={fotoFile}
+      path={!fotoFile ? activo?.foto_path : null}
+      titulo={nombreConsolidado || "Foto del activo"}
+    />
+
+    <PdfPreviewDialog
+      open={comprobantePreviewOpen}
+      onClose={() => setComprobantePreviewOpen(false)}
+      file={comprobanteFile}
+      path={!comprobanteFile ? activo?.comprobante_path : null}
+      titulo={
+        comprobanteSerie.trim()
+          ? `Comprobante ${comprobanteSerie.trim()}`
+          : "Comprobante de adquisición"
+      }
     />
 
     <ConfirmDialog

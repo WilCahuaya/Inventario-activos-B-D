@@ -145,6 +145,26 @@ function FileClearIcon({ className }: { className?: string }) {
   );
 }
 
+function FilePreviewIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+      />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 function fileMatchesAccept(file: File, accept?: string): boolean {
   if (!accept?.trim()) return true;
   const parts = accept.split(",").map((part) => part.trim()).filter(Boolean);
@@ -170,6 +190,9 @@ export function FileInput({
   variant = "inline",
   dropzoneLabel = "Arrastre el archivo aquí",
   dropzoneHint = "o haga clic para seleccionarlo",
+  onPreview,
+  canPreview = false,
+  previewLabel = "Previsualizar",
 }: {
   id?: string;
   accept?: string;
@@ -183,6 +206,10 @@ export function FileInput({
   variant?: "inline" | "dropzone";
   dropzoneLabel?: string;
   dropzoneHint?: string;
+  /** Si se define y `canPreview`, muestra el icono de ojo. */
+  onPreview?: () => void;
+  canPreview?: boolean;
+  previewLabel?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -356,6 +383,23 @@ export function FileInput({
         >
           {file?.name ?? emptyLabel}
         </span>
+        {onPreview && (
+          <button
+            type="button"
+            disabled={disabled || !canPreview}
+            onClick={onPreview}
+            className={cn(
+              "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors",
+              "text-muted-foreground hover:bg-muted hover:text-foreground",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "disabled:pointer-events-none disabled:opacity-40",
+            )}
+            aria-label={previewLabel}
+            title={previewLabel}
+          >
+            <FilePreviewIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
         {file && !disabled && (
           <button
             type="button"

@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ACTIVO_COMPROBANTE_ACCEPT, ACTIVO_FOTO_ACCEPT } from "@inventario/types";
 import { Button, FileInput } from "@inventario/ui";
 import { updateActivoPaths } from "@/lib/actions/activos";
-import { createClient } from "@/lib/supabase/client";
+import { uploadActivoFile } from "@/lib/upload-activo-file";
 
 interface ActivoUploadProps {
   activoId: string;
@@ -22,6 +23,8 @@ export function ActivoUpload({
 }: ActivoUploadProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [currentFotoPath, setCurrentFotoPath] = useState(fotoPath ?? null);
+  const [currentComprobantePath, setCurrentComprobantePath] = useState(comprobantePath ?? null);
   const fotoRef = useRef<HTMLInputElement>(null);
   const comprobanteRef = useRef<HTMLInputElement>(null);
 
@@ -29,25 +32,23 @@ export function ActivoUpload({
     setLoading(true);
     setStatus(null);
 
-    const bucket = kind === "foto" ? "fotos-activos" : "comprobantes-activos";
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
-    const path = `${entidadId}/${activoId}/${kind}.${ext}`;
+    const previousPath = kind === "foto" ? currentFotoPath : currentComprobantePath;
+    const upload = await uploadActivoFile(entidadId, activoId, file, kind, previousPath);
 
-    const supabase = createClient();
-    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
-      upsert: true,
-      contentType: file.type,
-    });
-
-    if (uploadError) {
+    if (upload.error || !upload.path) {
       setLoading(false);
-      setStatus(uploadError.message);
+      setStatus(upload.error ?? "No se pudo subir el archivo");
       return;
     }
 
     const update = await updateActivoPaths(activoId, {
-      ...(kind === "foto" ? { foto_path: path } : { comprobante_path: path }),
+      ...(kind === "foto" ? { foto_path: upload.path } : { comprobante_path: upload.path }),
     });
+
+    if (!update.error) {
+      if (kind === "foto") setCurrentFotoPath(upload.path);
+      else setCurrentComprobantePath(upload.path);
+    }
 
     setLoading(false);
     setStatus(update.error ?? null);
@@ -59,7 +60,7 @@ export function ActivoUpload({
         <input
           ref={fotoRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={ACTIVO_FOTO_ACCEPT}
           className="hidden"
           disabled={loading}
           onChange={(e) => {
@@ -71,7 +72,7 @@ export function ActivoUpload({
         <input
           ref={comprobanteRef}
           type="file"
-          accept="application/pdf,image/jpeg,image/png"
+          accept={ACTIVO_COMPROBANTE_ACCEPT}
           className="hidden"
           disabled={loading}
           onChange={(e) => {
@@ -83,22 +84,22 @@ export function ActivoUpload({
         <Button
           type="button"
           size="sm"
-          variant={fotoPath ? "secondary" : "outline"}
+          variant={currentFotoPath ? "secondary" : "outline"}
           className="h-7 px-2 text-[10px]"
           disabled={loading}
           onClick={() => fotoRef.current?.click()}
         >
-          {fotoPath ? "✓ Foto" : "Foto"}
+          {currentFotoPath ? "Cambiar foto" : "Foto"}
         </Button>
         <Button
           type="button"
           size="sm"
-          variant={comprobantePath ? "secondary" : "outline"}
+          variant={currentComprobantePath ? "secondary" : "outline"}
           className="h-7 px-2 text-[10px]"
           disabled={loading}
           onClick={() => comprobanteRef.current?.click()}
         >
-          {comprobantePath ? "✓ CP" : "Comprobante"}
+          {currentComprobantePath ? "Cambiar CP" : "Comprobante"}
         </Button>
         {loading && <span className="text-[10px] text-muted-foreground">Subiendo…</span>}
         {status && <span className="text-[10px] text-destructive">{status}</span>}
@@ -111,11 +112,15 @@ export function ActivoUpload({
       <div className="space-y-1">
         <span className="text-sm font-medium">Foto</span>
         <FileInput
-          accept="image/jpeg,image/png,image/webp"
+          accept={ACTIVO_FOTO_ACCEPT}
           disabled={loading}
-          buttonLabel="Seleccionar foto"
+          buttonLabel={currentFotoPath ? "Cambiar foto" : "Seleccionar foto"}
           emptyLabel="Sin foto adjunta"
-          hint={fotoPath ? `Actual: ${fotoPath.split("/").pop()}` : undefined}
+          hint={
+            currentFotoPath
+              ? `Actual: ${currentFotoPath.split("/").pop()}. Elija otra imagen para reemplazarla.`
+              : "Formatos: JPG, PNG, WebP, GIF, BMP, HEIC, AVIF, TIFF."
+          }
           onFileChange={(file) => {
             if (file) void uploadFile(file, "foto");
           }}
@@ -124,11 +129,15 @@ export function ActivoUpload({
       <div className="space-y-1">
         <span className="text-sm font-medium">Comprobante PDF</span>
         <FileInput
-          accept="application/pdf,image/jpeg,image/png"
+          accept={ACTIVO_COMPROBANTE_ACCEPT}
           disabled={loading}
-          buttonLabel="Seleccionar PDF"
+          buttonLabel={currentComprobantePath ? "Cambiar archivo" : "Seleccionar PDF"}
           emptyLabel="Sin archivo adjunto"
-          hint={comprobantePath ? `Actual: ${comprobantePath.split("/").pop()}` : undefined}
+          hint={
+            currentComprobantePath
+              ? `Actual: ${currentComprobantePath.split("/").pop()}`
+              : undefined
+          }
           onFileChange={(file) => {
             if (file) void uploadFile(file, "comprobante");
           }}

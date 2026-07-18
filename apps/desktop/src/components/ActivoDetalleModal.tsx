@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { formatEjemplaresEnAmbienteTexto } from "@inventario/types";
+import { formatEjemplaresEnAmbienteTexto, nombreConsolidadoDesdeActivo } from "@inventario/types";
 import { ActivoDetalleSheet } from "@inventario/ui/panel";
 import { EliminarPreregistroDialog, useToast, mensajeEliminacionPreregistros, ActivoHistorialPanel } from "@inventario/ui";
 import type { HistorialActivoItem, HistorialLookupMaps } from "@inventario/types";
@@ -309,7 +309,7 @@ export function ActivoDetalleModal({
           open={fotoOpen}
           onClose={() => setFotoOpen(false)}
           path={activo.foto_path}
-          titulo={activo.nombre}
+          titulo={nombreConsolidadoDesdeActivo(activo)}
         />
       )}
 

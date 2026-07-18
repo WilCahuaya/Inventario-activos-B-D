@@ -583,6 +583,13 @@ export function formatDepreciacionResumida(
 
 export type { CodigoBarrasPayload } from "./codigo-barras-types";
 
+export {
+  ACTIVO_COMPROBANTE_ACCEPT,
+  ACTIVO_FOTO_ACCEPT,
+  ACTIVO_FOTO_EXTENSIONS,
+  ACTIVO_FOTO_MIME_TYPES,
+} from "./activo-media";
+
 import {
   CODIGO_BARRAS_CATALOGO_DIGITS,
   CORRELATIVO_DIGITS,
@@ -969,6 +976,27 @@ export function buildNombreConsolidado(
 
   if (partes.length === 0) return base;
   return `${base} ${partes.join(", ")}`;
+}
+
+/** Nombre consolidado desde un activo (usa `caracteristicas` como detalle). */
+export function nombreConsolidadoDesdeActivo(activo: {
+  nombre: string;
+  marca?: string | null;
+  modelo?: string | null;
+  serie?: string | null;
+  color?: string | null;
+  medidas?: string | null;
+  caracteristicas?: string | null;
+}): string {
+  return buildNombreConsolidado(
+    activo.nombre,
+    activo.marca,
+    activo.modelo,
+    activo.serie,
+    activo.color,
+    activo.medidas,
+    activo.caracteristicas,
+  );
 }
 
 /** Serie de comprobante: mayúsculas; letras, números, guión, barra y espacios (ej. F/E001 - 0007). */

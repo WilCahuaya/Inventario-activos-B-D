@@ -46,6 +46,10 @@ export function ComprobanteSerieDialog({
     Boolean(file) &&
     (file!.type === "application/pdf" ||
       file!.name.toLowerCase().endsWith(".pdf"));
+  const isImage =
+    Boolean(file) &&
+    (file!.type.startsWith("image/") ||
+      /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif|tiff?)$/i.test(file!.name));
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +60,7 @@ export function ComprobanteSerieDialog({
   }, [open, initialSerie, initialFecha, initialMonto]);
 
   useEffect(() => {
-    if (!open || !file || !isPdf) {
+    if (!open || !file || (!isPdf && !isImage)) {
       setPreviewUrl(null);
       return;
     }
@@ -67,7 +71,7 @@ export function ComprobanteSerieDialog({
       URL.revokeObjectURL(url);
       setPreviewUrl(null);
     };
-  }, [open, file, isPdf]);
+  }, [open, file, isPdf, isImage]);
 
   function handleConfirm() {
     const trimmedSerie = serie.trim();
@@ -106,12 +110,21 @@ export function ComprobanteSerieDialog({
         {previewUrl ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             <p className="shrink-0 text-sm font-medium text-foreground">Vista previa</p>
-            <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-muted/30">
-              <iframe
-                title={`Vista previa de ${displayName ?? "comprobante"}`}
-                src={previewUrl}
-                className="h-full w-full"
-              />
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
+              {isImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewUrl}
+                  alt={displayName ?? "Vista previa del comprobante"}
+                  className="max-h-full max-w-full object-contain p-2"
+                />
+              ) : (
+                <iframe
+                  title={`Vista previa de ${displayName ?? "comprobante"}`}
+                  src={previewUrl}
+                  className="h-full w-full"
+                />
+              )}
             </div>
           </div>
         ) : null}

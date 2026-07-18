@@ -1023,7 +1023,7 @@ export async function previewDeleteActivosPorCodigos(entidadId: string, codigosT
   const parsed = parseCodigosBarrasInputDetailed(codigosText);
   if (parsed.invalidos.length > 0) {
     return {
-      error: `Formato inválido (solo 12 dígitos o 8-4 con guion): ${parsed.invalidos.join(", ")}`,
+      error: `Formato inválido (nacional 12 dígitos / 8-4, o catálogo propio BD000001-0001): ${parsed.invalidos.join(", ")}`,
     };
   }
   const codigos = parsed.codigos;
@@ -1051,7 +1051,7 @@ export async function deleteActivosPorCodigos(entidadId: string, codigosText: st
   const parsed = parseCodigosBarrasInputDetailed(codigosText);
   if (parsed.invalidos.length > 0) {
     return {
-      error: `Formato inválido (solo 12 dígitos o 8-4 con guion): ${parsed.invalidos.join(", ")}`,
+      error: `Formato inválido (nacional 12 dígitos / 8-4, o catálogo propio BD000001-0001): ${parsed.invalidos.join(", ")}`,
     };
   }
   const codigos = parsed.codigos;

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Activo } from "@inventario/types";
+import { nombreConsolidadoDesdeActivo, type Activo } from "@inventario/types";
 import {
   TableActionsOverflow,
   type ActivoDetalle,
@@ -11,12 +11,14 @@ import {
 import { FotoPreviewDialog } from "./ActivoMediaDialogs";
 import { ActivoDetalleModal } from "./ActivoDetalleModal";
 import { AgregarBienesSimilaresDialog } from "./AgregarBienesSimilaresDialog";
+import { ValidarPreregistroDialog } from "./ValidarPreregistroDialog";
 import {
   ActivoIconButton,
   IconAmbiente,
   IconEditar,
   IconFoto,
   IconSimilares,
+  IconValidar,
   IconVer,
 } from "./activo-icons";
 
@@ -53,8 +55,10 @@ export function ActivoAccionesBar({
   const [fotoOpen, setFotoOpen] = useState(false);
   const [detalleOpen, setDetalleOpen] = useState(false);
   const [similaresOpen, setSimilaresOpen] = useState(false);
+  const [validarOpen, setValidarOpen] = useState(false);
   const inactivo = activo.estado_registro === "DADO_DE_BAJA";
   const esPreregistrado = activo.estado_registro === "PREREGISTRADO";
+  const mostrarValidar = puedeValidarPreregistro && esPreregistrado;
   const iconSize = compact ? "h-7 w-7" : "h-9 w-9";
   const overflowVariant = compact ? (variant === "auto" ? "icons" : variant) : variant;
 
@@ -66,6 +70,14 @@ export function ActivoAccionesBar({
         label: editarLabel,
         icon: <IconEditar />,
         onClick: () => onEdit(activo),
+      });
+    }
+    if (mostrarValidar) {
+      list.push({
+        id: "validar",
+        label: "Validar preregistro",
+        icon: <IconValidar />,
+        onClick: () => setValidarOpen(true),
       });
     }
     if (!inactivo) {
@@ -99,7 +111,16 @@ export function ActivoAccionesBar({
       onClick: () => setDetalleOpen(true),
     });
     return list;
-  }, [activo, activo.ambiente_id, activo.foto_path, editarLabel, inactivo, onEdit, onIrAmbiente]);
+  }, [
+    activo,
+    activo.ambiente_id,
+    activo.foto_path,
+    editarLabel,
+    inactivo,
+    mostrarValidar,
+    onEdit,
+    onIrAmbiente,
+  ]);
 
   return (
     <>
@@ -119,6 +140,16 @@ export function ActivoAccionesBar({
               className={iconSize}
             >
               <IconEditar />
+            </ActivoIconButton>
+          )}
+          {mostrarValidar && (
+            <ActivoIconButton
+              label="Validar preregistro"
+              variant="primary"
+              onClick={() => setValidarOpen(true)}
+              className={iconSize}
+            >
+              <IconValidar />
             </ActivoIconButton>
           )}
           {!inactivo && (
@@ -164,12 +195,29 @@ export function ActivoAccionesBar({
         onActivoEliminado={onActivoEliminado}
       />
 
+      {mostrarValidar && (
+        <ValidarPreregistroDialog
+          open={validarOpen}
+          onClose={() => setValidarOpen(false)}
+          entidadId={activo.entidad_id}
+          activoId={activo.id}
+          nombre={activo.nombre}
+          codigoCatalogo={activo.codigo_catalogo}
+          posibleAmbienteId={activo.posible_ambiente_id}
+          posibleAmbienteNombre={activo.posible_ambiente_nombre}
+          onSuccess={() => {
+            setValidarOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
+
       {activo.foto_path && (
         <FotoPreviewDialog
           open={fotoOpen}
           onClose={() => setFotoOpen(false)}
           path={activo.foto_path}
-          titulo={activo.nombre}
+          titulo={nombreConsolidadoDesdeActivo(activo)}
         />
       )}
 

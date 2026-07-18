@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { nombreConsolidadoDesdeActivo } from "@inventario/types";
 import type { ActivoConUbicacion } from "../lib/activos";
 import {
   TableActionsOverflow,
@@ -207,7 +208,7 @@ export function ActivosCampoAcciones({
           open={fotoOpen}
           onClose={() => setFotoOpen(false)}
           path={activo.foto_path}
-          titulo={activo.nombre}
+          titulo={nombreConsolidadoDesdeActivo(activo)}
         />
       )}
 

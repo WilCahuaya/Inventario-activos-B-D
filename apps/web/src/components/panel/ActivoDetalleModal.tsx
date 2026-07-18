@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Activo } from "@inventario/types";
-import { formatEjemplaresEnAmbienteTexto } from "@inventario/types";
+import { formatEjemplaresEnAmbienteTexto, nombreConsolidadoDesdeActivo } from "@inventario/types";
 import { ActivoDetalleSheet, type ActivoDetalle } from "@inventario/ui/panel";
 import { EliminarPreregistroDialog, useToast, mensajeEliminacionPreregistros, ActivoHistorialPanel } from "@inventario/ui";
 import type { HistorialActivoItem, HistorialLookupMaps } from "@inventario/types";
@@ -240,7 +240,7 @@ export function ActivoDetalleModal({
           open={fotoOpen}
           onClose={() => setFotoOpen(false)}
           path={activo.foto_path}
-          titulo={activo.nombre}
+          titulo={nombreConsolidadoDesdeActivo(activo)}
         />
       )}
 

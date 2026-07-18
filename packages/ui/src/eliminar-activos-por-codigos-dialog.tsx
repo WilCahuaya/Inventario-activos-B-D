@@ -171,7 +171,11 @@ export function EliminarActivosPorCodigosDialog({
               const { value, selectionStart } = el;
               const lineStart = value.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1;
               const currentLine = value.slice(lineStart, selectionStart).trim();
-              if (!/^\d{12}$/.test(currentLine)) return;
+              const canAutoGuion =
+                /^\d{12}$/.test(currentLine) ||
+                /^BD\d{10}$/i.test(currentLine) ||
+                /^24\d{10}$/.test(currentLine);
+              if (!canAutoGuion) return;
 
               e.preventDefault();
               const formatted = insertGuionCodigoBarras12(currentLine);
@@ -190,14 +194,15 @@ export function EliminarActivosPorCodigosDialog({
             onBlur={() => {
               setCodigosText(formatCodigosBarrasLinesWithGuion(codigosText));
             }}
-            placeholder={"746443220001\n74644322-0002\n746443220012"}
+            placeholder={"746443220001\nBD000005-0002\n240000050003"}
             spellCheck={false}
           />
           <p className="text-xs text-muted-foreground">
-            Una fila por código: 12 dígitos del lector (
-            <code className="text-[0.7rem]">746443220001</code>). Al pasar a la siguiente fila se
-            inserta el guion (
-            <code className="text-[0.7rem]">74644322-0001</code>).
+            Una fila por código. Nacional: 12 dígitos (
+            <code className="text-[0.7rem]">746443220001</code>) o con guion (
+            <code className="text-[0.7rem]">74644322-0001</code>). Catálogo propio:{" "}
+            <code className="text-[0.7rem]">BD000005-0002</code> (también el símbolo{" "}
+            <code className="text-[0.7rem]">240000050002</code>).
           </p>
           {parsedCount > 0 && !hasInvalidos && (
             <p className="text-xs text-muted-foreground">
@@ -207,7 +212,8 @@ export function EliminarActivosPorCodigosDialog({
           )}
           {hasInvalidos && (
             <p className="text-xs text-destructive">
-              Formato inválido (solo 12 dígitos o 8-4 con guion): {parsed.invalidos.join(", ")}
+              Formato inválido (nacional 12 dígitos / 8-4, o catálogo propio BD000001-0001):{" "}
+              {parsed.invalidos.join(", ")}
             </p>
           )}
         </div>

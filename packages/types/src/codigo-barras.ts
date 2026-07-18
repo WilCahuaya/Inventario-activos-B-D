@@ -195,16 +195,26 @@ export function matchesCodigoBarrasQuery(
 }
 
 /**
- * Formato aceptado al eliminar por códigos (lector sin guion o con guion):
- * 12 dígitos (`746443220001`) o 8+guion+4 (`74644322-0001` = 13 caracteres).
+ * Formato aceptado al eliminar por códigos:
+ * - Nacional: 12 dígitos (`746443220001`) o 8+guion+4 (`74644322-0001`)
+ * - Catálogo propio: `BD000005-0002`, `BD0000050002`, o símbolo `240000050002` / `24000005-0002`
  */
-export const CODIGO_BARRAS_ELIMINAR_INPUT_RE = /^(\d{12}|\d{8}-\d{4})$/;
+export const CODIGO_BARRAS_ELIMINAR_INPUT_RE =
+  /^(\d{12}|\d{8}-\d{4}|BD\d{6}-\d{4}|BD\d{6}\d{4}|24\d{6}-\d{4}|24\d{10})$/i;
 
-/** Inserta guion tras 8 dígitos: `746443220001` → `74644322-0001`. */
+/** Inserta guion tras el catálogo: `746443220001` → `74644322-0001`; `BD0000050002` → `BD000005-0002`. */
 export function insertGuionCodigoBarras12(raw: string): string {
   const trimmed = raw.trim();
   if (/^\d{12}$/.test(trimmed)) {
     return `${trimmed.slice(0, CODIGO_BARRAS_CATALOGO_DIGITS)}-${trimmed.slice(CODIGO_BARRAS_CATALOGO_DIGITS)}`;
+  }
+  const propioCompacto = trimmed.match(/^BD(\d{6})(\d{4})$/i);
+  if (propioCompacto) {
+    return `BD${propioCompacto[1]}-${propioCompacto[2]}`;
+  }
+  const propioSimbolo = trimmed.match(/^24(\d{6})(\d{4})$/);
+  if (propioSimbolo) {
+    return `BD${propioSimbolo[1]}-${propioSimbolo[2]}`;
   }
   return trimmed;
 }
@@ -232,13 +242,13 @@ export function formatCodigosBarrasLinesWithGuion(
 }
 
 export interface ParseCodigosBarrasInputResult {
-  /** Códigos normalizados con guion (o BD… si venían como 24…). */
+  /** Códigos normalizados con guion (nacional o BD… para catálogo propio). */
   codigos: string[];
-  /** Líneas no vacías que no cumplen 12 dígitos / 13 con guion. */
+  /** Líneas no vacías que no cumplen un formato de código de barras conocido. */
   invalidos: string[];
 }
 
-/** Parsea lista de códigos para eliminar: valida formato y añade el guion. */
+/** Parsea lista de códigos para eliminar: valida formato y normaliza (guion / BD…). */
 export function parseCodigosBarrasInputDetailed(text: string): ParseCodigosBarrasInputResult {
   const seen = new Set<string>();
   const codigos: string[] = [];
@@ -247,7 +257,7 @@ export function parseCodigosBarrasInputDetailed(text: string): ParseCodigosBarra
   for (const part of text.split(/[\n,;]+/)) {
     const raw = part.trim();
     if (!raw) continue;
-    if (!CODIGO_BARRAS_ELIMINAR_INPUT_RE.test(raw)) {
+    if (!parseCodigoBarras(raw)) {
       if (!invalidos.includes(raw)) invalidos.push(raw);
       continue;
     }
