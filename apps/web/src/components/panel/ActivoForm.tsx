@@ -103,6 +103,11 @@ interface ActivoFormProps {
   posibleAmbientePreset?: { sedeId: string; ambienteId: string };
   /** Admin entidad: en edición solo puede cambiar sede/ambiente */
   soloUbicacion?: boolean;
+  /**
+   * Admin en edición masiva de preregistrados: solo posible ambiente
+   * (alineado con update_activos_similares).
+   */
+  soloPosibleAmbiente?: boolean;
   /** Alcance de edición cuando hay ejemplares similares */
   editScope?: ActivoEditScope;
   ejemplaresTotal?: number;
@@ -129,6 +134,7 @@ export function ActivoForm({
   asignaCodigoInmediato = true,
   posibleAmbientePreset,
   soloUbicacion = false,
+  soloPosibleAmbiente = false,
   editScope = "single",
   ejemplaresTotal = 0,
   variant = "page",
@@ -147,6 +153,10 @@ export function ActivoForm({
   /** Preregistro admin (crear o editar PREREGISTRADO): sin depreciación ni vida útil */
   const esPreregistroAdmin =
     !asignaCodigoInmediato && (!isEdit || activo?.estado_registro === "PREREGISTRADO");
+  /** Admin en lote preregistrado: solo posible ambiente. */
+  const esEdicionMasivaAdminPreregistro = Boolean(
+    esEdicionMasiva && soloPosibleAmbiente,
+  );
   const mostrarPosibleAmbiente =
     (!isEdit && !asignaCodigoInmediato) ||
     (isEdit && activo?.estado_registro === "PREREGISTRADO");
@@ -621,6 +631,23 @@ export function ActivoForm({
     const form = event.currentTarget;
     setMessage(null);
 
+    if (esEdicionMasivaAdminPreregistro && activo) {
+      setPending(true);
+      const result = await updateActivosSimilares(activo.id, {
+        posible_ambiente_id: posibleAmbienteId || null,
+      });
+      setPending(false);
+      if (result.error) {
+        setMessage(result.error);
+        return;
+      }
+      setMessage(
+        `${"data" in result && result.data ? (result.data as { actualizados?: number }).actualizados : ejemplaresTotal} ejemplares actualizados.`,
+      );
+      onSuccess?.();
+      return;
+    }
+
     if (soloUbicacionEdit && activo) {
       setPending(true);
       if (!sedeId || !ambienteId) {
@@ -922,7 +949,12 @@ export function ActivoForm({
       : "text-primary";
   const formActionButtons = (
     <div className="flex flex-wrap justify-end gap-2">
-      <Button type="submit" disabled={pending || (!catalogo && !soloUbicacionEdit)}>
+      <Button
+        type="submit"
+        disabled={
+          pending || (!catalogo && !soloUbicacionEdit && !esEdicionMasivaAdminPreregistro)
+        }
+      >
         {pending
           ? "Guardando…"
           : esEdicionMasiva
@@ -957,7 +989,14 @@ export function ActivoForm({
         </p>
       )}
 
-      {esEdicionMasiva && !soloUbicacionEdit && (
+      {esEdicionMasivaAdminPreregistro && (
+        <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
+          Solo puede actualizar el <strong>posible ambiente</strong> de los{" "}
+          <strong>{ejemplaresTotal} ejemplares</strong> de este lote. El resto de datos del
+          preregistro se edita unidad por unidad o lo gestiona el contador.
+        </div>
+      )}
+      {esEdicionMasiva && !soloUbicacionEdit && !esEdicionMasivaAdminPreregistro && (
         <div className="col-span-1 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm text-foreground lg:col-span-2">
           Los cambios se aplicarán a los{" "}
           <strong>{ejemplaresTotal} ejemplares</strong> de este lote de compra. Cada unidad
@@ -985,7 +1024,21 @@ export function ActivoForm({
         </div>
       )}
 
-      {esEdicionMasiva && !soloUbicacionEdit && activo && (
+      {esEdicionMasivaAdminPreregistro && activo && (
+        <div className="col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 lg:col-span-2">
+          <p className="font-semibold text-foreground">{activo.nombre}</p>
+          <p className="font-mono text-xs text-muted-foreground">
+            {activo.codigo_catalogo}
+            {activo.codigo_barras ? ` · ${activo.codigo_barras}` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {[activo.marca, activo.modelo, activo.color, activo.medidas].filter(Boolean).join(" · ") ||
+              "Sin detalle físico adicional"}
+          </p>
+        </div>
+      )}
+
+      {esEdicionMasiva && !soloUbicacionEdit && !esEdicionMasivaAdminPreregistro && activo && (
       <>
       <div className="col-span-1 space-y-1 rounded-lg border border-border/50 bg-muted/20 p-4 lg:col-span-2">
         <p className="font-semibold text-foreground">{activo.nombre}</p>

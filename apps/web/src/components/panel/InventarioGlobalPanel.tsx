@@ -372,6 +372,12 @@ export function InventarioGlobalPanel({
                 : "Guardar cambios"
           }
           soloUbicacion={isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
+          soloPosibleAmbiente={
+            isAdmin &&
+            editActivo.estado_registro === "PREREGISTRADO" &&
+            editScope === "bulk" &&
+            ejemplaresTotal > 1
+          }
           asignaCodigoInmediato={!isAdmin && editActivo.estado_registro !== "PREREGISTRADO"}
           variant="page"
           onSuccess={handleSuccess}
