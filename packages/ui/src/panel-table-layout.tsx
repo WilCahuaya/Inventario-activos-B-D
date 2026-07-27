@@ -38,9 +38,10 @@ export const panelTableNowrapCellClass = "whitespace-nowrap";
 /** Anchos % — ambientes: nombre, responsable, descripción, sucursal, activos, estado, acciones */
 export const AMBIENTES_TABLE_COL_WIDTHS_PCT = [16, 12, 22, 10, 8, 8, 24] as const;
 
-/** Ambientes: nombre, responsable, descripción, sucursal, activos, estado, acciones */
+/** Ambientes: nombre, espacio, responsable, descripción, sucursal, activos, estado, acciones */
 export const AMBIENTES_TABLE_COLS: PanelTableColSpec[] = [
   { type: "grow" },
+  { type: "shrink" },
   { type: "grow" },
   { type: "grow" },
   { type: "shrink" },
@@ -51,14 +52,15 @@ export const AMBIENTES_TABLE_COLS: PanelTableColSpec[] = [
 
 /** Con columna visita de campo */
 export const AMBIENTES_TABLE_COLS_VISITA: PanelTableColSpec[] = [
-  ...AMBIENTES_TABLE_COLS.slice(0, 5),
+  ...AMBIENTES_TABLE_COLS.slice(0, 6),
   { type: "shrink" },
-  ...AMBIENTES_TABLE_COLS.slice(5),
+  ...AMBIENTES_TABLE_COLS.slice(6),
 ];
 
 /** Sin columna sucursal (filtro por sede activo) */
 export const AMBIENTES_TABLE_COLS_SIN_SUCURSAL: PanelTableColSpec[] = [
   { type: "grow" },
+  { type: "shrink" },
   { type: "grow" },
   { type: "grow" },
   { type: "shrink" },
@@ -68,9 +70,9 @@ export const AMBIENTES_TABLE_COLS_SIN_SUCURSAL: PanelTableColSpec[] = [
 
 /** Sin sucursal, con columna visita */
 export const AMBIENTES_TABLE_COLS_SIN_SUCURSAL_VISITA: PanelTableColSpec[] = [
-  ...AMBIENTES_TABLE_COLS_SIN_SUCURSAL.slice(0, 4),
+  ...AMBIENTES_TABLE_COLS_SIN_SUCURSAL.slice(0, 5),
   { type: "shrink" },
-  ...AMBIENTES_TABLE_COLS_SIN_SUCURSAL.slice(4),
+  ...AMBIENTES_TABLE_COLS_SIN_SUCURSAL.slice(5),
 ];
 
 /** Anchos % — sucursales: nombre, dirección, # ambientes, tipo, acciones */

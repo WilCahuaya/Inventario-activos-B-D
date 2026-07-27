@@ -105,8 +105,25 @@ interface Window {
     offlineCacheReplace: (entidadId: string, items: unknown[]) => Promise<number>;
     offlineCacheFind: (entidadId: string, codigo: string) => Promise<unknown | null>;
     offlineCacheUpsert: (entidadId: string, activo: unknown) => Promise<void>;
+    offlineCacheRemove: (entidadId: string, activoId: string) => Promise<boolean>;
     offlineCacheMeta: (entidadId: string) => Promise<{ count: number; updatedAt: string | null }>;
     offlineCacheList: (entidadId: string) => Promise<unknown[]>;
+    offlineMasterReplace: (
+      domain: string,
+      entidadId: string,
+      items: unknown[],
+    ) => Promise<number>;
+    offlineMasterList: (domain: string, entidadId?: string) => Promise<unknown[]>;
+    offlineMasterUpsert: (domain: string, entidadId: string, item: unknown) => Promise<void>;
+    offlineMasterRemove: (domain: string, entidadId: string, id: string) => Promise<void>;
+    offlineMasterMeta: (
+      domain: string,
+      entidadId?: string,
+    ) => Promise<{ count: number; updatedAt: string | null }>;
+    offlineMasterFind: (
+      domain: string,
+      id: string,
+    ) => Promise<{ entidadId: string; data: unknown } | null>;
     printBuildZpl: (options: {
       entidadNombre: string;
       codigoBarras: string;

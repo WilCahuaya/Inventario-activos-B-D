@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CreateResponsableInput, Entidad, ResponsableConConteo, SedeConConteo, VisitaCampoActiva, VisitaCampoHistorial } from "@inventario/types";
+import type {
+  CreateResponsableInput,
+  Entidad,
+  Espacio,
+  EspacioConOcupacion,
+  ResponsableConConteo,
+  SedeConConteo,
+  VisitaCampoActiva,
+  VisitaCampoHistorial,
+} from "@inventario/types";
 import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { ESTRUCTURA_REFRESH_EVENT } from "@inventario/realtime";
 import { panelFieldsetClass } from "@inventario/ui/panel";
-import { Button, Dialog, ResponsablesPanel, Select } from "@inventario/ui";
+import { Button, Dialog, EspaciosSedeDialog, ResponsablesPanel, Select } from "@inventario/ui";
 import {
   DeleteIcon,
   EditIcon,
@@ -41,15 +50,20 @@ import {
   IniciarVisitaCampoButton,
   AmbientesDatosMenu,
 } from "@inventario/ui/panel";
-import { AmbienteFormFields, ambienteFromForm } from "./AmbienteFormFields";
+import { AmbienteFormFields, ambienteFromForm, etiquetaEspacioAmbiente } from "./AmbienteFormFields";
 import { AmbientesImportDialog } from "./AmbientesImportDialog";
 import { InventarioImportDialog } from "./InventarioImportDialog";
 import { ConfirmDialog, CrearResponsableDialog, EliminarActivosPorCodigosDialog } from "@inventario/ui";
 import { GestionarSucursales } from "./GestionarSucursales";
 import {
   createAmbiente,
+  createEspacio,
   deleteAmbiente,
+  deleteEspacio,
+  ensureEspaciosHasta,
   listAmbientesPorEntidad,
+  listEspacios,
+  listEspaciosPorEntidad,
   listSedesConConteo,
   updateAmbiente,
   type AmbienteConSede,
@@ -123,6 +137,10 @@ function AmbienteCard({
   onDelete: () => void;
   onViewActivos: () => void;
 }) {
+  const espacioLabel = etiquetaEspacioAmbiente({
+    esPreregistro: ambiente.es_preregistro,
+    espacioNombre: ambiente.espacio_nombre,
+  });
   return (
     <article className={`${panelCardClass} flex flex-col overflow-hidden`}>
       <button
@@ -138,6 +156,16 @@ function AmbienteCard({
         <div className="flex flex-1 flex-col gap-2 px-4 py-3 text-sm">
           <p className="font-medium text-foreground">
             {ambiente.responsable ?? "Sin responsable asignado"}
+          </p>
+          <p
+            className="text-sm text-muted-foreground"
+            title={
+              ambiente.es_preregistro
+                ? "Ambiente de preregistros: no es un local físico"
+                : undefined
+            }
+          >
+            Espacio: {espacioLabel}
           </p>
           {ambiente.descripcion ? (
             <p className="text-muted-foreground">{ambiente.descripcion}</p>
@@ -209,9 +237,16 @@ export function AmbientesView({
   const [createOpen, setCreateOpen] = useState(false);
   const [createResponsableOpen, setCreateResponsableOpen] = useState(false);
   const [createResponsableId, setCreateResponsableId] = useState("");
+  const [createEspacioId, setCreateEspacioId] = useState("");
   const [editResponsableOpen, setEditResponsableOpen] = useState(false);
   const [editResponsableId, setEditResponsableId] = useState("");
+  const [editEspacioId, setEditEspacioId] = useState("");
   const [editAmbiente, setEditAmbiente] = useState<AmbienteConVisita | null>(null);
+  const [espacios, setEspacios] = useState<Espacio[]>([]);
+  const [manageEspaciosSedeId, setManageEspaciosSedeId] = useState<string | null>(null);
+  const [manageEspaciosList, setManageEspaciosList] = useState<EspacioConOcupacion[]>([]);
+  const [manageEspaciosPending, setManageEspaciosPending] = useState(false);
+  const [manageEspaciosError, setManageEspaciosError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AmbienteConVisita | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -227,6 +262,7 @@ export function AmbientesView({
   useEffect(() => {
     if (editAmbiente) {
       setEditResponsableId(editAmbiente.responsable_id ?? "");
+      setEditEspacioId(editAmbiente.espacio_id ?? "");
       setEditResponsableOpen(false);
     }
   }, [editAmbiente]);
@@ -235,6 +271,7 @@ export function AmbientesView({
     setCreateOpen(false);
     setCreateResponsableOpen(false);
     setCreateResponsableId("");
+    setCreateEspacioId("");
     setError(null);
   }
 
@@ -242,6 +279,7 @@ export function AmbientesView({
     setEditAmbiente(null);
     setEditResponsableOpen(false);
     setEditResponsableId("");
+    setEditEspacioId("");
     setError(null);
   }
 
@@ -276,19 +314,23 @@ export function AmbientesView({
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const [ambList, sedeList, respList, visitas, historial] = await Promise.all([
-        listAmbientesPorEntidad(entidad.id, sedeFocus?.id),
-        listSedesConConteo(entidad.id),
-        listResponsables(entidad.id),
-        getVisitasCampoActivas(entidad.id),
-        listVisitasCampoHistorial(entidad.id),
-      ]);
+      const [ambList, sedeList, respList, espacioList, visitas, historial] =
+        await Promise.all([
+          listAmbientesPorEntidad(entidad.id, sedeFocus?.id),
+          listSedesConConteo(entidad.id),
+          listResponsables(entidad.id),
+          listEspaciosPorEntidad(entidad.id),
+          getVisitasCampoActivas(entidad.id).catch(() => []),
+          listVisitasCampoHistorial(entidad.id).catch(() => []),
+        ]);
+
       const enriched = await attachVisitaEstadoToAmbientes(ambList, entidad.id);
       setAmbientes(enriched);
       setSedes(sedeList);
       setResponsables(respList.data ?? []);
       setVisitasActivas(visitas);
       setVisitasHistorial(historial);
+      setEspacios(espacioList);
       hasLoadedRef.current = true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "No se pudieron cargar los ambientes";
@@ -303,20 +345,10 @@ export function AmbientesView({
   }, [entidadId, initialTab]);
 
   useEffect(() => {
-    if (online) void loadData();
-    else {
-      hasLoadedRef.current = false;
-      setLoading(false);
-      setAmbientes([]);
-      setSedes([]);
-      setResponsables([]);
-      setVisitasActivas([]);
-      setVisitasHistorial([]);
-    }
+    void loadData();
   }, [online, loadData]);
 
   useEffect(() => {
-    if (!online) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onEstructuraRefresh = () => {
       if (timer) clearTimeout(timer);
@@ -330,20 +362,39 @@ export function AmbientesView({
       if (timer) clearTimeout(timer);
       window.removeEventListener(ESTRUCTURA_REFRESH_EVENT, onEstructuraRefresh);
     };
-  }, [online, loadData]);
+  }, [loadData]);
+
+  async function syncEspaciosEntidad() {
+    const list = await listEspaciosPorEntidad(entidad.id);
+    setEspacios(list);
+  }
+
+  async function reloadManageEspacios() {
+    if (!manageEspaciosSedeId) return;
+    setManageEspaciosPending(true);
+    setManageEspaciosError(null);
+    try {
+      const data = await listEspacios(manageEspaciosSedeId);
+      setManageEspaciosList(data);
+    } finally {
+      setManageEspaciosPending(false);
+    }
+  }
 
   async function syncVisitaYAmbientes() {
-    const [visitas, respResult, historial, sedeList] = await Promise.all([
+    const [visitas, respResult, historial, sedeList, espacioList] = await Promise.all([
       getVisitasCampoActivas(entidad.id),
       listResponsables(entidad.id),
       listVisitasCampoHistorial(entidad.id),
       listSedesConConteo(entidad.id),
+      listEspaciosPorEntidad(entidad.id),
     ]);
     const ambList = await listAmbientesPorEntidad(entidad.id, sedeFocus?.id);
     const enriched = await attachVisitaEstadoToAmbientes(ambList, entidad.id);
     setAmbientes(enriched);
     if (!respResult.error) setResponsables(respResult.data ?? []);
     setSedes(sedeList);
+    setEspacios(espacioList);
     setVisitasActivas(visitas);
     setVisitasHistorial(historial);
   }
@@ -478,6 +529,7 @@ export function AmbientesView({
         nombre: input.nombre,
         descripcion: input.descripcion,
         responsableId: input.responsableId,
+        espacioId: input.espacioId,
       });
 
       if (result.error) {
@@ -485,10 +537,13 @@ export function AmbientesView({
         return;
       }
 
+      const espacioNombre =
+        espacios.find((e) => e.id === input.espacioId)?.nombre ?? null;
       const nuevo: AmbienteConVisita = {
         ...result.data!,
         sede_nombre: sede?.nombre ?? "",
         sede_es_principal: sede?.es_principal ?? false,
+        espacio_nombre: espacioNombre,
         activo_count: 0,
         visita_estado: visitaAbierta ? "EN_PROCESO" : null,
         responsable:
@@ -504,6 +559,8 @@ export function AmbientesView({
       );
       setCreateOpen(false);
       form.reset();
+      setCreateResponsableId("");
+      setCreateEspacioId("");
       void syncAmbientesYResponsables();
     } finally {
       setPending(false);
@@ -534,6 +591,9 @@ export function AmbientesView({
                 descripcion: input.descripcion.trim() || null,
                 responsable_id: input.responsableId,
                 responsable: responsableNombreById(input.responsableId),
+                espacio_id: input.espacioId,
+                espacio_nombre:
+                  espacios.find((e) => e.id === input.espacioId)?.nombre ?? null,
               }
             : a,
         ),
@@ -588,7 +648,7 @@ export function AmbientesView({
           actions={
             <Button
               type="button"
-              disabled={!online || sedes.length === 0}
+              disabled={sedes.length === 0}
               onClick={() => {
                 setError(null);
                 setCreateOpen(true);
@@ -618,30 +678,22 @@ export function AmbientesView({
         </div>
       ) : null}
 
-      {!online && tab !== "inventario" && (
-        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          Sin conexión: la gestión de ambientes requiere internet.
-        </p>
-      )}
-
       {!sedeFocus && (
         <PanelTabs
           tabs={entityTabs}
           value={tab}
           onChange={setTab}
           actions={
-            online ? (
-              <IniciarVisitaCampoButton
-                visitas={visitasActivas}
-                sedes={sedes.map((s) => ({
-                  id: s.id,
-                  nombre: s.nombre,
-                  es_principal: s.es_principal,
-                }))}
-                pending={visitaPending}
-                onClick={handleAbrirVisita}
-              />
-            ) : undefined
+            <IniciarVisitaCampoButton
+              visitas={visitasActivas}
+              sedes={sedes.map((s) => ({
+                id: s.id,
+                nombre: s.nombre,
+                es_principal: s.es_principal,
+              }))}
+              pending={visitaPending}
+              onClick={handleAbrirVisita}
+            />
           }
         />
       )}
@@ -662,7 +714,7 @@ export function AmbientesView({
           onActivoDeleted={onActivoDeleted}
           onOpenEliminarPorCodigos={() => setEliminarOpen(true)}
         />
-      ) : !online ? null : (
+      ) : (
         <>
           {!sedeFocus && tab === "visitas" ? (
             <VisitasCampoHistorialPanel
@@ -701,6 +753,9 @@ export function AmbientesView({
               entidadId={entidad.id}
               sedes={sedes}
               onViewAmbientes={verAmbientesDeSede}
+              onEspaciosChange={() => {
+                void syncEspaciosEntidad();
+              }}
               onSedesChange={(next) => {
                 setSedes(next);
                 setAmbientes((prev) =>
@@ -760,18 +815,16 @@ export function AmbientesView({
                     <PanelViewToggle value={viewMode} onChange={setViewMode} />
                     {tab === "ambientes" && (
                       <AmbientesDatosMenu
-                        disabled={loading || !online}
+                        disabled={loading}
                         onAction={(action) => {
                           if (action === "import-ambientes") setImportAmbientesOpen(true);
                           else setImportActivosOpen(true);
                         }}
-                        importActivosDisabled={loading || ambientes.length === 0 || !online}
+                        importActivosDisabled={loading || ambientes.length === 0}
                         importActivosDisabledReason={
-                          !online
-                            ? "Requiere conexión"
-                            : ambientes.length === 0
-                              ? "Primero importe o cree ambientes"
-                              : undefined
+                          ambientes.length === 0
+                            ? "Primero importe o cree ambientes"
+                            : undefined
                         }
                       />
                     )}
@@ -836,6 +889,7 @@ export function AmbientesView({
                   <thead className={panelTableStickyHeadClass}>
                     <tr className={panelTableHeadRowClass}>
                       <PanelTableTh>Ambiente</PanelTableTh>
+                      <PanelTableTh className={panelTableNowrapCellClass}>Espacio que ocupa</PanelTableTh>
                       <PanelTableTh>Responsable</PanelTableTh>
                       <PanelTableTh>Descripción</PanelTableTh>
                       {!ocultarSucursalEnLista && <PanelTableTh className={panelTableShrinkCellClass}>Sucursal</PanelTableTh>}
@@ -868,6 +922,19 @@ export function AmbientesView({
                       >
                         <PanelTableTd className="font-medium text-primary" title={amb.nombre}>
                           {amb.nombre}
+                        </PanelTableTd>
+                        <PanelTableTd
+                          className={panelTableNowrapCellClass}
+                          title={
+                            amb.es_preregistro
+                              ? "Ambiente de preregistros: no es un local físico"
+                              : amb.espacio_nombre ?? undefined
+                          }
+                        >
+                          {etiquetaEspacioAmbiente({
+                            esPreregistro: amb.es_preregistro,
+                            espacioNombre: amb.espacio_nombre,
+                          })}
                         </PanelTableTd>
                         <PanelTableTd title={amb.responsable ?? undefined}>
                           {amb.responsable ?? "—"}
@@ -1017,11 +1084,18 @@ export function AmbientesView({
           <AmbienteFormFields
             sedes={sedes}
             responsables={responsables}
+            espacios={espacios}
             defaultSedeId={sedeFilterId || sedeIdSinSelector(sedes) || undefined}
             showSedeSelect={entidadMultiplesSedes}
             responsableId={createResponsableId}
             onResponsableIdChange={setCreateResponsableId}
             onRequestCreateResponsable={() => setCreateResponsableOpen(true)}
+            espacioId={createEspacioId}
+            onEspacioIdChange={setCreateEspacioId}
+            onRequestManageEspacios={(sedeId) => {
+              setManageEspaciosError(null);
+              setManageEspaciosSedeId(sedeId);
+            }}
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
@@ -1057,9 +1131,17 @@ export function AmbientesView({
               ambiente={editAmbiente}
               sedes={sedes}
               responsables={responsables}
+              espacios={espacios}
               responsableId={editResponsableId}
               onResponsableIdChange={setEditResponsableId}
               onRequestCreateResponsable={() => setEditResponsableOpen(true)}
+              espacioId={editEspacioId}
+              onEspacioIdChange={setEditEspacioId}
+              esPreregistro={editAmbiente.es_preregistro}
+              onRequestManageEspacios={(sedeId) => {
+                setManageEspaciosError(null);
+                setManageEspaciosSedeId(sedeId);
+              }}
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
@@ -1081,6 +1163,38 @@ export function AmbientesView({
         onCreated={(nuevo) => {
           setEditResponsableId(nuevo.id);
           setEditResponsableOpen(false);
+        }}
+      />
+
+      <EspaciosSedeDialog
+        open={!!manageEspaciosSedeId}
+        onClose={() => {
+          setManageEspaciosSedeId(null);
+          void syncEspaciosEntidad();
+        }}
+        sedeNombre={
+          sedes.find((s) => s.id === manageEspaciosSedeId)?.nombre ?? "Sucursal"
+        }
+        espacios={manageEspaciosList}
+        pending={manageEspaciosPending}
+        error={manageEspaciosError}
+        onReload={reloadManageEspacios}
+        onCreate={async (nombre) => {
+          if (!manageEspaciosSedeId) return { error: "Sucursal no válida." };
+          const result = await createEspacio(manageEspaciosSedeId, nombre);
+          if (result.error) return { error: result.error };
+          return {};
+        }}
+        onEnsureHasta={async (cantidad) => {
+          if (!manageEspaciosSedeId) return { error: "Sucursal no válida." };
+          const result = await ensureEspaciosHasta(manageEspaciosSedeId, cantidad);
+          if (result.error) return { error: result.error };
+          return { creados: result.creados };
+        }}
+        onDelete={async (espacioId) => {
+          const result = await deleteEspacio(espacioId);
+          if (result.error) return { error: result.error };
+          return {};
         }}
       />
 

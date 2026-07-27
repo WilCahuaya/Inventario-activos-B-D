@@ -209,7 +209,7 @@ interface EntidadesViewProps {
 
 export function EntidadesView({
   entidades,
-  online,
+  online: _online,
   onEntidadesChange,
   onViewAmbientes,
 }: EntidadesViewProps) {
@@ -431,21 +431,13 @@ export function EntidadesView({
         title="Gestión de entidades"
         subtitle="Administra las entidades y sus ambientes de inventario"
         actions={
-          <Button type="button" disabled={!online} onClick={() => setCreateOpen(true)}>
+          <Button type="button" onClick={() => setCreateOpen(true)}>
             + Nueva entidad
           </Button>
         }
       />
 
-      {!online && (
-        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          Sin conexión: la gestión de entidades requiere internet.
-        </p>
-      )}
-
-      {online && (
-        <>
-          <PanelToolbar
+      <PanelToolbar
             left={<PanelCountLabel count={filtradas.length} singular="entidad" plural="entidades" />}
             right={
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
@@ -598,8 +590,6 @@ export function EntidadesView({
               ))}
             </div>
           )}
-        </>
-      )}
 
       <Dialog
         open={createOpen}

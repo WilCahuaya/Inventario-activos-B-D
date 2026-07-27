@@ -77,7 +77,7 @@ export function ActivosCampoAcciones({
         id: "similares",
         label: "Agregar similares",
         icon: <IconSimilares />,
-        disabled: !online || esPendiente,
+        disabled: esPendiente,
         onClick: () => setSimilaresOpen(true),
       });
     }
@@ -103,7 +103,7 @@ export function ActivosCampoAcciones({
       icon: <IconVer />,
       onClick: () => setDetalleOpen(true),
     });
-    if (esPreregistrado && online) {
+    if (esPreregistrado) {
       list.push({
         id: "validar",
         label: "Validar preregistro",
@@ -142,7 +142,7 @@ export function ActivosCampoAcciones({
             <ActivoIconButton
               label="Agregar similares"
               className={iconSize}
-              disabled={!online || esPendiente}
+              disabled={esPendiente}
               onClick={() => setSimilaresOpen(true)}
             >
               <IconSimilares />
@@ -164,7 +164,7 @@ export function ActivosCampoAcciones({
           >
             <IconVer />
           </ActivoIconButton>
-          {esPreregistrado && online && (
+          {esPreregistrado && (
             <ActivoIconButton
               label="Validar preregistro"
               variant="primary"

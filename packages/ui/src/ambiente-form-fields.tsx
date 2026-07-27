@@ -1,21 +1,35 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Ambiente, Responsable, SedeConConteo } from "@inventario/types";
+import type { Ambiente, Espacio, Responsable, SedeConConteo } from "@inventario/types";
 import { Button, Input, Label, Select, Textarea } from "./components";
 
 export type AmbienteFormAmbiente = Pick<
   Ambiente,
-  "nombre" | "descripcion" | "responsable_id" | "responsable"
->;
+  "nombre" | "descripcion" | "responsable_id" | "responsable" | "espacio_id" | "sede_id"
+> & {
+  es_preregistro?: boolean;
+};
+
+/** Texto de espacio en listas: preregistro no es local físico. */
+export function etiquetaEspacioAmbiente(opts: {
+  esPreregistro?: boolean;
+  espacioNombre?: string | null;
+}): string {
+  if (opts.esPreregistro) return "No aplica";
+  const nombre = opts.espacioNombre?.trim();
+  return nombre || "Sin asignar";
+}
 
 export function ambienteFromForm(form: FormData) {
   const responsableId = String(form.get("responsable_id") || "").trim();
+  const espacioId = String(form.get("espacio_id") || "").trim();
   return {
     sedeId: String(form.get("sede_id") || ""),
     nombre: String(form.get("nombre")),
     descripcion: String(form.get("descripcion") || ""),
     responsableId: responsableId || null,
+    espacioId: espacioId || null,
   };
 }
 
@@ -23,30 +37,55 @@ export function AmbienteFormFields({
   ambiente,
   sedes,
   responsables,
+  espacios = [],
   defaultSedeId,
   showSedeSelect,
   responsableId,
   onResponsableIdChange,
   onRequestCreateResponsable,
+  espacioId,
+  onEspacioIdChange,
+  onRequestManageEspacios,
+  esPreregistro = false,
 }: {
   ambiente?: AmbienteFormAmbiente;
   sedes: Array<SedeConConteo | { id: string; nombre: string; es_principal?: boolean }>;
   responsables: Responsable[];
+  /** Espacios de la entidad (se filtran por sucursal seleccionada). */
+  espacios?: Espacio[];
   defaultSedeId?: string;
   showSedeSelect?: boolean;
   responsableId: string;
   onResponsableIdChange: (id: string) => void;
   onRequestCreateResponsable?: () => void;
+  espacioId: string;
+  onEspacioIdChange: (id: string) => void;
+  onRequestManageEspacios?: (sedeId: string) => void;
+  /** Ambiente buzón de preregistros: no ocupa espacio físico. */
+  esPreregistro?: boolean;
 }) {
   const [nombre, setNombre] = useState(ambiente?.nombre ?? "");
+  const [sedeId, setSedeId] = useState(
+    ambiente?.sede_id ?? defaultSedeId ?? sedes.find((s) => s.es_principal)?.id ?? "",
+  );
 
   useEffect(() => {
     setNombre(ambiente?.nombre ?? "");
-  }, [ambiente?.nombre, ambiente?.responsable_id]);
+  }, [ambiente?.nombre, ambiente?.responsable_id, ambiente?.espacio_id]);
+
+  useEffect(() => {
+    if (ambiente?.sede_id) setSedeId(ambiente.sede_id);
+    else if (defaultSedeId) setSedeId(defaultSedeId);
+  }, [ambiente?.sede_id, defaultSedeId]);
 
   const activos = useMemo(
     () => responsables.filter((r) => r.activo),
     [responsables],
+  );
+
+  const espaciosSede = useMemo(
+    () => espacios.filter((e) => e.sede_id === sedeId && e.activo),
+    [espacios, sedeId],
   );
 
   const puedeElegirResponsable = Boolean(ambiente) || nombre.trim().length > 0;
@@ -60,12 +99,16 @@ export function AmbienteFormFields({
             id="amb_sede"
             name="sede_id"
             required
-            defaultValue={defaultSedeId ?? sedes.find((s) => s.es_principal)?.id ?? ""}
+            value={sedeId}
+            onChange={(next) => {
+              setSedeId(next);
+              onEspacioIdChange("");
+            }}
             options={sedes.map((sede) => ({ value: sede.id, label: sede.nombre }))}
           />
         </div>
-      ) : defaultSedeId ? (
-        <input type="hidden" name="sede_id" value={defaultSedeId} />
+      ) : sedeId ? (
+        <input type="hidden" name="sede_id" value={sedeId} />
       ) : null}
       <div className="space-y-2">
         <Label htmlFor="amb_nombre">Nombre del ambiente</Label>
@@ -73,7 +116,7 @@ export function AmbienteFormFields({
           id="amb_nombre"
           name="nombre"
           required
-          placeholder="Ej. Almacén central"
+          placeholder="Ej. Secretaría, Nivel 3…"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           autoFocus={!ambiente}
@@ -87,6 +130,48 @@ export function AmbienteFormFields({
           placeholder="Opcional"
           defaultValue={ambiente?.descripcion ?? ""}
         />
+      </div>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label htmlFor="amb_espacio_id">Espacio que ocupa</Label>
+          {!esPreregistro && onRequestManageEspacios && sedeId && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => onRequestManageEspacios(sedeId)}
+            >
+              Gestionar espacios
+            </Button>
+          )}
+        </div>
+        {esPreregistro ? (
+          <>
+            <input type="hidden" name="espacio_id" value="" />
+            <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              No aplica. Este ambiente es solo para preregistros: no es un local físico. El espacio
+              se asigna al validar y ubicar cada bien.
+            </p>
+          </>
+        ) : (
+          <>
+            <Select
+              id="amb_espacio_id"
+              name="espacio_id"
+              value={espacioId}
+              onChange={onEspacioIdChange}
+              disabled={!sedeId}
+              options={[
+                { value: "", label: "Sin espacio asignado (opcional)" },
+                ...espaciosSede.map((e) => ({ value: e.id, label: e.nombre })),
+              ]}
+            />
+            <p className="text-xs text-muted-foreground">
+              Local físico de la sucursal (ej. Espacio 01). Puede cambiarlo si el área se muda.
+            </p>
+          </>
+        )}
       </div>
       <div
         className={

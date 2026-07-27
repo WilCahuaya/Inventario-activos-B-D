@@ -20,7 +20,7 @@ export function AmbientesImportDialog({
   open,
   onClose,
   entidad,
-  online,
+  online: _online,
   onImported,
 }: AmbientesImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
@@ -56,10 +56,6 @@ export function AmbientesImportDialog({
 
   async function handleImport() {
     if (!file) return;
-    if (!online) {
-      setActionError("Se requiere conexión para importar ambientes.");
-      return;
-    }
 
     setPending(true);
     setParseError(null);
@@ -97,7 +93,7 @@ export function AmbientesImportDialog({
     await downloadImportAmbientesErrores(entidad.nombre, result.errores);
   }
 
-  const canImport = Boolean(file && !pending && online);
+  const canImport = Boolean(file && !pending);
   const hasErrores = (result?.errores.length ?? 0) > 0;
 
   return (
@@ -109,12 +105,6 @@ export function AmbientesImportDialog({
           <strong>Principal</strong> para la sucursal por defecto de la entidad. El cargo del
           responsable se asigna automáticamente.
         </p>
-
-        {!online && (
-          <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-            Sin conexión: la importación requiere estar en línea.
-          </p>
-        )}
 
         <div className="flex flex-wrap gap-2">
           <Button

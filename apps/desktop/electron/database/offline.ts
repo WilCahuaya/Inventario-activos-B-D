@@ -42,12 +42,23 @@ export function initOfflineSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_activos_cache_entidad ON activos_cache(entidad_id);
     CREATE INDEX IF NOT EXISTS idx_activos_cache_barras ON activos_cache(entidad_id, codigo_barras);
     CREATE INDEX IF NOT EXISTS idx_activos_cache_catalogo ON activos_cache(entidad_id, codigo_catalogo);
+
+    CREATE TABLE IF NOT EXISTS master_cache (
+      domain TEXT NOT NULL,
+      entidad_id TEXT NOT NULL DEFAULT '',
+      id TEXT NOT NULL,
+      data TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (domain, entidad_id, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_master_cache_domain_entidad
+      ON master_cache(domain, entidad_id);
   `);
 }
 
 export interface SyncQueueRow {
   id: string;
-  operation: "create" | "update";
+  operation: string;
   entidad_id: string;
   activo_id: string | null;
   payload: string;
@@ -56,7 +67,7 @@ export interface SyncQueueRow {
 }
 
 export function enqueueSyncItem(item: {
-  operation: "create" | "update";
+  operation: string;
   entidad_id: string;
   activo_id?: string | null;
   payload: unknown;
@@ -170,6 +181,14 @@ export function upsertCachedActivo(entidadId: string, activo: unknown): void {
     });
 }
 
+export function removeCachedActivo(entidadId: string, activoId: string): boolean {
+  const database = getOfflineDb();
+  const result = database
+    .prepare("DELETE FROM activos_cache WHERE entidad_id = @entidadId AND id = @id")
+    .run({ entidadId, id: activoId });
+  return result.changes > 0;
+}
+
 export function listCachedActivos(entidadId: string): unknown[] {
   const database = getOfflineDb();
   const rows = database
@@ -192,4 +211,133 @@ export function cacheMeta(entidadId: string): { count: number; updatedAt: string
     .prepare("SELECT MAX(updated_at) AS u FROM activos_cache WHERE entidad_id = @entidadId")
     .get({ entidadId }) as { u: string | null };
   return { count: countRow?.c ?? 0, updatedAt: updatedRow?.u ?? null };
+}
+
+export type MasterCacheDomain =
+  | "entidades"
+  | "sedes"
+  | "ambientes"
+  | "espacios"
+  | "responsables"
+  | "visitas"
+  | "visita_ambientes";
+
+export function replaceMasterCache(
+  domain: MasterCacheDomain,
+  entidadId: string,
+  items: unknown[],
+): number {
+  const database = getOfflineDb();
+  const now = new Date().toISOString();
+  const scope = entidadId || "";
+  const del = database.prepare(
+    "DELETE FROM master_cache WHERE domain = @domain AND entidad_id = @entidadId",
+  );
+  const ins = database.prepare(`
+    INSERT INTO master_cache (domain, entidad_id, id, data, updated_at)
+    VALUES (@domain, @entidad_id, @id, @data, @updated_at)
+  `);
+
+  const tx = database.transaction((rows: unknown[]) => {
+    del.run({ domain, entidadId: scope });
+    for (const raw of rows) {
+      const a = raw as Record<string, unknown>;
+      const id = String(a.id ?? "");
+      if (!id) continue;
+      ins.run({
+        domain,
+        entidad_id: scope,
+        id,
+        data: JSON.stringify(raw),
+        updated_at: now,
+      });
+    }
+  });
+
+  tx(items);
+  return items.length;
+}
+
+export function listMasterCache(domain: MasterCacheDomain, entidadId = ""): unknown[] {
+  const database = getOfflineDb();
+  const rows = database
+    .prepare(
+      `SELECT data FROM master_cache
+       WHERE domain = @domain AND entidad_id = @entidadId
+       ORDER BY updated_at DESC`,
+    )
+    .all({ domain, entidadId: entidadId || "" }) as { data: string }[];
+  return rows.map((row) => JSON.parse(row.data) as unknown);
+}
+
+export function upsertMasterCacheItem(
+  domain: MasterCacheDomain,
+  entidadId: string,
+  item: unknown,
+): void {
+  const a = item as Record<string, unknown>;
+  const id = String(a.id ?? "");
+  if (!id) return;
+  const database = getOfflineDb();
+  database
+    .prepare(
+      `INSERT OR REPLACE INTO master_cache (domain, entidad_id, id, data, updated_at)
+       VALUES (@domain, @entidad_id, @id, @data, @updated_at)`,
+    )
+    .run({
+      domain,
+      entidad_id: entidadId || "",
+      id,
+      data: JSON.stringify(item),
+      updated_at: new Date().toISOString(),
+    });
+}
+
+export function removeMasterCacheItem(
+  domain: MasterCacheDomain,
+  entidadId: string,
+  id: string,
+): void {
+  getOfflineDb()
+    .prepare(
+      `DELETE FROM master_cache
+       WHERE domain = @domain AND entidad_id = @entidadId AND id = @id`,
+    )
+    .run({ domain, entidadId: entidadId || "", id });
+}
+
+export function masterCacheMeta(
+  domain: MasterCacheDomain,
+  entidadId = "",
+): { count: number; updatedAt: string | null } {
+  const database = getOfflineDb();
+  const countRow = database
+    .prepare(
+      `SELECT COUNT(*) AS c FROM master_cache
+       WHERE domain = @domain AND entidad_id = @entidadId`,
+    )
+    .get({ domain, entidadId: entidadId || "" }) as { c: number };
+  const updatedRow = database
+    .prepare(
+      `SELECT MAX(updated_at) AS u FROM master_cache
+       WHERE domain = @domain AND entidad_id = @entidadId`,
+    )
+    .get({ domain, entidadId: entidadId || "" }) as { u: string | null };
+  return { count: countRow?.c ?? 0, updatedAt: updatedRow?.u ?? null };
+}
+
+export function findMasterCacheById(
+  domain: MasterCacheDomain,
+  id: string,
+): { entidadId: string; data: unknown } | null {
+  const database = getOfflineDb();
+  const row = database
+    .prepare(
+      `SELECT entidad_id, data FROM master_cache
+       WHERE domain = @domain AND id = @id
+       LIMIT 1`,
+    )
+    .get({ domain, id }) as { entidad_id: string; data: string } | undefined;
+  if (!row) return null;
+  return { entidadId: row.entidad_id, data: JSON.parse(row.data) as unknown };
 }

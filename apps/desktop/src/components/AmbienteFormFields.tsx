@@ -1,2 +1,2 @@
-export { AmbienteFormFields, ambienteFromForm } from "@inventario/ui";
+export { AmbienteFormFields, ambienteFromForm, etiquetaEspacioAmbiente } from "@inventario/ui";
 export type { AmbienteFormAmbiente } from "@inventario/ui";

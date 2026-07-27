@@ -13,6 +13,9 @@ import {
   resolverFechaCorteISO,
 } from "@reportes/fecha-corte";
 import type { ReporteId } from "@reportes/types";
+import type { ActivoConUbicacion } from "./activos";
+import { isOnline } from "./master-cache";
+import { listCachedActivos } from "./offline";
 import { getSupabaseClient } from "./supabase";
 
 function esReportePorAmbiente(reporteId: string): boolean {
@@ -45,6 +48,94 @@ function mapActivoReporteRows(data: Record<string, unknown>[] | null): ActivoRep
   });
 }
 
+function mapCachedActivoToReporte(activo: ActivoConUbicacion): ActivoReporte {
+  const cat =
+    activo.cuenta_codigo ||
+    activo.contabilidad ||
+    activo.cuenta_contable_codigo ||
+    activo.catalogo_grupo
+      ? {
+          cuenta_codigo: activo.cuenta_codigo ?? activo.cuenta_contable_codigo ?? null,
+          contabilidad: activo.contabilidad ?? activo.cuenta_contable_nombre ?? null,
+          grupo: activo.catalogo_grupo ?? null,
+        }
+      : null;
+  const cuenta = resolveCuentaContableActivo(activo, cat);
+  return {
+    ...activo,
+    entidad_nombre: activo.entidad_nombre,
+    sede_nombre: activo.sede_nombre,
+    ambiente_nombre: activo.ambiente_nombre,
+    cuenta_contable: cuenta.cuenta_codigo,
+    contabilidad: cuenta.contabilidad,
+    grupo_contable: activo.catalogo_grupo ?? cat?.grupo ?? null,
+  };
+}
+
+function sortActivosReporte(a: ActivoReporte, b: ActivoReporte): number {
+  const catCmp = (a.codigo_catalogo ?? "").localeCompare(b.codigo_catalogo ?? "");
+  if (catCmp !== 0) return catCmp;
+  return (a.correlativo ?? 0) - (b.correlativo ?? 0);
+}
+
+function filtrarActivosReporteCache(
+  activos: ActivoReporte[],
+  input: CargarActivosReporteInput,
+): ActivoReporte[] {
+  let filtered = activos;
+
+  if (esReportePorAmbiente(input.reporteId)) {
+    if (input.sedeId) {
+      filtered = filtered.filter((a) => a.sede_id === input.sedeId);
+    }
+    if (input.ambienteId) {
+      filtered = filtered.filter((a) => a.ambiente_id === input.ambienteId);
+    }
+  }
+
+  if (input.reporteId === "reporte_bajas") {
+    filtered = filtered.filter((a) => a.estado_registro === ("DADO_DE_BAJA" as EstadoRegistro));
+  } else if (input.reporteId === "reporte_activos_estado_malo") {
+    filtered = filtered.filter(
+      (a) => a.estado_registro === ("REGISTRADO" as EstadoRegistro) && a.estado_bien === "MALO",
+    );
+  } else if (esReporteAdquiridosEjercicio(input.reporteId as ReporteId)) {
+    const anio = anioEjercicioAdquisicion(input.reporteId as ReporteId, input.fechaCorte);
+    if (anio == null) return [];
+    const { desde, hasta } = rangoFechasEjercicio(anio);
+    filtered = filtered.filter(
+      (a) =>
+        a.estado_registro === ("REGISTRADO" as EstadoRegistro) &&
+        a.fecha_adquisicion != null &&
+        a.fecha_adquisicion >= desde &&
+        a.fecha_adquisicion <= hasta,
+    );
+  } else {
+    filtered = filtered.filter((a) => a.estado_registro === ("REGISTRADO" as EstadoRegistro));
+  }
+
+  const corteISO = resolverFechaCorteISO(input.fechaCorte);
+  if (
+    corteISO &&
+    aplicaFiltroAdquisicionFechaCorte(input.reporteId as ReporteId, input.fechaCorte)
+  ) {
+    filtered = filtered.filter(
+      (a) => !a.fecha_adquisicion || a.fecha_adquisicion.slice(0, 10) <= corteISO,
+    );
+  }
+
+  filtered = filtrarActivosPorFechaCorte(filtered, input.reporteId as ReporteId, input.fechaCorte);
+  return [...filtered].sort(sortActivosReporte);
+}
+
+async function cargarActivosReporteFromCache(
+  input: CargarActivosReporteInput,
+): Promise<ActivoReporte[]> {
+  const cached = await listCachedActivos(input.entidadId);
+  const activos = cached.map(mapCachedActivoToReporte);
+  return filtrarActivosReporteCache(activos, input);
+}
+
 export interface CargarActivosReporteInput {
   reporteId: string;
   entidadId: string;
@@ -57,6 +148,10 @@ export async function cargarActivosReporte(
   input: CargarActivosReporteInput,
 ): Promise<{ data?: ActivoReporte[]; error?: string }> {
   if (!input.entidadId) return { error: "Seleccione una entidad." };
+
+  if (!isOnline()) {
+    return { data: await cargarActivosReporteFromCache(input) };
+  }
 
   const supabase = getSupabaseClient();
   let query = supabase
@@ -103,7 +198,11 @@ export async function cargarActivosReporte(
   }
 
   const { data, error } = await query;
-  if (error) return { error: error.message };
+  if (error) {
+    const cached = await cargarActivosReporteFromCache(input);
+    if (cached.length > 0) return { data: cached };
+    return { error: error.message };
+  }
 
   let activos = mapActivoReporteRows(data as Record<string, unknown>[]);
   activos = filtrarActivosPorFechaCorte(

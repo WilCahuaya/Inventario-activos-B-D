@@ -1,5 +1,27 @@
-import type { Entidad, EntidadConConteo } from "@inventario/types";
-import { normalizeResponsableDni, validarAdminEntidadDni } from "@inventario/types";
+import type {
+  Entidad,
+  EntidadConConteo,
+  ResponsableConConteo,
+  SedeConConteo,
+} from "@inventario/types";
+import {
+  buildAmbientePreregistroNombre,
+  normalizeResponsableDni,
+  normalizeResponsableNombre,
+  RESPONSABLE_CARGO_ADMIN,
+  validarAdminEntidadDni,
+} from "@inventario/types";
+import {
+  enqueueOfflineOp,
+  findMasterItem,
+  isOnline,
+  listMasterDomain,
+  newLocalId,
+  removeMasterItem,
+  replaceMasterDomain,
+  upsertMasterItem,
+} from "./master-cache";
+import type { AmbienteConSede } from "./ubicacion";
 import { getSupabaseClient } from "./supabase";
 import { syncSedePrincipalDireccionFromEntidad } from "./sede-principal-direccion";
 import { syncAdminResponsableForEntidad } from "./responsables-admin-sync";
@@ -57,7 +79,7 @@ export function inviteEntidadAdminInBackground(
   );
 }
 
-export async function listEntidades(): Promise<EntidadConConteo[]> {
+async function fetchEntidadesRemote(): Promise<EntidadConConteo[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("entidades")
@@ -98,6 +120,23 @@ export async function listEntidades(): Promise<EntidadConConteo[]> {
   }));
 }
 
+export async function listEntidades(): Promise<EntidadConConteo[]> {
+  if (isOnline()) {
+    try {
+      const items = await fetchEntidadesRemote();
+      await replaceMasterDomain("entidades", "", items);
+      return items;
+    } catch {
+      /* usar caché */
+    }
+  }
+  const cached = await listMasterDomain<EntidadConConteo>("entidades", "");
+  return cached.sort((a, b) => {
+    if (a.activo !== b.activo) return a.activo ? -1 : 1;
+    return a.nombre.localeCompare(b.nombre, "es");
+  });
+}
+
 export async function createEntidad(
   input: CreateEntidadInput,
 ): Promise<{ data?: Entidad; error?: string; inviteMessage?: string | null }> {
@@ -111,6 +150,104 @@ export async function createEntidad(
   const adminDni = normalizeResponsableDni(input.admin_dni ?? "");
   const dniError = validarAdminEntidadDni(adminDni);
   if (dniError) return { error: dniError };
+
+  if (!isOnline()) {
+    const id = newLocalId();
+    const sedeId = newLocalId();
+    const preregistroId = newLocalId();
+    const responsableId = newLocalId();
+    const now = new Date().toISOString();
+
+    const entidad: EntidadConConteo = {
+      id,
+      nombre,
+      nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
+      ruc: input.ruc?.trim() || null,
+      direccion: input.direccion?.trim() || null,
+      admin_nombre: adminNombre,
+      admin_email: adminEmail,
+      admin_dni: adminDni,
+      admin_telefono: input.admin_telefono?.trim() || null,
+      activo: true,
+      created_at: now,
+      updated_at: now,
+      ambiente_count: 1,
+      activo_count: 0,
+    };
+
+    const sede: SedeConConteo = {
+      id: sedeId,
+      entidad_id: id,
+      nombre: "Principal",
+      direccion: input.direccion?.trim() || null,
+      es_principal: true,
+      activo: true,
+      created_at: now,
+      updated_at: now,
+      ambiente_count: 1,
+    };
+
+    const preregistro: AmbienteConSede = {
+      id: preregistroId,
+      sede_id: sedeId,
+      nombre: buildAmbientePreregistroNombre(),
+      descripcion: null,
+      responsable_id: null,
+      responsable: null,
+      espacio_id: null,
+      es_preregistro: true,
+      activo: true,
+      created_at: now,
+      updated_at: now,
+      sede_nombre: sede.nombre,
+      sede_es_principal: true,
+      espacio_nombre: null,
+      activo_count: 0,
+    };
+
+    const responsable: ResponsableConConteo = {
+      id: responsableId,
+      entidad_id: id,
+      nombre: normalizeResponsableNombre(adminNombre),
+      dni: adminDni || null,
+      email: adminEmail.toLowerCase(),
+      telefono: input.admin_telefono?.trim() || null,
+      cargo: RESPONSABLE_CARGO_ADMIN,
+      activo: true,
+      created_at: now,
+      updated_at: now,
+      ambiente_count: 0,
+      es_administrador: true,
+    };
+
+    await upsertMasterItem("entidades", "", entidad);
+    await upsertMasterItem("sedes", id, sede);
+    await upsertMasterItem("ambientes", id, preregistro);
+    await upsertMasterItem("responsables", id, responsable);
+
+    await enqueueOfflineOp("entidad:create", id, {
+      id,
+      sedeId,
+      preregistroId,
+      responsableId,
+      input: {
+        nombre,
+        nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
+        ruc: input.ruc?.trim() || null,
+        direccion: input.direccion?.trim() || null,
+        admin_nombre: adminNombre,
+        admin_email: adminEmail,
+        admin_dni: adminDni,
+        admin_telefono: input.admin_telefono?.trim() || null,
+      },
+    });
+
+    return {
+      data: entidad,
+      inviteMessage:
+        "Entidad guardada offline. Se creará en el servidor y se enviará la invitación al reconectar.",
+    };
+  }
 
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
@@ -171,6 +308,30 @@ export async function updateEntidad(
   const dniError = validarAdminEntidadDni(adminDni);
   if (dniError) return { error: dniError };
 
+  if (!isOnline()) {
+    const cached = await findMasterItem<EntidadConConteo>("entidades", entidadId);
+    if (!cached) return { error: "Entidad no encontrada en caché local." };
+    const updated: EntidadConConteo = {
+      ...cached.data,
+      nombre,
+      nombre_etiqueta: input.nombre_etiqueta?.trim() || null,
+      ruc: input.ruc?.trim() || null,
+      direccion: input.direccion?.trim() || null,
+      admin_nombre: adminNombre,
+      admin_email: adminEmail,
+      admin_dni: adminDni,
+      admin_telefono: input.admin_telefono?.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    await upsertMasterItem("entidades", "", updated);
+    await enqueueOfflineOp("entidad:update", entidadId, { input });
+    return {
+      data: updated,
+      inviteMessage: "Cambios guardados offline. Se sincronizarán al volver online.",
+      inviteMode: "resend",
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data: entidadAnterior } = await supabase
     .from("entidades")
@@ -229,6 +390,15 @@ export async function setEntidadActivo(
   entidadId: string,
   activo: boolean,
 ): Promise<{ data?: Entidad; success?: true; error?: string }> {
+  if (!isOnline()) {
+    const cached = await findMasterItem<EntidadConConteo>("entidades", entidadId);
+    if (!cached) return { error: "Entidad no encontrada en caché local." };
+    const updated = { ...cached.data, activo, updated_at: new Date().toISOString() };
+    await upsertMasterItem("entidades", "", updated);
+    await enqueueOfflineOp("entidad:setActivo", entidadId, { activo });
+    return { success: true, data: updated };
+  }
+
   const supabase = getSupabaseClient();
 
   const { data, error } = await supabase
@@ -248,6 +418,20 @@ export async function setEntidadActivo(
 export async function deleteEntidad(
   entidadId: string,
 ): Promise<{ success?: true; error?: string }> {
+  if (!isOnline()) {
+    const cached = await findMasterItem<EntidadConConteo>("entidades", entidadId);
+    if (!cached) return { error: "Entidad no encontrada en caché local." };
+    if ((cached.data.activo_count ?? 0) > 0) {
+      return {
+        error:
+          "No puede eliminar una entidad que tiene activos. Elimine o dé de baja los bienes primero, o desactive la entidad.",
+      };
+    }
+    await removeMasterItem("entidades", "", entidadId);
+    await enqueueOfflineOp("entidad:delete", entidadId, {});
+    return { success: true };
+  }
+
   const supabase = getSupabaseClient();
 
   const { count } = await supabase

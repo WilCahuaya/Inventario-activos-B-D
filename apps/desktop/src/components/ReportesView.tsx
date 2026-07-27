@@ -62,7 +62,7 @@ export function ReportesView({
   const sede = sedes.find((s) => s.id === sedeId);
 
   useEffect(() => {
-    if (!entidadId || !online) {
+    if (!entidadId) {
       setSedes([]);
       setSedeId("");
       setAmbienteId("");
@@ -88,15 +88,15 @@ export function ReportesView({
         }
       })
       .catch(() => setSedes([]));
-  }, [entidadId, online, definicion.scope]);
+  }, [entidadId, definicion.scope]);
 
   useEffect(() => {
-    if (!sedeId || !online) {
+    if (!sedeId) {
       setAmbientes([]);
       return;
     }
     void listAmbientes(sedeId).then(setAmbientes).catch(() => setAmbientes([]));
-  }, [sedeId, online]);
+  }, [sedeId]);
 
   useEffect(() => {
     if (definicion.scope === "entidad") {
@@ -140,10 +140,6 @@ export function ReportesView({
   }, [activos, reporteId, definicion.valorizado, fechaCorteISO, esEjercicio]);
 
   async function cargarActivos(): Promise<ActivoReporte[] | null> {
-    if (!online) {
-      setError("Se requiere conexión a internet para generar reportes.");
-      return null;
-    }
     if (!entidadId) {
       setError("Seleccione una entidad.");
       return null;
@@ -279,11 +275,10 @@ export function ReportesView({
         loading={loading}
         pending={pending}
         error={error}
-        disabled={!online}
         offlineBanner={
           !online ? (
             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-              Sin conexión: los reportes requieren internet para cargar datos desde el servidor.
+              Sin conexión: usando datos locales sincronizados en este equipo.
             </p>
           ) : undefined
         }

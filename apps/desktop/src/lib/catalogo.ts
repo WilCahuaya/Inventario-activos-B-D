@@ -30,6 +30,10 @@ import {
 } from "@inventario/types";
 import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
+import { enqueueOfflineOp, isOnline, listMasterDomain } from "./master-cache";
+import { listCachedActivos } from "./offline";
+
+const CATALOGO_SYNC_ENTIDAD = "";
 
 async function ensureCuentaContableForCatalogo(
   supabase: ReturnType<typeof getSupabaseClient>,
@@ -118,6 +122,29 @@ function syncLocalRow(row: CatalogoNacional) {
 
 function removeLocalRow(codigo: string) {
   void window.electronAPI?.deleteCatalogRow?.(codigo);
+}
+
+async function countActivosUsingCodigoCatalogo(codigo: string): Promise<number> {
+  const entidades = await listMasterDomain<{ id: string }>("entidades", "");
+  let count = 0;
+  for (const entidad of entidades) {
+    const activos = await listCachedActivos(entidad.id);
+    count += activos.filter((activo) => activo.codigo_catalogo === codigo).length;
+  }
+  return count;
+}
+
+async function enqueueCuentaContableIfNeeded(
+  cuentaCodigo: string | null | undefined,
+  nombre: string | null | undefined,
+): Promise<void> {
+  const codigo = cuentaCodigo?.trim();
+  const nombreTrim = nombre?.trim();
+  if (!codigo || !nombreTrim) return;
+  await enqueueOfflineOp("cuenta:upsert", CATALOGO_SYNC_ENTIDAD, {
+    codigo,
+    nombre: nombreTrim,
+  });
 }
 
 export async function searchCatalogo(query: string, limit = 20): Promise<CatalogoNacional[]> {
@@ -368,6 +395,20 @@ export async function createCatalogoNacional(
   if (validationError) return { error: validationError };
 
   const payload = buildCreateCatalogoCuentaOrdenPayload(input);
+
+  if (!isOnline()) {
+    const existing = await getCatalogoByCodigo(payload.codigo);
+    if (existing) {
+      return { error: `El código ${payload.codigo} ya existe en el catálogo.` };
+    }
+
+    const row: CatalogoNacional = { ...payload, created_at: new Date().toISOString() };
+    syncLocalRow(row);
+    await enqueueCuentaContableIfNeeded(payload.cuenta_codigo, payload.contabilidad);
+    await enqueueOfflineOp("catalogo:create", CATALOGO_SYNC_ENTIDAD, { payload });
+    return { data: row };
+  }
+
   const supabase = getSupabaseClient();
 
   const { data: existing } = await supabase
@@ -412,6 +453,20 @@ export async function createCatalogoNacionalExtension(
   if (validationError) return { error: validationError };
 
   const payload = buildCreateCatalogoNacionalExtensionPayload(input);
+
+  if (!isOnline()) {
+    const existing = await getCatalogoByCodigo(payload.codigo);
+    if (existing) {
+      return { error: `El código ${payload.codigo} ya existe en el catálogo nacional.` };
+    }
+
+    const row: CatalogoNacional = { ...payload, created_at: new Date().toISOString() };
+    syncLocalRow(row);
+    await enqueueCuentaContableIfNeeded(payload.cuenta_codigo, payload.contabilidad);
+    await enqueueOfflineOp("catalogo:create", CATALOGO_SYNC_ENTIDAD, { payload });
+    return { data: row };
+  }
+
   const supabase = getSupabaseClient();
 
   const { data: existing } = await supabase
@@ -460,6 +515,29 @@ export async function updateCatalogoPropio(
 
   const validationError = validarUpdateCatalogoPropioInput(input);
   if (validationError) return { error: validationError };
+
+  if (!isOnline()) {
+    const existing = await getCatalogoByCodigo(trimmed);
+    if (!existing || existing.origen !== "PROPIO") {
+      return { error: "El ítem no existe en el catálogo propio." };
+    }
+
+    const payload = buildUpdateCatalogoPropioPayload(input);
+    const row: CatalogoNacional = {
+      ...existing,
+      ...payload,
+      codigo: trimmed,
+      origen: "PROPIO",
+    };
+    syncLocalRow(row);
+    await enqueueCuentaContableIfNeeded(payload.cuenta_codigo, payload.contabilidad);
+    await enqueueOfflineOp("catalogo:update", CATALOGO_SYNC_ENTIDAD, {
+      codigo: trimmed,
+      mode: "propio",
+      payload,
+    });
+    return { data: row };
+  }
 
   const supabase = getSupabaseClient();
   const { data: existing, error: fetchError } = await supabase
@@ -511,6 +589,30 @@ export async function updateCatalogoNacionalContabilidad(
   }
 
   const payload = buildUpdateCatalogoNacionalContabilidadPayload(input);
+
+  if (!isOnline()) {
+    const existing = await getCatalogoByCodigo(trimmed);
+    if (!existing) return { error: "No se pudo actualizar el ítem." };
+    if (existing.origen === "PROPIO") {
+      return { error: "Use el catálogo propio para ítems BD…" };
+    }
+
+    const row: CatalogoNacional = {
+      ...existing,
+      cuenta_codigo: payload.cuenta_codigo ?? null,
+      contabilidad: payload.contabilidad ?? null,
+      depreciacion: payload.depreciacion ?? null,
+    };
+    syncLocalRow(row);
+    await enqueueCuentaContableIfNeeded(payload.cuenta_codigo, payload.contabilidad);
+    await enqueueOfflineOp("catalogo:update", CATALOGO_SYNC_ENTIDAD, {
+      codigo: trimmed,
+      mode: "contabilidad",
+      payload,
+    });
+    return { data: row };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.rpc("update_catalogo_nacional_contabilidad", {
     p_codigo: trimmed,
@@ -535,6 +637,24 @@ export async function deleteCatalogoPropio(codigo: string): Promise<{ error?: st
   const trimmed = codigo.trim();
   if (!CATALOGO_PROPIO_CODIGO_RE.test(trimmed)) {
     return { error: "Solo se pueden eliminar ítems del catálogo propio (BD…)." };
+  }
+
+  if (!isOnline()) {
+    const existing = await getCatalogoByCodigo(trimmed);
+    if (!existing || existing.origen !== "PROPIO") {
+      return { error: "El ítem no existe en el catálogo propio." };
+    }
+
+    const count = await countActivosUsingCodigoCatalogo(trimmed);
+    if (count > 0) {
+      return {
+        error: `No se puede eliminar: ${count} activo(s) usan el código ${trimmed}.`,
+      };
+    }
+
+    removeLocalRow(trimmed);
+    await enqueueOfflineOp("catalogo:delete", CATALOGO_SYNC_ENTIDAD, { codigo: trimmed });
+    return {};
   }
 
   const supabase = getSupabaseClient();
@@ -611,6 +731,15 @@ export async function upsertCuentaContable(
   const codigo = normalizeCuentaCodigo(input.codigo);
   if (!codigo) return { error: "Código de cuenta contable inválido." };
 
+  if (!isOnline()) {
+    const row: CuentaContable = {
+      codigo,
+      nombre: input.nombre.trim(),
+    };
+    await enqueueOfflineOp("cuenta:upsert", CATALOGO_SYNC_ENTIDAD, row);
+    return { data: row };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.rpc("upsert_cuenta_contable", {
     p_codigo: codigo,
@@ -629,6 +758,11 @@ export async function deleteCuentaContable(codigo: string): Promise<{ error?: st
   const normalizado = normalizeCuentaCodigo(codigo.trim());
   if (!normalizado || !/^\d{1,6}$/.test(normalizado)) {
     return { error: "Código de cuenta contable inválido." };
+  }
+
+  if (!isOnline()) {
+    await enqueueOfflineOp("cuenta:delete", CATALOGO_SYNC_ENTIDAD, { codigo: normalizado });
+    return {};
   }
 
   const supabase = getSupabaseClient();

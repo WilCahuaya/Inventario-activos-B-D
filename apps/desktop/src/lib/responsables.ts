@@ -1,5 +1,6 @@
 import type {
   CreateResponsableInput,
+  Entidad,
   Responsable,
   ResponsableConConteo,
   UpdateResponsableInput,
@@ -10,6 +11,16 @@ import {
   RESPONSABLE_CARGO_DEFAULT,
   validarCreateResponsableInput,
 } from "@inventario/types";
+import {
+  enqueueOfflineOp,
+  findMasterItem,
+  isOnline,
+  listMasterDomain,
+  newLocalId,
+  removeMasterItem,
+  replaceMasterDomain,
+  upsertMasterItem,
+} from "./master-cache";
 import { syncAdminResponsableForEntidad } from "./responsables-admin-sync";
 import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
@@ -51,51 +62,68 @@ function mapResponsableRow(
   };
 }
 
+function sortResponsables(rows: ResponsableConConteo[]): ResponsableConConteo[] {
+  return [...rows].sort((a, b) => {
+    if (a.es_administrador !== b.es_administrador) return a.es_administrador ? -1 : 1;
+    return a.nombre.localeCompare(b.nombre, "es");
+  });
+}
+
 export async function listResponsables(
   entidadId: string,
 ): Promise<{ data?: ResponsableConConteo[]; error?: string }> {
   const auth = await assertCanManageEntidad(entidadId);
   if (auth?.error) return auth;
 
-  const supabase = getSupabaseClient();
+  if (isOnline()) {
+    try {
+      const supabase = getSupabaseClient();
 
-  const { data: entidad } = await supabase
-    .from("entidades")
-    .select("admin_nombre, admin_email, admin_dni, admin_telefono")
-    .eq("id", entidadId)
-    .maybeSingle();
+      const { data: entidad } = await supabase
+        .from("entidades")
+        .select("admin_nombre, admin_email, admin_dni, admin_telefono")
+        .eq("id", entidadId)
+        .maybeSingle();
 
-  if (entidad?.admin_email && entidad.admin_nombre) {
-    await syncAdminResponsableForEntidad(
-      supabase,
-      entidadId,
-      entidad.admin_nombre,
-      entidad.admin_email,
-      entidad.admin_telefono,
-      entidad.admin_dni,
-    );
+      if (entidad?.admin_email && entidad.admin_nombre) {
+        await syncAdminResponsableForEntidad(
+          supabase,
+          entidadId,
+          entidad.admin_nombre,
+          entidad.admin_email,
+          entidad.admin_telefono,
+          entidad.admin_dni,
+        );
+      }
+
+      const adminEmailNorm = entidad?.admin_email?.trim().toLowerCase() ?? "";
+
+      const { data, error } = await supabase
+        .from("responsables")
+        .select("*, ambientes(id, nombre, activo, sedes(nombre))")
+        .eq("entidad_id", entidadId)
+        .order("nombre");
+
+      if (error) return { error: error.message };
+
+      const rows = (data ?? []).map((row) =>
+        mapResponsableRow(
+          row as Responsable & { ambientes?: AmbienteRow[] | null },
+          adminEmailNorm,
+        ),
+      );
+      const sorted = sortResponsables(rows);
+      await replaceMasterDomain("responsables", entidadId, sorted);
+      return { data: sorted };
+    } catch (err) {
+      const cached = await listMasterDomain<ResponsableConConteo>("responsables", entidadId);
+      if (cached.length > 0) return { data: sortResponsables(cached) };
+      return { error: err instanceof Error ? err.message : "Error al listar responsables" };
+    }
   }
 
-  const adminEmailNorm = entidad?.admin_email?.trim().toLowerCase() ?? "";
-
-  const { data, error } = await supabase
-    .from("responsables")
-    .select("*, ambientes(id, nombre, activo, sedes(nombre))")
-    .eq("entidad_id", entidadId)
-    .order("nombre");
-
-  if (error) return { error: error.message };
-
-  const rows = (data ?? []).map((row) =>
-    mapResponsableRow(row as Responsable & { ambientes?: AmbienteRow[] | null }, adminEmailNorm),
-  );
-
-  rows.sort((a, b) => {
-    if (a.es_administrador !== b.es_administrador) return a.es_administrador ? -1 : 1;
-    return a.nombre.localeCompare(b.nombre, "es");
-  });
-
-  return { data: rows };
+  const cached = await listMasterDomain<ResponsableConConteo>("responsables", entidadId);
+  return { data: sortResponsables(cached) };
 }
 
 export async function createResponsable(
@@ -108,13 +136,44 @@ export async function createResponsable(
   const validationError = validarCreateResponsableInput(input);
   if (validationError) return { error: validationError };
 
-  const supabase = getSupabaseClient();
   const nombre = normalizeResponsableNombre(input.nombre);
   const trimOrNull = (v?: string) => {
     const t = v?.trim();
     return t ? t : null;
   };
 
+  if (!isOnline()) {
+    const existentes = await listMasterDomain<ResponsableConConteo>("responsables", entidadId);
+    const dni = normalizeResponsableDni(input.dni) || null;
+    if (dni && existentes.some((r) => r.dni === dni)) {
+      return { error: "Ya existe un responsable con ese DNI en esta entidad." };
+    }
+    if (existentes.some((r) => r.nombre.toLowerCase() === nombre.toLowerCase())) {
+      return { error: `Ya existe un responsable llamado «${nombre}» en esta entidad.` };
+    }
+    const id = newLocalId();
+    const now = new Date().toISOString();
+    const row: ResponsableConConteo = {
+      id,
+      entidad_id: entidadId,
+      nombre,
+      dni,
+      email: trimOrNull(input.email),
+      telefono: trimOrNull(input.telefono),
+      cargo: RESPONSABLE_CARGO_DEFAULT,
+      activo: true,
+      created_at: now,
+      updated_at: now,
+      ambiente_count: 0,
+      ambiente_nombres: [],
+      es_administrador: false,
+    };
+    await upsertMasterItem("responsables", entidadId, row);
+    await enqueueOfflineOp("responsable:create", entidadId, { id, input });
+    return { data: row };
+  }
+
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("responsables")
     .insert({
@@ -145,6 +204,35 @@ export async function updateResponsable(
   responsableId: string,
   input: UpdateResponsableInput,
 ): Promise<{ error?: string }> {
+  const validationError = validarCreateResponsableInput(input);
+  if (validationError) return { error: validationError };
+
+  const trimOrNull = (v?: string) => {
+    const t = v?.trim();
+    return t ? t : null;
+  };
+
+  if (!isOnline()) {
+    const found = await findMasterItem<ResponsableConConteo>("responsables", responsableId);
+    if (!found) return { error: "Responsable no encontrado." };
+    const auth = await assertCanManageEntidad(found.entidadId);
+    if (auth?.error) return auth;
+    await upsertMasterItem("responsables", found.entidadId, {
+      ...found.data,
+      nombre: normalizeResponsableNombre(input.nombre),
+      dni: normalizeResponsableDni(input.dni) || null,
+      email: trimOrNull(input.email),
+      telefono: trimOrNull(input.telefono),
+      ...(input.activo !== undefined ? { activo: input.activo } : {}),
+      updated_at: new Date().toISOString(),
+    });
+    await enqueueOfflineOp("responsable:update", found.entidadId, {
+      responsableId,
+      input,
+    });
+    return {};
+  }
+
   const supabase = getSupabaseClient();
   const { data: existing } = await supabase
     .from("responsables")
@@ -156,14 +244,6 @@ export async function updateResponsable(
 
   const auth = await assertCanManageEntidad(existing.entidad_id as string);
   if (auth?.error) return auth;
-
-  const validationError = validarCreateResponsableInput(input);
-  if (validationError) return { error: validationError };
-
-  const trimOrNull = (v?: string) => {
-    const t = v?.trim();
-    return t ? t : null;
-  };
 
   const { error } = await supabase
     .from("responsables")
@@ -193,6 +273,23 @@ export async function setResponsableActivo(
   responsableId: string,
   activo: boolean,
 ): Promise<{ error?: string }> {
+  if (!isOnline()) {
+    const found = await findMasterItem<ResponsableConConteo>("responsables", responsableId);
+    if (!found) return { error: "Responsable no encontrado." };
+    const auth = await assertCanManageEntidad(found.entidadId);
+    if (auth?.error) return auth;
+    await upsertMasterItem("responsables", found.entidadId, {
+      ...found.data,
+      activo,
+      updated_at: new Date().toISOString(),
+    });
+    await enqueueOfflineOp("responsable:setActivo", found.entidadId, {
+      responsableId,
+      activo,
+    });
+    return {};
+  }
+
   const supabase = getSupabaseClient();
   const { data: existing } = await supabase
     .from("responsables")
@@ -217,6 +314,31 @@ export async function setResponsableActivo(
 export async function deleteResponsable(
   responsableId: string,
 ): Promise<{ error?: string }> {
+  if (!isOnline()) {
+    const found = await findMasterItem<ResponsableConConteo>("responsables", responsableId);
+    if (!found) return { error: "Responsable no encontrado." };
+    const auth = await assertCanManageEntidad(found.entidadId);
+    if (auth?.error) return auth;
+    if (found.data.activo) {
+      return { error: "Desactive el responsable antes de eliminarlo definitivamente." };
+    }
+    if (found.data.es_administrador) {
+      return {
+        error:
+          "No puede eliminar al administrador de la entidad. Actualice los datos del administrador en la ficha de la entidad.",
+      };
+    }
+    if ((found.data.ambiente_count ?? 0) > 0) {
+      return {
+        error:
+          "No puede eliminar un responsable con ambientes asignados. Reasigne los ambientes o desactívelo.",
+      };
+    }
+    await removeMasterItem("responsables", found.entidadId, responsableId);
+    await enqueueOfflineOp("responsable:delete", found.entidadId, { responsableId });
+    return {};
+  }
+
   const supabase = getSupabaseClient();
   const { data: existing } = await supabase
     .from("responsables")
@@ -256,7 +378,8 @@ export async function deleteResponsable(
 
   if ((count ?? 0) > 0) {
     return {
-      error: "No puede eliminar un responsable con ambientes asignados. Reasigne los ambientes o desactívelo.",
+      error:
+        "No puede eliminar un responsable con ambientes asignados. Reasigne los ambientes o desactívelo.",
     };
   }
 
@@ -270,6 +393,25 @@ export async function assignResponsableAmbiente(
   ambienteId: string,
   responsableId: string | null,
 ): Promise<{ error?: string }> {
+  if (!isOnline()) {
+    const found = await findMasterItem<{ id: string; sede_id: string; responsable_id: string | null }>(
+      "ambientes",
+      ambienteId,
+    );
+    if (!found) return { error: "Ambiente no encontrado." };
+    const auth = await assertCanManageEntidad(found.entidadId);
+    if (auth?.error) return auth;
+    await upsertMasterItem("ambientes", found.entidadId, {
+      ...found.data,
+      responsable_id: responsableId,
+    });
+    await enqueueOfflineOp("ambiente:assignResponsable", found.entidadId, {
+      ambienteId,
+      responsableId,
+    });
+    return {};
+  }
+
   const supabase = getSupabaseClient();
   const { data: ambiente } = await supabase
     .from("ambientes")
@@ -298,4 +440,12 @@ export async function assignResponsableAmbiente(
 
   if (error) return { error: error.message };
   return {};
+}
+
+/** Usado por sync: obtener admin email de entidad en caché. */
+export async function getEntidadAdminEmailFromCache(
+  entidadId: string,
+): Promise<string | null> {
+  const found = await findMasterItem<Entidad>("entidades", entidadId);
+  return found?.data.admin_email ?? null;
 }

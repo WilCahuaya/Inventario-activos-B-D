@@ -37,13 +37,21 @@ import {
   cacheMeta,
   enqueueSyncItem,
   findCachedActivo,
+  findMasterCacheById,
   listCachedActivos,
+  listMasterCache,
   listSyncQueue,
+  masterCacheMeta,
+  removeCachedActivo,
+  removeMasterCacheItem,
   removeSyncItem,
   replaceActivosCache,
+  replaceMasterCache,
   setSyncItemError,
   syncQueueCount,
   upsertCachedActivo,
+  upsertMasterCacheItem,
+  type MasterCacheDomain,
 } from "./database/offline";
 import { buildLabelZpl, listSystemPrinters, saveZplDialog, sendZplToPrinter } from "./print";
 
@@ -249,8 +257,40 @@ ipcMain.handle("offline:cacheFind", (_event, entidadId: string, codigo: string) 
 ipcMain.handle("offline:cacheUpsert", (_event, entidadId: string, activo: unknown) =>
   upsertCachedActivo(entidadId, activo),
 );
+ipcMain.handle("offline:cacheRemove", (_event, entidadId: string, activoId: string) =>
+  removeCachedActivo(entidadId, activoId),
+);
 ipcMain.handle("offline:cacheMeta", (_event, entidadId: string) => cacheMeta(entidadId));
 ipcMain.handle("offline:cacheList", (_event, entidadId: string) => listCachedActivos(entidadId));
+ipcMain.handle(
+  "offline:masterReplace",
+  (_event, domain: MasterCacheDomain, entidadId: string, items: unknown[]) =>
+    replaceMasterCache(domain, entidadId, items),
+);
+ipcMain.handle(
+  "offline:masterList",
+  (_event, domain: MasterCacheDomain, entidadId?: string) =>
+    listMasterCache(domain, entidadId ?? ""),
+);
+ipcMain.handle(
+  "offline:masterUpsert",
+  (_event, domain: MasterCacheDomain, entidadId: string, item: unknown) =>
+    upsertMasterCacheItem(domain, entidadId, item),
+);
+ipcMain.handle(
+  "offline:masterRemove",
+  (_event, domain: MasterCacheDomain, entidadId: string, id: string) =>
+    removeMasterCacheItem(domain, entidadId, id),
+);
+ipcMain.handle(
+  "offline:masterMeta",
+  (_event, domain: MasterCacheDomain, entidadId?: string) =>
+    masterCacheMeta(domain, entidadId ?? ""),
+);
+ipcMain.handle(
+  "offline:masterFind",
+  (_event, domain: MasterCacheDomain, id: string) => findMasterCacheById(domain, id),
+);
 
 ipcMain.handle("print:buildZpl", (_event, options) => buildLabelZpl(options));
 ipcMain.handle("print:saveDialog", (event, zpl: string) => {

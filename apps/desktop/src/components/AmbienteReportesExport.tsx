@@ -37,18 +37,13 @@ export function AmbienteReportesExport({
   fichaExportMeta,
   usuarioNombre,
   usuarioEmail,
-  online,
+  online: _online,
   size = "sm",
 }: AmbienteReportesExportProps) {
   const reportes = useMemo(() => reportesAmbienteParaRol("CONTADOR"), []);
   const [pending, setPending] = useState<string | null>(null);
 
   async function handleExport(reporteId: ReporteId, formato: ReporteFormato) {
-    if (!online) {
-      window.alert("Se requiere conexión a internet para generar reportes.");
-      return;
-    }
-
     const key = `${reporteId}:${formato}`;
     setPending(key);
     try {
@@ -95,7 +90,6 @@ export function AmbienteReportesExport({
       reportes={reportes.map((r) => ({ id: r.id, label: r.label }))}
       pending={pending}
       size={size}
-      disabled={!online}
       onExport={(id, formato) => void handleExport(id as ReporteId, formato)}
     />
   );

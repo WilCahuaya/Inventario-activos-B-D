@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { BD_PORTAL_LOGIN_HINT } from "@inventario/types";
 import {
   Button,
@@ -37,6 +37,7 @@ import { useOnline } from "./hooks/useOnline";
 import { useProfile } from "./hooks/useProfile";
 import { useSelectedEntidad } from "./hooks/useSelectedEntidad";
 import { useSyncQueue } from "./hooks/useSyncQueue";
+import { useMasterDataSync } from "./hooks/useMasterDataSync";
 import { useActivosRealtime } from "./hooks/useActivosRealtime";
 import { useEstructuraRealtime } from "./hooks/useEstructuraRealtime";
 import { useVisibilityRefresh } from "./hooks/useVisibilityRefresh";
@@ -210,7 +211,14 @@ function MainApp({ userId }: { userId: string; email: string }) {
     setEntidadesList,
     refreshEntidades,
   } = useSelectedEntidad(Boolean(profile));
-  const { pending, syncing, lastResult, syncNow } = useSyncQueue(Boolean(profile));
+  const refreshActivosRef = useRef<() => Promise<void>>(async () => undefined);
+  const refreshEstructuraRef = useRef<() => Promise<void>>(async () => undefined);
+
+  const { pending, syncing, lastResult, syncNow } = useSyncQueue(Boolean(profile), () => {
+    void refreshEstructuraRef.current();
+    void refreshActivosRef.current();
+  });
+  useMasterDataSync(Boolean(profile), entidadId || null);
 
   const [mainNav, setMainNav] = useState<MainNav>("dashboard");
   const [dashboardEntidadId, setDashboardEntidadId] = useState("");
@@ -243,10 +251,14 @@ function MainApp({ userId }: { userId: string; email: string }) {
     await globalActivos.refresh();
   }, [activosCache.refresh, globalActivos.refresh]);
 
+  refreshActivosRef.current = refreshActivos;
+
   const refreshEstructura = useCallback(async () => {
     await refreshEntidades();
     dispatchEstructuraRefresh();
   }, [refreshEntidades]);
+
+  refreshEstructuraRef.current = refreshEstructura;
 
   const refreshAllRemote = useCallback(async () => {
     await refreshEstructura();

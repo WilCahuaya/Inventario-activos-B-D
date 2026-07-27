@@ -55,6 +55,7 @@ import {
 import { panelFieldsetClass, panelLegendClass, panelModalClass } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
 import {
+  applyActivosSimilaresPatchLocal,
   createActivo,
   previewCodigoBarras,
   updateActivo,
@@ -67,6 +68,7 @@ import {
   fileToBase64,
   upsertCachedActivo,
 } from "../lib/offline";
+import { enqueueOfflineOp } from "../lib/master-cache";
 import { updateActivoPaths, uploadActivoFile } from "../lib/storage";
 import { suggestActivoAtributo, upsertLocalAtributosFromActivo } from "../lib/atributo-vocab";
 import {
@@ -502,10 +504,6 @@ export function ActivoFormDesktop({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (esEdicionMasiva && !navigator.onLine) {
-      setMessage("La edición masiva de ejemplares requiere conexión a internet.");
-      return;
-    }
     if (!catalogo) {
       setMessage("Seleccione un ítem del catálogo nacional.");
       return;
@@ -597,8 +595,67 @@ export function ActivoFormDesktop({
     const ambienteNombre = ambientes.find((a) => a.id === ambienteId)?.nombre;
     const online = navigator.onLine;
 
-    if (!online && esEdicionMasiva) {
-      setMessage("La edición masiva de ejemplares requiere conexión a internet.");
+    if (!online && esEdicionMasiva && activo) {
+      const bulkPatch: UpdateActivosSimilaresInput = {
+        categoria: payload.categoria,
+        marca: marca.trim() || null,
+        modelo: modelo.trim() || null,
+        color: color.trim() || null,
+        medidas: medidas.trim() || null,
+        caracteristicas: detalle.trim() || null,
+        estado_bien: estadoBien,
+        valor_adquisicion: payload.valor_adquisicion ?? null,
+        valor_es_mercado: payload.valor_es_mercado,
+        fecha_adquisicion: payload.fecha_adquisicion ?? null,
+      };
+      if (aplicarObservacionLote) {
+        bulkPatch.observacion = observacion.trim() || null;
+      }
+      if (mostrarPosibleAmbiente) {
+        bulkPatch.posible_ambiente_id = posibleAmbienteId || null;
+      }
+      if (mostrarDepreciacionBulk) {
+        bulkPatch.depreciacion = depreciacion.trim() || null;
+        bulkPatch.vida_util_meses = vidaUtilMeses ? Number(vidaUtilMeses) : null;
+      } else if (categoria === "CUENTA_ORDEN") {
+        bulkPatch.depreciacion = null;
+        bulkPatch.vida_util_meses = null;
+      }
+      if (
+        mostrarCuentaContableBulk &&
+        debePersistirCuentaContableEnActivo({
+          esEdicion: true,
+          activoTienePropia: activoTieneCuentaContablePropia(activo),
+          cuentaCodigo,
+          cuentaNombre,
+          referenciaCodigo: cuentaReferenciaRef.current.codigo,
+          referenciaNombre: cuentaReferenciaRef.current.nombre,
+        })
+      ) {
+        const cuentaPayload = buildActivoCuentaContablePayload(cuentaCodigo, cuentaNombre, categoria);
+        bulkPatch.cuenta_contable_codigo = cuentaPayload.cuenta_contable_codigo;
+        bulkPatch.cuenta_contable_nombre = cuentaPayload.cuenta_contable_nombre;
+      }
+      if (valorEsMercado) {
+        bulkPatch.comprobante_path = null;
+        bulkPatch.comprobante_serie = null;
+      } else {
+        bulkPatch.comprobante_serie = comprobanteSerie.trim() || null;
+      }
+
+      await enqueueOfflineOp("activos:updateSimilares", entidadId, {
+        activoId: activo.id,
+        patch: bulkPatch,
+      });
+      const actualizados = await applyActivosSimilaresPatchLocal(entidadId, activo, bulkPatch);
+      const archivosOmitidos = Boolean(comprobanteFile || fotoFile);
+      setMessage(
+        `${actualizados || ejemplaresTotal} ejemplares actualizados (guardado en cola offline, se sincronizarán al reconectar).` +
+          (archivosOmitidos
+            ? " Los archivos adjuntos no se aplicaron sin conexión; súbalos luego de sincronizar."
+            : ""),
+      );
+      onSuccess(activo);
       return;
     }
 

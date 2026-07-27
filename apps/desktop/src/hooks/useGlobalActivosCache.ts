@@ -35,13 +35,13 @@ export function useGlobalActivosCache(entidades: Entidad[], enabled: boolean) {
   }, [enabled, entidades]);
 
   const refresh = useCallback(async () => {
-    if (!enabled || !online) return;
+    if (!enabled) return;
     const showSpinner = !hasDataRef.current;
     if (showSpinner) setLoading(true);
     try {
       const fetched = await listActivosGlobal();
       setActivos(fetched);
-      setUpdatedAt(new Date().toISOString());
+      if (online) setUpdatedAt(new Date().toISOString());
       hasDataRef.current = true;
     } finally {
       if (showSpinner) setLoading(false);
@@ -57,7 +57,7 @@ export function useGlobalActivosCache(entidades: Entidad[], enabled: boolean) {
   }, [enabled, loadFromCache]);
 
   useEffect(() => {
-    if (enabled && online) {
+    if (enabled) {
       void refresh();
     }
   }, [enabled, online, refresh]);

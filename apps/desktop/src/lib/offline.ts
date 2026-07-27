@@ -82,6 +82,11 @@ export async function listCachedActivos(entidadId: string): Promise<ActivoConUbi
   return rows as ActivoConUbicacion[];
 }
 
+export async function removeCachedActivo(entidadId: string, activoId: string): Promise<boolean> {
+  if (!window.electronAPI?.offlineCacheRemove) return false;
+  return window.electronAPI.offlineCacheRemove(entidadId, activoId);
+}
+
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

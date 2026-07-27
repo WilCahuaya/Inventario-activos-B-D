@@ -22,7 +22,7 @@ export function InventarioImportDialog({
   open,
   onClose,
   entidades,
-  online,
+  online: _online,
   fixedEntidad = null,
   onImported,
 }: InventarioImportDialogProps) {
@@ -74,10 +74,6 @@ export function InventarioImportDialog({
 
   async function handleImport() {
     if (!resolvedEntidadId || !file) return;
-    if (!online) {
-      setActionError("Se requiere conexión para importar activos.");
-      return;
-    }
 
     setPending(true);
     setParseError(null);
@@ -115,7 +111,7 @@ export function InventarioImportDialog({
     await downloadImportActivosErrores(entidad.nombre, result.errores);
   }
 
-  const canImport = Boolean(resolvedEntidadId && file && !pending && online);
+  const canImport = Boolean(resolvedEntidadId && file && !pending);
   const hasErrores = (result?.errores.length ?? 0) > 0;
 
   return (
@@ -134,12 +130,6 @@ export function InventarioImportDialog({
             </>
           )}
         </p>
-
-        {!online && (
-          <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-            Sin conexión: la importación requiere estar en línea.
-          </p>
-        )}
 
         {!fixedEntidad && (
           <div className="space-y-2">

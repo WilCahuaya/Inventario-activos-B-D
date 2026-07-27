@@ -63,10 +63,6 @@ export function ActivosAmbienteView({
   const [fichaMeta, setFichaMeta] = useState<FichaAsignacionExportMeta | null>(null);
 
   useEffect(() => {
-    if (!online) {
-      setFichaMeta(null);
-      return;
-    }
     let cancelled = false;
     void resolveFichaAsignacionExportMeta(
       entidad,
@@ -85,7 +81,7 @@ export function ActivosAmbienteView({
     return () => {
       cancelled = true;
     };
-  }, [entidad, ambienteResponsableId, ambienteResponsable, sedeNombre, online]);
+  }, [entidad, ambienteResponsableId, ambienteResponsable, sedeNombre]);
 
   const exportMeta = useMemo(
     () => ({

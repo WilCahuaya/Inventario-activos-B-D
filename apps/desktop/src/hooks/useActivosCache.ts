@@ -26,15 +26,17 @@ export function useActivosCache(entidadId: string, enabled: boolean) {
   }, [enabled, entidadId]);
 
   const refresh = useCallback(async () => {
-    if (!enabled || !entidadId || !online) return;
+    if (!enabled || !entidadId) return;
     const showSpinner = !hasDataRef.current;
     if (showSpinner) setLoading(true);
     try {
       const fetched = await listActivosForEntidad(entidadId);
-      await refreshActivosCache(entidadId, fetched);
+      if (online) {
+        await refreshActivosCache(entidadId, fetched);
+        setUpdatedAt(new Date().toISOString());
+      }
       setActivos(fetched);
       setCount(fetched.length);
-      setUpdatedAt(new Date().toISOString());
       hasDataRef.current = true;
     } finally {
       if (showSpinner) setLoading(false);
@@ -55,7 +57,7 @@ export function useActivosCache(entidadId: string, enabled: boolean) {
   }, [enabled, entidadId, loadFromCache]);
 
   useEffect(() => {
-    if (enabled && entidadId && online) {
+    if (enabled && entidadId) {
       void refresh();
     }
   }, [enabled, entidadId, online, refresh]);

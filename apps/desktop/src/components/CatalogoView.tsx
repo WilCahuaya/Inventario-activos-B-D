@@ -29,106 +29,20 @@ interface CatalogoViewProps {
 export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
   const online = useOnline();
 
-  async function handleCreate(
-    ...args: Parameters<typeof createCatalogoNacional>
-  ) {
-    if (!online) {
-      return {
-        error: "Se requiere conexión a internet para agregar ítems al catálogo.",
-      };
-    }
-    return createCatalogoNacional(...args);
-  }
-
-  async function handleCreateNacional(
-    ...args: Parameters<typeof createCatalogoNacionalExtension>
-  ) {
-    if (!online) {
-      return {
-        error: "Se requiere conexión a internet para agregar ítems al catálogo nacional.",
-      };
-    }
-    return createCatalogoNacionalExtension(...args);
-  }
-
-  async function handleUpdate(
-    ...args: Parameters<typeof updateCatalogoPropio>
-  ) {
-    if (!online) {
-      return { error: "Se requiere conexión para editar el catálogo propio." };
-    }
-    return updateCatalogoPropio(...args);
-  }
-
-  async function handleUpdateNacionalContabilidad(
-    ...args: Parameters<typeof updateCatalogoNacionalContabilidad>
-  ) {
-    if (!online) {
-      return {
-        error: "Se requiere conexión para editar los datos contables del catálogo nacional.",
-      };
-    }
-    return updateCatalogoNacionalContabilidad(...args);
-  }
-
-  async function handleDelete(codigo: string) {
-    if (!online) {
-      return { error: "Se requiere conexión para eliminar del catálogo propio." };
-    }
-    return deleteCatalogoPropio(codigo);
-  }
-
-  async function handleDeleteOpcion(
-    ...args: Parameters<typeof deleteCatalogoOpcionPersonalizada>
-  ) {
-    if (!online) {
-      return { error: "Se requiere conexión para eliminar opciones personalizadas." };
-    }
-    return deleteCatalogoOpcionPersonalizada(...args);
-  }
-
-  async function handleRegisterOpcion(
-    ...args: Parameters<typeof registerCatalogoOpcionPersonalizada>
-  ) {
-    if (!online) {
-      return { error: "Se requiere conexión para guardar opciones personalizadas." };
-    }
-    return registerCatalogoOpcionPersonalizada(...args);
-  }
-
-  async function handleUpsertCuentaContable(
-    ...args: Parameters<typeof upsertCuentaContable>
-  ) {
-    if (!online) {
-      return { error: "Se requiere conexión para guardar cuentas contables." };
-    }
-    return upsertCuentaContable(...args);
-  }
-
-  async function handleDeleteCuentaContable(
-    ...args: Parameters<typeof deleteCuentaContable>
-  ) {
-    if (!online) {
-      return { error: "Se requiere conexión para eliminar cuentas contables." };
-    }
-    return deleteCuentaContable(...args);
-  }
-
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Catálogo</h2>
         <p className="text-sm text-muted-foreground">
-          Administre bienes de cuenta de orden (catálogo propio) y consulte el catálogo nacional
+          Administree bienes de cuenta de orden (catálogo propio) y consulte el catálogo nacional
           oficial.
         </p>
       </div>
 
       {!online && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-foreground">
-          Sin conexión. Puede consultar el catálogo nacional ya sincronizado y ver ítems propios en
-          caché; crear, editar o eliminar propios y completar los datos contables del catálogo nacional requiere
-          internet.
+          Sin conexión. Puede consultar el catálogo nacional sincronizado y editar ítems propios;
+          los cambios se sincronizarán al reconectar.
         </p>
       )}
 
@@ -140,27 +54,27 @@ export function CatalogoView({ initialDenominacion = "" }: CatalogoViewProps) {
             ? undefined
             : "Mostrando resultados del catálogo nacional sincronizado en este equipo."
         }
-        readOnlyPropio={!online}
-        readOnlyNacionalCreate={!online}
+        readOnlyPropio={false}
+        readOnlyNacionalCreate={false}
         loadNextCodigo={getNextCodigoCatalogoPropio}
         loadGrupos={listCatalogoGrupos}
         loadClases={listCatalogoClases}
         suggestGrupo={suggestCatalogoGrupo}
-        onRegisterOpcionPersonalizada={handleRegisterOpcion}
-        onDeleteOpcionPersonalizada={handleDeleteOpcion}
-        onCreate={handleCreate}
-        onCreateNacional={handleCreateNacional}
+        onRegisterOpcionPersonalizada={registerCatalogoOpcionPersonalizada}
+        onDeleteOpcionPersonalizada={deleteCatalogoOpcionPersonalizada}
+        onCreate={createCatalogoNacional}
+        onCreateNacional={createCatalogoNacionalExtension}
         listPropio={listCatalogoPropio}
-        onUpdatePropio={handleUpdate}
-        onDeletePropio={handleDelete}
+        onUpdatePropio={updateCatalogoPropio}
+        onDeletePropio={deleteCatalogoPropio}
         searchNacional={searchCatalogoNacionalOficial}
         searchCuentasContables={searchCuentasContables}
         listCuentasContables={listCuentasContables}
-        onUpsertCuentaContable={handleUpsertCuentaContable}
-        onDeleteCuentaContable={handleDeleteCuentaContable}
-        readOnlyCuentasContables={!online}
-        onUpdateNacionalContabilidad={handleUpdateNacionalContabilidad}
-        readOnlyNacionalContabilidad={!online}
+        onUpsertCuentaContable={upsertCuentaContable}
+        onDeleteCuentaContable={deleteCuentaContable}
+        readOnlyCuentasContables={false}
+        onUpdateNacionalContabilidad={updateCatalogoNacionalContabilidad}
+        readOnlyNacionalContabilidad={false}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Ambiente, Sede, SedeConConteo } from "@inventario/types";
+import type { Ambiente, Espacio, EspacioConOcupacion, Sede, SedeConConteo } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
 import { loadSedesForEntidad } from "@/lib/sede-principal-direccion";
 import { getProfile, requireProfile } from "@/lib/auth/profile";
@@ -108,6 +108,7 @@ export async function listSedes(entidadId: string): Promise<Sede[]> {
 export type AmbienteConSede = Ambiente & {
   sede_nombre: string;
   sede_es_principal: boolean;
+  espacio_nombre?: string | null;
   activo_count: number;
 };
 
@@ -161,9 +162,32 @@ export async function listAmbientesPorEntidad(
       ...(ambiente as Ambiente),
       sede_nombre: sede?.nombre ?? "",
       sede_es_principal: sede?.es_principal ?? false,
+      espacio_nombre: null as string | null,
       activo_count: 0,
     };
   });
+
+  const espacioIds = [
+    ...new Set(
+      mapped
+        .map((a) => a.espacio_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (espacioIds.length > 0) {
+    const { data: espaciosRows } = await supabase
+      .from("espacios")
+      .select("id, nombre")
+      .in("id", espacioIds);
+    const nombreById = new Map(
+      (espaciosRows ?? []).map((e) => [e.id as string, e.nombre as string]),
+    );
+    for (const amb of mapped) {
+      if (amb.espacio_id) {
+        amb.espacio_nombre = nombreById.get(amb.espacio_id) ?? null;
+      }
+    }
+  }
 
   const activoCounts = await activoCountByAmbienteIds(
     supabase,
@@ -308,6 +332,42 @@ export interface CreateAmbienteInput {
   nombre: string;
   descripcion?: string;
   responsableId?: string | null;
+  espacioId?: string | null;
+}
+
+const ESPACIO_OCUPADO_MSG = "Ese espacio ya está ocupado por otro ambiente.";
+
+function mapAmbienteEspacioError(message: string): string {
+  const m = message.toLowerCase();
+  if (
+    m.includes("idx_ambientes_espacio_unico") ||
+    (m.includes("duplicate key") && m.includes("espacio"))
+  ) {
+    return ESPACIO_OCUPADO_MSG;
+  }
+  return message;
+}
+
+async function mensajeSiEspacioOcupado(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  espacioId: string | null | undefined,
+  excludeAmbienteId?: string,
+): Promise<string | null> {
+  if (!espacioId) return null;
+  let query = supabase
+    .from("ambientes")
+    .select("id, nombre")
+    .eq("espacio_id", espacioId)
+    .eq("activo", true);
+  if (excludeAmbienteId) {
+    query = query.neq("id", excludeAmbienteId);
+  }
+  const { data } = await query.maybeSingle();
+  if (!data) return null;
+  const nombre = (data.nombre as string | null)?.trim();
+  return nombre
+    ? `Ese espacio ya está ocupado por «${nombre}».`
+    : ESPACIO_OCUPADO_MSG;
 }
 
 export async function createAmbiente(input: CreateAmbienteInput) {
@@ -324,6 +384,9 @@ export async function createAmbiente(input: CreateAmbienteInput) {
     .eq("id", input.sedeId)
     .single();
 
+  const ocupado = await mensajeSiEspacioOcupado(supabase, input.espacioId);
+  if (ocupado) return { error: ocupado };
+
   const { data, error } = await supabase
     .from("ambientes")
     .insert({
@@ -331,11 +394,12 @@ export async function createAmbiente(input: CreateAmbienteInput) {
       nombre: trimmed,
       descripcion: input.descripcion?.trim() || null,
       responsable_id: input.responsableId || null,
+      espacio_id: input.espacioId || null,
     })
     .select()
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { error: mapAmbienteEspacioError(error.message) };
 
   if (sede?.entidad_id) revalidateEntidad(sede.entidad_id as string);
   revalidatePath(`/contador/entidades/${sede?.entidad_id}/ambientes/${data.id}`);
@@ -389,16 +453,21 @@ export async function updateAmbiente(
     }
   }
 
+  const espacioId = input.espacioId ?? null;
+  const ocupado = await mensajeSiEspacioOcupado(supabase, espacioId, ambienteId);
+  if (ocupado) return { error: ocupado };
+
   const { error } = await supabase
     .from("ambientes")
     .update({
       nombre: trimmed,
       descripcion: input.descripcion?.trim() || null,
       responsable_id: input.responsableId ?? null,
+      espacio_id: espacioId,
     })
     .eq("id", ambienteId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: mapAmbienteEspacioError(error.message) };
 
   const { data: sede } = await supabase
     .from("sedes")
@@ -446,5 +515,215 @@ export async function deleteAmbiente(ambienteId: string) {
     .single();
   const entidadId = sede?.entidad_id as string | undefined;
   if (entidadId) revalidateEntidad(entidadId);
+  return { success: true };
+}
+
+function nombreEspacioNumerado(n: number): string {
+  return `Espacio ${String(n).padStart(2, "0")}`;
+}
+
+function maxNumeroEspacioExistente(existentes: Array<{ nombre: string }>): number {
+  let max = 0;
+  for (const e of existentes) {
+    const match = e.nombre.trim().match(/^espacio\s*0*(\d+)$/i);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return max;
+}
+
+export async function listEspacios(sedeId: string): Promise<EspacioConOcupacion[]> {
+  const profile = await getProfile();
+  if (!profile) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("espacios")
+    .select("*, ambientes(id, nombre, activo)")
+    .eq("sede_id", sedeId)
+    .eq("activo", true)
+    .order("nombre");
+
+  if (error || !data) return [];
+
+  return data.map((row) => {
+    const ambientes = (row.ambientes as Array<{ id: string; nombre: string; activo: boolean }> | null) ?? [];
+    const ocupante = ambientes.find((a) => a.activo);
+    const { ambientes: _, ...espacio } = row;
+    return {
+      ...(espacio as Espacio),
+      ambiente_id: ocupante?.id ?? null,
+      ambiente_nombre: ocupante?.nombre ?? null,
+    };
+  });
+}
+
+export async function listEspaciosPorEntidad(entidadId: string): Promise<Espacio[]> {
+  const profile = await getProfile();
+  if (!profile) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("espacios")
+    .select("*, sedes!inner(entidad_id)")
+    .eq("activo", true)
+    .eq("sedes.entidad_id", entidadId)
+    .order("nombre");
+
+  if (error || !data) return [];
+  return data.map((row) => {
+    const { sedes: _, ...espacio } = row;
+    return espacio as Espacio;
+  });
+}
+
+export async function createEspacio(sedeId: string, nombre: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
+    return { error: "No autorizado." };
+  }
+
+  const trimmed = nombre.trim();
+  if (!trimmed) return { error: "Nombre de espacio obligatorio." };
+
+  const supabase = await createClient();
+
+  if (profile.rol === "ADMIN_ENTIDAD") {
+    const { data: sedeRow } = await supabase
+      .from("sedes")
+      .select("entidad_id")
+      .eq("id", sedeId)
+      .maybeSingle();
+    if (!sedeRow || sedeRow.entidad_id !== profile.entidad_id) {
+      return { error: "No autorizado." };
+    }
+  }
+
+  const { data: existentes } = await supabase
+    .from("espacios")
+    .select("nombre")
+    .eq("sede_id", sedeId)
+    .eq("activo", true);
+
+  const nombreNorm = trimmed.toLowerCase();
+  if ((existentes ?? []).some((e) => e.nombre.trim().toLowerCase() === nombreNorm)) {
+    return {
+      error: "No puede haber dos espacios con el mismo nombre en la sucursal.",
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("espacios")
+    .insert({ sede_id: sedeId, nombre: trimmed })
+    .select()
+    .single();
+
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("idx_espacios_sede_nombre_activo") || msg.includes("duplicate key")) {
+      return {
+        error: "No puede haber dos espacios con el mismo nombre en la sucursal.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  const { data: sede } = await supabase.from("sedes").select("entidad_id").eq("id", sedeId).single();
+  if (sede?.entidad_id) revalidateEntidad(sede.entidad_id as string, sedeId);
+  return { success: true, data: data as Espacio };
+}
+
+/** Agrega `cantidad` espacios a continuación del último número (ej. tras Espacio 10 → 11, 12…). */
+export async function ensureEspaciosHasta(sedeId: string, cantidad: number) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
+    return { error: "No autorizado." };
+  }
+  if (!Number.isFinite(cantidad) || cantidad < 1 || cantidad > 500) {
+    return { error: "Indique una cantidad entre 1 y 500." };
+  }
+
+  const supabase = await createClient();
+
+  if (profile.rol === "ADMIN_ENTIDAD") {
+    const { data: sedeRow } = await supabase
+      .from("sedes")
+      .select("entidad_id")
+      .eq("id", sedeId)
+      .maybeSingle();
+    if (!sedeRow || sedeRow.entidad_id !== profile.entidad_id) {
+      return { error: "No autorizado." };
+    }
+  }
+
+  const existentes = await listEspacios(sedeId);
+  const nombres = new Set(existentes.map((e) => e.nombre.trim().toLowerCase()));
+  const desde = maxNumeroEspacioExistente(existentes) + 1;
+  const aCrear: { sede_id: string; nombre: string }[] = [];
+  for (let i = 0; i < cantidad; i++) {
+    const nombre = nombreEspacioNumerado(desde + i);
+    if (!nombres.has(nombre.toLowerCase())) {
+      aCrear.push({ sede_id: sedeId, nombre });
+    }
+  }
+
+  if (aCrear.length === 0) {
+    return { success: true, creados: 0, data: existentes };
+  }
+
+  const { error } = await supabase.from("espacios").insert(aCrear);
+  if (error) return { error: error.message };
+
+  const { data: sede } = await supabase.from("sedes").select("entidad_id").eq("id", sedeId).single();
+  if (sede?.entidad_id) revalidateEntidad(sede.entidad_id as string, sedeId);
+
+  const actualizados = await listEspacios(sedeId);
+  return { success: true, creados: aCrear.length, data: actualizados };
+}
+
+export async function deleteEspacio(espacioId: string) {
+  const profile = await getProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
+    return { error: "No autorizado." };
+  }
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("espacios")
+    .select("id, sede_id")
+    .eq("id", espacioId)
+    .eq("activo", true)
+    .maybeSingle();
+
+  if (!existing) return { error: "Espacio no encontrado." };
+
+  if (profile.rol === "ADMIN_ENTIDAD") {
+    const { data: sedeRow } = await supabase
+      .from("sedes")
+      .select("entidad_id")
+      .eq("id", existing.sede_id)
+      .maybeSingle();
+    if (!sedeRow || sedeRow.entidad_id !== profile.entidad_id) {
+      return { error: "No autorizado." };
+    }
+  }
+
+  await supabase.from("ambientes").update({ espacio_id: null }).eq("espacio_id", espacioId);
+
+  const { error } = await supabase
+    .from("espacios")
+    .update({ activo: false })
+    .eq("id", espacioId);
+
+  if (error) return { error: error.message };
+
+  const { data: sede } = await supabase
+    .from("sedes")
+    .select("entidad_id")
+    .eq("id", existing.sede_id)
+    .single();
+  if (sede?.entidad_id) revalidateEntidad(sede.entidad_id as string, existing.sede_id);
   return { success: true };
 }

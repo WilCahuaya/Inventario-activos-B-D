@@ -55,8 +55,6 @@ export function InventarioEntidadView({
         onOpenEliminarPorCodigos ? (
           <EliminarActivosPorCodigosButton
             onClick={onOpenEliminarPorCodigos}
-            disabled={!online}
-            disabledReason="Requiere conexión"
           />
         ) : undefined
       }

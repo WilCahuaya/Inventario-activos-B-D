@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("offline:cacheFind", entidadId, codigo),
   offlineCacheUpsert: (entidadId: string, activo: unknown) =>
     ipcRenderer.invoke("offline:cacheUpsert", entidadId, activo),
+  offlineCacheRemove: (entidadId: string, activoId: string) =>
+    ipcRenderer.invoke("offline:cacheRemove", entidadId, activoId) as Promise<boolean>,
   offlineCacheMeta: (entidadId: string) =>
     ipcRenderer.invoke("offline:cacheMeta", entidadId) as Promise<{
       count: number;
@@ -55,6 +57,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
     }>,
   offlineCacheList: (entidadId: string) =>
     ipcRenderer.invoke("offline:cacheList", entidadId) as Promise<unknown[]>,
+  offlineMasterReplace: (domain: string, entidadId: string, items: unknown[]) =>
+    ipcRenderer.invoke("offline:masterReplace", domain, entidadId, items) as Promise<number>,
+  offlineMasterList: (domain: string, entidadId?: string) =>
+    ipcRenderer.invoke("offline:masterList", domain, entidadId ?? "") as Promise<unknown[]>,
+  offlineMasterUpsert: (domain: string, entidadId: string, item: unknown) =>
+    ipcRenderer.invoke("offline:masterUpsert", domain, entidadId, item),
+  offlineMasterRemove: (domain: string, entidadId: string, id: string) =>
+    ipcRenderer.invoke("offline:masterRemove", domain, entidadId, id),
+  offlineMasterMeta: (domain: string, entidadId?: string) =>
+    ipcRenderer.invoke("offline:masterMeta", domain, entidadId ?? "") as Promise<{
+      count: number;
+      updatedAt: string | null;
+    }>,
+  offlineMasterFind: (domain: string, id: string) =>
+    ipcRenderer.invoke("offline:masterFind", domain, id) as Promise<{
+      entidadId: string;
+      data: unknown;
+    } | null>,
   printBuildZpl: (options: {
     entidadNombre: string;
     codigoBarras: string;

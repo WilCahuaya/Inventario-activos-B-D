@@ -124,6 +124,21 @@ export interface Sede {
   updated_at: string;
 }
 
+export interface Espacio {
+  id: string;
+  sede_id: string;
+  nombre: string;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EspacioConOcupacion extends Espacio {
+  /** Nombre del ambiente que lo ocupa, si aplica. */
+  ambiente_nombre?: string | null;
+  ambiente_id?: string | null;
+}
+
 export interface Ambiente {
   id: string;
   sede_id: string;
@@ -131,6 +146,8 @@ export interface Ambiente {
   descripcion: string | null;
   responsable_id: string | null;
   responsable: string | null;
+  /** Espacio físico opcional que ocupa el ambiente (misma sucursal). */
+  espacio_id: string | null;
   es_preregistro: boolean;
   activo: boolean;
   created_at: string;

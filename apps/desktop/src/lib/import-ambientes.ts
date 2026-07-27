@@ -17,10 +17,11 @@ import {
   type ImportAmbientesContext,
   type ImportAmbientesResult,
 } from "@inventario/types";
+import { isOnline, listMasterDomain } from "./master-cache";
 import { fetchProfile } from "./profile";
+import { createResponsable, listResponsables } from "./responsables";
 import { getSupabaseClient } from "./supabase";
-import { listAmbientesPorEntidad, listSedesConConteo } from "./ubicacion";
-import { listResponsables } from "./responsables";
+import { createAmbiente, createSede, listAmbientesPorEntidad, listSedesConConteo } from "./ubicacion";
 
 export type { ImportAmbientesContext };
 
@@ -76,6 +77,16 @@ async function resolveSedeId(
     return { id: existingId };
   }
 
+  if (!isOnline()) {
+    const result = await createSede(entidadId, sedeKey, data.sedeDireccion ?? undefined);
+    if (result.error || !result.data) {
+      return { error: result.error ?? "No se pudo crear la sucursal." };
+    }
+    sedeLookup.set(lookupKey, result.data.id);
+    sedesCreadas.count += 1;
+    return { id: result.data.id };
+  }
+
   const supabase = getSupabaseClient();
   const { data: sede, error } = await supabase
     .from("sedes")
@@ -124,6 +135,22 @@ async function resolveResponsableId(
     return trimmed ? trimmed : null;
   };
 
+  if (!isOnline()) {
+    const result = await createResponsable(entidadId, {
+      nombre,
+      dni: dni ?? "",
+      email: trimOrNull(data.responsableEmail) ?? undefined,
+      telefono: trimOrNull(data.responsableTelefono) ?? undefined,
+    });
+    if (result.error || !result.data) {
+      return { error: result.error ?? "No se pudo crear el responsable." };
+    }
+    if (dni) responsableByDni.set(dni, result.data.id);
+    responsableByNombre.set(nombreKey, result.data.id);
+    responsablesCreados.count += 1;
+    return { id: result.data.id };
+  }
+
   const supabase = getSupabaseClient();
   const { data: row, error } = await supabase
     .from("responsables")
@@ -164,14 +191,21 @@ export async function importAmbientes(
   if (!entidadId) return { error: "Entidad no válida." };
   if (filas.length === 0) return { error: "No hay filas para importar." };
 
-  const supabase = getSupabaseClient();
-  const { data: entidad } = await supabase
-    .from("entidades")
-    .select("id")
-    .eq("id", entidadId)
-    .eq("activo", true)
-    .maybeSingle();
-  if (!entidad) return { error: "Entidad no encontrada." };
+  if (!isOnline()) {
+    const entidades = await listMasterDomain<{ id: string; activo: boolean }>("entidades", "");
+    if (!entidades.some((e) => e.id === entidadId && e.activo)) {
+      return { error: "Entidad no encontrada." };
+    }
+  } else {
+    const supabase = getSupabaseClient();
+    const { data: entidad } = await supabase
+      .from("entidades")
+      .select("id")
+      .eq("id", entidadId)
+      .eq("activo", true)
+      .maybeSingle();
+    if (!entidad) return { error: "Entidad no encontrada." };
+  }
 
   const context = await getImportAmbientesContext(entidadId);
   const principal = findPrincipalSede(context.sedes);
@@ -227,16 +261,30 @@ export async function importAmbientes(
       continue;
     }
 
-    const { error } = await supabase.from("ambientes").insert({
-      sede_id: sedeResult.id,
-      nombre: parsed.data.ambienteNombre,
-      descripcion: parsed.data.ambienteDescripcion,
-      responsable_id: responsableResult.id,
-    });
+    if (!isOnline()) {
+      const ambienteResult = await createAmbiente({
+        sedeId: sedeResult.id,
+        nombre: parsed.data.ambienteNombre,
+        descripcion: parsed.data.ambienteDescripcion ?? undefined,
+        responsableId: responsableResult.id,
+      });
+      if (ambienteResult.error) {
+        errores.push({ fila: filaExcel, datos: fila, motivo: ambienteResult.error });
+        continue;
+      }
+    } else {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase.from("ambientes").insert({
+        sede_id: sedeResult.id,
+        nombre: parsed.data.ambienteNombre,
+        descripcion: parsed.data.ambienteDescripcion,
+        responsable_id: responsableResult.id,
+      });
 
-    if (error) {
-      errores.push({ fila: filaExcel, datos: fila, motivo: error.message });
-      continue;
+      if (error) {
+        errores.push({ fila: filaExcel, datos: fila, motivo: error.message });
+        continue;
+      }
     }
 
     existingKeys.add(dup.key);

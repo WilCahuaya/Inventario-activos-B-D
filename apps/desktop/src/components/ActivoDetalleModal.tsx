@@ -98,13 +98,6 @@ export function ActivoDetalleModal({
   }, [activo.id]);
 
   function loadHistorial() {
-    if (!online) {
-      setHistorial([]);
-      setHistorialLookups({ sedes: {}, ambientes: {} });
-      setHistorialError(null);
-      setHistorialLoading(false);
-      return;
-    }
     setHistorialLoading(true);
     setHistorialError(null);
     void listHistorialActivo(activo.id)
@@ -194,15 +187,14 @@ export function ActivoDetalleModal({
       )}
       {esPreregistrado && (
         <ActivoIconButton
-          label={online ? "Validar preregistro" : "Validar preregistro (requiere conexión)"}
+          label="Validar preregistro"
           variant="primary"
-          disabled={!online}
           onClick={() => setValidarOpen(true)}
         >
           <IconValidar />
         </ActivoIconButton>
       )}
-      {esPreregistrado && online && !esPendiente && puedeEliminarPreregistro && (
+      {esPreregistrado && !esPendiente && puedeEliminarPreregistro && (
         <ActivoIconButton
           label="Eliminar preregistro"
           variant="danger"
@@ -226,7 +218,7 @@ export function ActivoDetalleModal({
       {!inactivo && (
         <ActivoIconButton
           label="Agregar similares"
-          disabled={!online || esPendiente}
+          disabled={esPendiente}
           onClick={() => setSimilaresOpen(true)}
         >
           <IconSimilares />
@@ -239,7 +231,7 @@ export function ActivoDetalleModal({
               ? "Preparando etiquetas…"
               : `Imprimir ejemplares (${ejemplares?.registrados ?? 0})`
           }
-          disabled={!online || esPendiente || printEjemplaresPending}
+          disabled={esPendiente || printEjemplaresPending}
           onClick={() => void handleImprimirEjemplares()}
         >
           <IconEtiqueta />
@@ -248,7 +240,6 @@ export function ActivoDetalleModal({
       {!inactivo && !esPreregistrado && (
         <ActivoIconButton
           label="Cambiar ambiente"
-          disabled={!online}
           onClick={() => setCambiarAmbienteOpen(true)}
         >
           <IconAmbiente />
@@ -258,7 +249,7 @@ export function ActivoDetalleModal({
         <ActivoIconButton
           label="Dar de baja"
           variant="danger"
-          disabled={!online || esPendiente}
+          disabled={esPendiente}
           onClick={() => setBajaOpen(true)}
         >
           <IconInactivo />
@@ -266,9 +257,9 @@ export function ActivoDetalleModal({
       )}
       {inactivo && (
         <ActivoIconButton
-          label={online ? "Recuperar activo" : "Recuperar activo (requiere conexión)"}
+          label="Recuperar activo"
           variant="primary"
-          disabled={!online || esPendiente}
+          disabled={esPendiente}
           onClick={() => setRecuperarOpen(true)}
         >
           <IconRecuperar />

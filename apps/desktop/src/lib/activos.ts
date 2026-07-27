@@ -11,14 +11,49 @@ import {
   type PreviewDeleteActivosPorCodigosResult,
   type DeleteActivosPorCodigosResult,
   type DeleteActivosPreregistradosResult,
+  type ActivoEliminarPreviewItem,
+  type ActivoEliminarNoElegibleItem,
   MAX_ELIMINAR_ACTIVOS_PREREGISTRADOS_POR_LOTE,
   MAX_ELIMINAR_ACTIVOS_POR_CODIGOS,
   parseCodigosBarrasInputDetailed,
+  matchesCodigoBarrasQuery,
 } from "@inventario/types";
 import type { Activo, CategoriaBien, EstadoBien, EstadoRegistro } from "@inventario/types";
 import { fetchProfile } from "./profile";
 import { getSupabaseClient } from "./supabase";
 import { removeActivoStoragePaths } from "./storage";
+import { enqueueOfflineOp, findMasterItem, isOnline } from "./master-cache";
+import type { AmbienteConSede } from "./ubicacion";
+
+async function findCachedActivoAcrossEntidades(
+  activoId: string,
+): Promise<{ entidadId: string; activo: ActivoConUbicacion } | null> {
+  const { listMasterDomain } = await import("./master-cache");
+  const { listCachedActivos } = await import("./offline");
+  const entidades = await listMasterDomain<{ id: string }>("entidades", "");
+  for (const e of entidades) {
+    const cached = await listCachedActivos(e.id);
+    const found = cached.find((a) => a.id === activoId);
+    if (found) return { entidadId: e.id, activo: found };
+  }
+  return null;
+}
+
+function mergeObservacionAdmin(existing: string | null, admin: string | null): string | null {
+  const sep = "\n---ADMIN---\n";
+  const adminTrimmed = admin?.trim() || null;
+
+  if (!existing?.trim()) {
+    return adminTrimmed ? sep + adminTrimmed : null;
+  }
+
+  const sepIndex = existing.indexOf(sep);
+  const contador = sepIndex === 0 ? "" : sepIndex > 0 ? existing.slice(0, sepIndex).trim() : existing.trim();
+
+  if (!adminTrimmed) return contador || null;
+  if (!contador) return sep + adminTrimmed;
+  return contador + sep + adminTrimmed;
+}
 
 export type ActivoConUbicacion = Activo & {
   entidad_nombre?: string;
@@ -181,38 +216,75 @@ export async function findActivoByCodigo(
 }
 
 export async function listActivosForEntidad(entidadId: string): Promise<ActivoConUbicacion[]> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("activos")
-    .select(ACTIVO_SELECT_SIN_ENTIDAD)
-    .eq("entidad_id", entidadId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return mapActivoRowsEnriched(data as Record<string, unknown>[]);
+  const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+  if (online) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from("activos")
+        .select(ACTIVO_SELECT_SIN_ENTIDAD)
+        .eq("entidad_id", entidadId)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      const mapped = await mapActivoRowsEnriched(data as Record<string, unknown>[]);
+      const { refreshActivosCache } = await import("./offline");
+      await refreshActivosCache(entidadId, mapped);
+      return mapped;
+    } catch {
+      /* caché */
+    }
+  }
+  const { listCachedActivos } = await import("./offline");
+  return listCachedActivos(entidadId);
 }
 
 export async function listActivosPorAmbiente(ambienteId: string): Promise<ActivoConUbicacion[]> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("activos")
-    .select(ACTIVO_SELECT_SIN_ENTIDAD)
-    .eq("ambiente_id", ambienteId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return mapActivoRowsEnriched(data as Record<string, unknown>[]);
+  const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+  if (online) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from("activos")
+        .select(ACTIVO_SELECT_SIN_ENTIDAD)
+        .eq("ambiente_id", ambienteId)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return mapActivoRowsEnriched(data as Record<string, unknown>[]);
+    } catch {
+      /* caché */
+    }
+  }
+  const { findMasterItem } = await import("./master-cache");
+  const { listCachedActivos } = await import("./offline");
+  const found = await findMasterItem("ambientes", ambienteId);
+  if (!found) return [];
+  const cached = await listCachedActivos(found.entidadId);
+  return cached.filter((a) => a.ambiente_id === ambienteId);
 }
 
 export async function listActivosGlobal(): Promise<ActivoConUbicacion[]> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("activos")
-    .select(ACTIVO_SELECT_GLOBAL)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return mapActivoRowsEnriched(data as Record<string, unknown>[]);
+  const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+  if (online) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from("activos")
+        .select(ACTIVO_SELECT_GLOBAL)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return mapActivoRowsEnriched(data as Record<string, unknown>[]);
+    } catch {
+      /* caché */
+    }
+  }
+  const { listMasterDomain } = await import("./master-cache");
+  const { listCachedActivos } = await import("./offline");
+  const entidades = await listMasterDomain<{ id: string }>("entidades", "");
+  const all: ActivoConUbicacion[] = [];
+  for (const e of entidades) {
+    all.push(...(await listCachedActivos(e.id)));
+  }
+  return all;
 }
 
 function mapActivoRows(data: Record<string, unknown>[] | null): ActivoConUbicacion[] {
@@ -408,9 +480,44 @@ export async function cambiarUbicacionActivo(
   sedeId: string,
   ambienteId: string,
 ): Promise<{ data?: ActivoConUbicacion; error?: string }> {
+  if (!sedeId || !ambienteId) return { error: "Seleccione sede y ambiente." };
+
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return { error: "Activo no encontrado en caché local." };
+    const { entidadId, activo } = found;
+
+    if (activo.estado_registro === "DADO_DE_BAJA") {
+      return { error: "No se puede mover un activo dado de baja." };
+    }
+
+    const ambiente = await findMasterItem<AmbienteConSede>("ambientes", ambienteId);
+    if (!ambiente || ambiente.data.sede_id !== sedeId) {
+      return { error: "El ambiente no pertenece a la sede seleccionada." };
+    }
+
+    const { upsertCachedActivo } = await import("./offline");
+    const updated: ActivoConUbicacion = {
+      ...activo,
+      sede_id: sedeId,
+      ambiente_id: ambienteId,
+      responsable: ambiente.data.responsable?.trim() || null,
+      sede_nombre: ambiente.data.sede_nombre,
+      ambiente_nombre: ambiente.data.nombre,
+      updated_at: new Date().toISOString(),
+    };
+    await upsertCachedActivo(entidadId, updated);
+    await enqueueOfflineOp(
+      "activo:cambiarUbicacion",
+      entidadId,
+      { activoId, sedeId, ambienteId },
+      activoId,
+    );
+    return { data: updated };
+  }
+
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
-  if (!sedeId || !ambienteId) return { error: "Seleccione sede y ambiente." };
 
   const supabase = getSupabaseClient();
 
@@ -476,14 +583,38 @@ export async function darDeBajaActivo(
   activoId: string,
   motivo: string,
 ): Promise<{ data?: ActivoConUbicacion; error?: string }> {
+  const motivoBaja = motivo.trim();
+  if (!motivoBaja) return { error: "Indique el motivo de baja." };
+
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return { error: "Activo no encontrado en caché local." };
+    const { entidadId, activo } = found;
+
+    if (activo.estado_registro === "DADO_DE_BAJA") {
+      return { error: "El activo ya está inactivo." };
+    }
+    if (activo.estado_registro === "PREREGISTRADO") {
+      return { error: "Un bien preregistrado no puede darse de baja. Elimínelo si fue un error." };
+    }
+
+    const { upsertCachedActivo } = await import("./offline");
+    const updated: ActivoConUbicacion = {
+      ...activo,
+      estado_registro: "DADO_DE_BAJA" as EstadoRegistro,
+      motivo_baja: motivoBaja,
+      updated_at: new Date().toISOString(),
+    };
+    await upsertCachedActivo(entidadId, updated);
+    await enqueueOfflineOp("activo:baja", entidadId, { activoId, motivo: motivoBaja }, activoId);
+    return { data: updated };
+  }
+
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
   if (profile.rol !== "CONTADOR") {
     return { error: "Solo el contador puede dar de baja activos." };
   }
-
-  const motivoBaja = motivo.trim();
-  if (!motivoBaja) return { error: "Indique el motivo de baja." };
 
   const supabase = getSupabaseClient();
 
@@ -524,6 +655,31 @@ export async function darDeBajaActivo(
 export async function recuperarActivo(
   activoId: string,
 ): Promise<{ data?: ActivoConUbicacion; error?: string }> {
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return { error: "Activo no encontrado en caché local." };
+    const { entidadId, activo } = found;
+
+    if (activo.estado_registro !== "DADO_DE_BAJA") {
+      return { error: "El activo no está dado de baja." };
+    }
+
+    const nuevoEstado: EstadoRegistro = activo.codigo_barras?.trim()
+      ? "REGISTRADO"
+      : "PREREGISTRADO";
+
+    const { upsertCachedActivo } = await import("./offline");
+    const updated: ActivoConUbicacion = {
+      ...activo,
+      estado_registro: nuevoEstado,
+      motivo_baja: null,
+      updated_at: new Date().toISOString(),
+    };
+    await upsertCachedActivo(entidadId, updated);
+    await enqueueOfflineOp("activo:recuperar", entidadId, { activoId }, activoId);
+    return { data: updated };
+  }
+
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
   if (profile.rol !== "CONTADOR") {
@@ -570,11 +726,50 @@ export async function registrarActivo(
   activoId: string,
   destino: { sedeId: string; ambienteId: string },
 ): Promise<{ data?: ActivoConUbicacion; error?: string }> {
-  const supabase = getSupabaseClient();
-
   if (!destino.sedeId || !destino.ambienteId) {
     return { error: "Seleccione sede y ambiente destino." };
   }
+
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return { error: "Activo no encontrado en caché local." };
+    const { entidadId, activo } = found;
+
+    if (activo.estado_registro !== "PREREGISTRADO") {
+      return { error: "El activo no está en preregistro." };
+    }
+
+    const ambiente = await findMasterItem<AmbienteConSede>("ambientes", destino.ambienteId);
+    if (!ambiente || ambiente.data.sede_id !== destino.sedeId) {
+      return { error: "El ambiente no pertenece a la sede seleccionada." };
+    }
+    if (ambiente.data.es_preregistro) {
+      return { error: "Seleccione un ambiente real, no el de preregistros." };
+    }
+
+    const { upsertCachedActivo } = await import("./offline");
+    const updated: ActivoConUbicacion = {
+      ...activo,
+      estado_registro: "REGISTRADO",
+      sede_id: destino.sedeId,
+      ambiente_id: destino.ambienteId,
+      posible_ambiente_id: null,
+      responsable: ambiente.data.responsable?.trim() || null,
+      sede_nombre: ambiente.data.sede_nombre,
+      ambiente_nombre: ambiente.data.nombre,
+      updated_at: new Date().toISOString(),
+    };
+    await upsertCachedActivo(entidadId, updated);
+    await enqueueOfflineOp(
+      "activo:validarPreregistro",
+      entidadId,
+      { activoId, sedeId: destino.sedeId, ambienteId: destino.ambienteId },
+      activoId,
+    );
+    return { data: updated };
+  }
+
+  const supabase = getSupabaseClient();
 
   const { data: ambienteDestino } = await supabase
     .from("ambientes")
@@ -720,19 +915,107 @@ function buildActivosSimilaresPatch(
   return patch;
 }
 
+/** Equivalente local de `public.activo_es_ejemplar_similar` (ver migraciones SQL). */
+function activoEsSimilarLocal(a: ActivoConUbicacion, t: ActivoConUbicacion): boolean {
+  const norm = (v?: string | null) => (v ?? "").trim();
+  return (
+    a.entidad_id === t.entidad_id &&
+    (a.sede_id ?? null) === (t.sede_id ?? null) &&
+    (a.ambiente_id ?? null) === (t.ambiente_id ?? null) &&
+    a.codigo_catalogo === t.codigo_catalogo &&
+    a.categoria === t.categoria &&
+    norm(a.nombre) === norm(t.nombre) &&
+    norm(a.marca) === norm(t.marca) &&
+    norm(a.modelo) === norm(t.modelo) &&
+    norm(a.color) === norm(t.color) &&
+    norm(a.medidas) === norm(t.medidas) &&
+    norm(a.caracteristicas) === norm(t.caracteristicas) &&
+    (a.valor_adquisicion ?? null) === (t.valor_adquisicion ?? null) &&
+    (a.valor_es_mercado ?? null) === (t.valor_es_mercado ?? null) &&
+    (a.fecha_adquisicion ?? null) === (t.fecha_adquisicion ?? null) &&
+    norm(a.comprobante_serie) === norm(t.comprobante_serie) &&
+    norm(a.depreciacion) === norm(t.depreciacion) &&
+    a.estado_registro !== "DADO_DE_BAJA"
+  );
+}
+
+/**
+ * Aplica localmente (caché offline) el mismo patch que `update_activos_similares` aplicaría
+ * en el servidor, para reflejar el cambio de inmediato en la UI. La sincronización posterior
+ * reemplazará estos valores con el resultado autoritativo del servidor.
+ */
+export async function applyActivosSimilaresPatchLocal(
+  entidadId: string,
+  template: ActivoConUbicacion,
+  input: UpdateActivosSimilaresInput,
+): Promise<number> {
+  const patch = buildActivosSimilaresPatch(input);
+  if (Object.keys(patch).length === 0) return 0;
+
+  const { listCachedActivos, upsertCachedActivo } = await import("./offline");
+
+  let ambienteData: AmbienteConSede | null = null;
+  if ("ambiente_id" in patch && patch.ambiente_id) {
+    const found = await findMasterItem<AmbienteConSede>("ambientes", String(patch.ambiente_id));
+    ambienteData = found?.data ?? null;
+  }
+
+  const cached = await listCachedActivos(entidadId);
+  const similares = cached.filter((a) => activoEsSimilarLocal(a, template));
+  const now = new Date().toISOString();
+
+  for (const activo of similares) {
+    const updated: ActivoConUbicacion = { ...activo, ...(patch as Partial<ActivoConUbicacion>), updated_at: now };
+
+    if ("observacion_admin" in patch) {
+      updated.observacion = mergeObservacionAdmin(
+        activo.observacion,
+        (patch.observacion_admin as string | null) ?? null,
+      );
+    }
+
+    if ("ambiente_id" in patch) {
+      if (ambienteData) {
+        updated.sede_id = ambienteData.sede_id;
+        updated.ambiente_id = ambienteData.id;
+        updated.ambiente_nombre = ambienteData.nombre;
+        updated.sede_nombre = ambienteData.sede_nombre;
+        updated.responsable = ambienteData.responsable?.trim() || null;
+      } else {
+        updated.ambiente_id = null;
+      }
+    } else if ("sede_id" in patch) {
+      updated.sede_id = (patch.sede_id as string | null) ?? null;
+    }
+
+    await upsertCachedActivo(entidadId, updated);
+  }
+
+  return similares.length;
+}
+
 export async function updateActivosSimilares(
   activoId: string,
   input: UpdateActivosSimilaresInput,
 ): Promise<{ data?: UpdateActivosSimilaresResult; error?: string }> {
+  const patch = buildActivosSimilaresPatch(input);
+  if (Object.keys(patch).length === 0) {
+    return { error: "No hay cambios para aplicar." };
+  }
+
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return { error: "Activo no encontrado en caché local." };
+    const { entidadId, activo } = found;
+    await enqueueOfflineOp("activos:updateSimilares", entidadId, { activoId, patch }, activoId);
+    const actualizados = await applyActivosSimilaresPatchLocal(entidadId, activo, input);
+    return { data: { actualizados } };
+  }
+
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
   if (profile.rol !== "CONTADOR" && profile.rol !== "ADMIN_ENTIDAD") {
     return { error: "No autorizado." };
-  }
-
-  const patch = buildActivosSimilaresPatch(input);
-  if (Object.keys(patch).length === 0) {
-    return { error: "No hay cambios para aplicar." };
   }
 
   const supabase = getSupabaseClient();
@@ -784,13 +1067,63 @@ function mapPreviewDeleteActivos(data: unknown): PreviewDeleteActivosPorCodigosR
   };
 }
 
-export async function previewDeleteActivosPorCodigos(
+function findCachedActivoByCodigoBarras(
+  cached: ActivoConUbicacion[],
+  codigo: string,
+): ActivoConUbicacion | null {
+  return (
+    cached.find((activo) => matchesCodigoBarrasQuery(codigo, activo.codigo_barras)) ?? null
+  );
+}
+
+async function previewDeleteActivosPorCodigosOffline(
+  entidadId: string,
+  codigos: string[],
+): Promise<PreviewDeleteActivosPorCodigosResult> {
+  const { listCachedActivos } = await import("./offline");
+  const cached = await listCachedActivos(entidadId);
+
+  const encontrados: ActivoEliminarPreviewItem[] = [];
+  const no_encontrados: string[] = [];
+  const no_elegibles: ActivoEliminarNoElegibleItem[] = [];
+
+  for (const codigo of codigos) {
+    const activo = findCachedActivoByCodigoBarras(cached, codigo);
+    if (!activo) {
+      no_encontrados.push(codigo);
+      continue;
+    }
+
+    if (activo.estado_registro !== "REGISTRADO") {
+      no_elegibles.push({
+        codigo_barras: codigo,
+        estado_registro: activo.estado_registro,
+        nombre: activo.nombre,
+      });
+      continue;
+    }
+
+    encontrados.push({
+      id: activo.id,
+      codigo_barras: activo.codigo_barras ?? codigo,
+      nombre: activo.nombre,
+      sede_nombre: activo.sede_nombre,
+      ambiente_nombre: activo.ambiente_nombre,
+    });
+  }
+
+  return {
+    solicitados: codigos.length,
+    encontrados,
+    no_encontrados,
+    no_elegibles,
+  };
+}
+
+function parseDeleteActivosPorCodigosInput(
   entidadId: string,
   codigosText: string,
-): Promise<{ data?: PreviewDeleteActivosPorCodigosResult; error?: string }> {
-  const profile = await fetchProfile();
-  if (!profile) return { error: "Sesión no válida." };
-  if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
+): { codigos?: string[]; error?: string } {
   if (!entidadId) return { error: "Seleccione la entidad." };
 
   const parsed = parseCodigosBarrasInputDetailed(codigosText);
@@ -803,6 +1136,24 @@ export async function previewDeleteActivosPorCodigos(
   if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
   if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
     return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };
+  }
+  return { codigos };
+}
+
+export async function previewDeleteActivosPorCodigos(
+  entidadId: string,
+  codigosText: string,
+): Promise<{ data?: PreviewDeleteActivosPorCodigosResult; error?: string }> {
+  const profile = await fetchProfile();
+  if (!profile) return { error: "Sesión no válida." };
+  if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
+
+  const parsedInput = parseDeleteActivosPorCodigosInput(entidadId, codigosText);
+  if (parsedInput.error) return { error: parsedInput.error };
+  const codigos = parsedInput.codigos!;
+
+  if (!isOnline()) {
+    return { data: await previewDeleteActivosPorCodigosOffline(entidadId, codigos) };
   }
 
   const supabase = getSupabaseClient();
@@ -822,18 +1173,55 @@ export async function deleteActivosPorCodigos(
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
   if (profile.rol !== "CONTADOR") return { error: "Solo el contador puede eliminar activos." };
-  if (!entidadId) return { error: "Seleccione la entidad." };
 
-  const parsed = parseCodigosBarrasInputDetailed(codigosText);
-  if (parsed.invalidos.length > 0) {
+  const parsedInput = parseDeleteActivosPorCodigosInput(entidadId, codigosText);
+  if (parsedInput.error) return { error: parsedInput.error };
+  const codigos = parsedInput.codigos!;
+
+  if (!isOnline()) {
+    const preview = await previewDeleteActivosPorCodigosOffline(entidadId, codigos);
+    if (preview.no_encontrados.length > 0) {
+      return { error: `Códigos no encontrados: ${preview.no_encontrados.join(", ")}` };
+    }
+    if (preview.no_elegibles.length > 0) {
+      return {
+        error: `Solo se pueden eliminar activos registrados. Revise: ${preview.no_elegibles
+          .map((e) => `${e.codigo_barras} (${e.estado_registro})`)
+          .join(", ")}`,
+      };
+    }
+    if (preview.encontrados.length === 0) {
+      return { error: "No hay activos elegibles para eliminar" };
+    }
+
+    const { listCachedActivos, removeCachedActivo } = await import("./offline");
+    const cached = await listCachedActivos(entidadId);
+    const fotoPaths: string[] = [];
+    const comprobantePaths: string[] = [];
+    const deletedCodigos: string[] = [];
+
+    for (const item of preview.encontrados) {
+      const activo = cached.find((a) => a.id === item.id);
+      if (activo?.foto_path && !fotoPaths.includes(activo.foto_path)) {
+        fotoPaths.push(activo.foto_path);
+      }
+      if (activo?.comprobante_path && !comprobantePaths.includes(activo.comprobante_path)) {
+        comprobantePaths.push(activo.comprobante_path);
+      }
+      await removeCachedActivo(entidadId, item.id);
+      deletedCodigos.push(item.codigo_barras);
+    }
+
+    await enqueueOfflineOp("activos:deletePorCodigos", entidadId, { codigos });
+
     return {
-      error: `Formato inválido (nacional 12 dígitos / 8-4, o catálogo propio BD000001-0001): ${parsed.invalidos.join(", ")}`,
+      data: {
+        eliminados: preview.encontrados.length,
+        codigos: deletedCodigos,
+        foto_paths: fotoPaths,
+        comprobante_paths: comprobantePaths,
+      },
     };
-  }
-  const codigos = parsed.codigos;
-  if (codigos.length === 0) return { error: "Indique al menos un código de barras." };
-  if (codigos.length > MAX_ELIMINAR_ACTIVOS_POR_CODIGOS) {
-    return { error: `Máximo ${MAX_ELIMINAR_ACTIVOS_POR_CODIGOS} códigos por operación.` };
   }
 
   const supabase = getSupabaseClient();
@@ -886,6 +1274,45 @@ export async function deleteActivosPreregistrados(
 
   if (profile.rol === "ADMIN_ENTIDAD" && profile.entidad_id !== entidadId) {
     return { error: "No autorizado." };
+  }
+
+  if (!isOnline()) {
+    const { listCachedActivos, removeCachedActivo } = await import("./offline");
+    const cached = await listCachedActivos(entidadId);
+    const fotoPaths: string[] = [];
+    const comprobantePaths: string[] = [];
+    const deletedIds: string[] = [];
+
+    for (const id of uniqueIds) {
+      const activo = cached.find((a) => a.id === id);
+      if (!activo) {
+        return { error: "Uno o más activos no fueron encontrados" };
+      }
+      if (activo.estado_registro !== "PREREGISTRADO") {
+        return {
+          error: `Solo se pueden eliminar activos preregistrados (${activo.nombre}: ${activo.estado_registro})`,
+        };
+      }
+      if (activo.foto_path && !fotoPaths.includes(activo.foto_path)) {
+        fotoPaths.push(activo.foto_path);
+      }
+      if (activo.comprobante_path && !comprobantePaths.includes(activo.comprobante_path)) {
+        comprobantePaths.push(activo.comprobante_path);
+      }
+      await removeCachedActivo(entidadId, id);
+      deletedIds.push(id);
+    }
+
+    await enqueueOfflineOp("activos:deletePreregistrados", entidadId, { activoIds: uniqueIds });
+
+    return {
+      data: {
+        eliminados: deletedIds.length,
+        activo_ids: deletedIds,
+        foto_paths: fotoPaths,
+        comprobante_paths: comprobantePaths,
+      },
+    };
   }
 
   const supabase = getSupabaseClient();
@@ -941,6 +1368,12 @@ export async function deleteActivoPreregistrado(
 ): Promise<{ data?: DeleteActivosPreregistradosResult; error?: string }> {
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
+
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return { error: "Activo no encontrado." };
+    return deleteActivosPreregistrados(found.entidadId, [activoId]);
+  }
 
   const supabase = getSupabaseClient();
   const { data: existing, error: fetchError } = await supabase
