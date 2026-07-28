@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { Entidad, ImportAmbientesResult } from "@inventario/types";
-import { Button, Dialog, FileInput, Label } from "@inventario/ui";
+import type { Entidad, ImportAmbientesResult, ImportProgress } from "@inventario/types";
+import { toImportProgress } from "@inventario/types";
+import { Button, Dialog, FileInput, ImportProgressBar, Label } from "@inventario/ui";
 import { importAmbientes } from "../lib/import-ambientes";
 import {
   downloadImportAmbientesErrores,
@@ -25,6 +26,7 @@ export function AmbientesImportDialog({
 }: AmbientesImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportAmbientesResult | null>(null);
@@ -34,6 +36,7 @@ export function AmbientesImportDialog({
     if (!open) {
       setFile(null);
       setPending(false);
+      setProgress(null);
       setParseError(null);
       setActionError(null);
       setResult(null);
@@ -58,6 +61,7 @@ export function AmbientesImportDialog({
     if (!file) return;
 
     setPending(true);
+    setProgress(null);
     setParseError(null);
     setActionError(null);
     setResult(null);
@@ -69,7 +73,10 @@ export function AmbientesImportDialog({
         return;
       }
 
-      const response = await importAmbientes(entidad.id, parsed.filas);
+      setProgress(toImportProgress(0, parsed.filas.length));
+      const response = await importAmbientes(entidad.id, parsed.filas, {
+        onProgress: setProgress,
+      });
       if (response.error) {
         setActionError(response.error);
         return;
@@ -85,6 +92,7 @@ export function AmbientesImportDialog({
       setActionError("No se pudo completar la importación.");
     } finally {
       setPending(false);
+      setProgress(null);
     }
   }
 
@@ -111,7 +119,7 @@ export function AmbientesImportDialog({
             type="button"
             variant="outline"
             size="sm"
-            disabled={templatePending}
+            disabled={templatePending || pending}
             onClick={() => void handleDownloadPlantilla()}
           >
             {templatePending ? "Generando…" : "Descargar plantilla"}
@@ -135,6 +143,8 @@ export function AmbientesImportDialog({
             }}
           />
         </div>
+
+        {pending && progress && <ImportProgressBar progress={progress} />}
 
         {parseError && (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -194,7 +204,7 @@ export function AmbientesImportDialog({
           </Button>
           {!result && (
             <Button type="button" size="sm" disabled={!canImport} onClick={() => void handleImport()}>
-              {pending ? "Importando…" : "Importar"}
+              {pending ? `Importando… ${progress?.percent ?? 0}%` : "Importar"}
             </Button>
           )}
         </div>

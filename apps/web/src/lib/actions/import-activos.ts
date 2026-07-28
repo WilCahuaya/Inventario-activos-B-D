@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  buildCuentaContableLookup,
   buildUbicacionLookup,
+  normalizeImportCodigoCatalogoRaw,
   validateImportActivoFila,
   type ImportActivoCatalogoItem,
   type ImportActivoErrorItem,
@@ -14,6 +14,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth/profile";
 import { listAmbientesPorEntidad } from "@/lib/actions/ubicacion";
+import { upsertCuentaContable } from "@/lib/actions/catalogo";
 
 export async function getImportActivosUbicaciones(entidadId: string): Promise<ImportUbicacionRef[]> {
   await requireProfile("CONTADOR");
@@ -54,19 +55,33 @@ async function loadCatalogoForImport(
   return map;
 }
 
-async function loadCuentaContableLookup(
+async function loadCuentasContablesLookup(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<Map<string, string>> {
-  const { data } = await supabase
-    .from("catalogo_nacional")
-    .select("cuenta_codigo, contabilidad")
-    .not("cuenta_codigo", "is", null);
-  return buildCuentaContableLookup(data ?? []);
+  const map = new Map<string, string>();
+  const { data } = await supabase.from("cuentas_contables").select("codigo, nombre");
+  for (const row of data ?? []) {
+    const codigo = String(row.codigo ?? "").trim();
+    if (!codigo) continue;
+    map.set(codigo, String(row.nombre ?? "").trim() || codigo);
+  }
+  return map;
+}
+
+function collectImportCatalogoCodigos(filas: ImportActivoFila[]): string[] {
+  const codes = new Set<string>();
+  for (const fila of filas) {
+    for (const code of normalizeImportCodigoCatalogoRaw(fila["Código catálogo"])) {
+      codes.add(code);
+    }
+  }
+  return [...codes];
 }
 
 export async function importActivos(
   entidadId: string,
   filas: ImportActivoFila[],
+  options?: { filaOffset?: number },
 ): Promise<{ data?: ImportActivosResult; error?: string }> {
   await requireProfile("CONTADOR");
   if (!entidadId) return { error: "Seleccione una entidad." };
@@ -87,19 +102,20 @@ export async function importActivos(
   const responsableByAmbiente = new Map(
     ubicaciones.map((u) => [u.ambienteId, u.responsable?.trim() || null] as const),
   );
-  const codigos = filas.map((f) => f["Código catálogo"].replace(/\D/g, "").padStart(8, "0").slice(-8));
+  const codigos = collectImportCatalogoCodigos(filas);
   const [catalogoByCodigo, cuentaLookupSeed] = await Promise.all([
     loadCatalogoForImport(supabase, codigos),
-    loadCuentaContableLookup(supabase),
+    loadCuentasContablesLookup(supabase),
   ]);
 
   const errores: ImportActivoErrorItem[] = [];
   let importados = 0;
   let cuentaLookup = cuentaLookupSeed;
+  const filaOffset = options?.filaOffset ?? 0;
 
   for (let i = 0; i < filas.length; i++) {
     const fila = filas[i]!;
-    const filaExcel = i + 2;
+    const filaExcel = filaOffset + i + 2;
     const validated = validateImportActivoFila(
       fila,
       entidadId,
@@ -113,6 +129,14 @@ export async function importActivos(
     }
 
     cuentaLookup = validated.cuentaLookup;
+    if (validated.cuentaToCreate) {
+      const created = await upsertCuentaContable(validated.cuentaToCreate);
+      if (created.error) {
+        errores.push({ fila: filaExcel, datos: fila, motivo: created.error });
+        continue;
+      }
+    }
+
     const payload = validated.payload;
     const responsable = responsableByAmbiente.get(payload.ambiente_id) ?? null;
 

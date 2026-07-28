@@ -290,6 +290,8 @@ export {
   InventarioTablaLeyenda,
   INVENTARIO_TABLA_LEYENDA,
   ValorBienCell,
+  InventarioFechaCell,
+  fechaAdquisicionToneClass,
   inventarioCuentaContable,
   inventarioDepreciacionFila,
   inventarioDescripcion,

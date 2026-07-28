@@ -9,6 +9,7 @@ import {
 } from "@inventario/types";
 import {
   EstadoBienBadge,
+  fechaAdquisicionToneClass,
   formatInventarioListaTexto,
   inventarioCuentaContable,
   inventarioDepreciacionFila,
@@ -38,11 +39,19 @@ interface ActivosInventarioMobileCardsProps {
   puedeSeleccionar?: (activo: Activo) => boolean;
 }
 
-function InfoItem({ label, value }: { label: string; value?: string | null }) {
+function InfoItem({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value?: string | null;
+  valueClassName?: string;
+}) {
   return (
     <div className="min-w-0">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="truncate text-sm text-foreground">{value?.trim() || "—"}</p>
+      <p className={`truncate text-sm ${valueClassName ?? "text-foreground"}`}>{value?.trim() || "—"}</p>
     </div>
   );
 }
@@ -188,6 +197,11 @@ export function ActivosInventarioMobileCards({
               <InfoItem
                 label="Fecha adq."
                 value={formatFechaISOToCortoES(activo.fecha_adquisicion)}
+                valueClassName={
+                  activo.fecha_adquisicion
+                    ? fechaAdquisicionToneClass(activo.valor_es_mercado)
+                    : undefined
+                }
               />
               <ValorCardItem activo={activo} />
               <InfoItem

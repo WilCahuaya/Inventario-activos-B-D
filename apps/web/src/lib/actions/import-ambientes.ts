@@ -155,6 +155,7 @@ async function resolveResponsableId(
 export async function importAmbientes(
   entidadId: string,
   filas: ImportAmbienteFila[],
+  options?: { filaOffset?: number },
 ): Promise<{ data?: ImportAmbientesResult; error?: string }> {
   await requireProfile("CONTADOR");
   if (!entidadId) return { error: "Entidad no válida." };
@@ -182,10 +183,11 @@ export async function importAmbientes(
 
   const errores: ImportAmbienteErrorItem[] = [];
   let importados = 0;
+  const filaOffset = options?.filaOffset ?? 0;
 
   for (let i = 0; i < filas.length; i++) {
     const fila = filas[i]!;
-    const filaExcel = i + 2;
+    const filaExcel = filaOffset + i + 2;
 
     const parsed = parseImportAmbienteFila(fila);
     if (!parsed.ok) {

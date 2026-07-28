@@ -13,7 +13,7 @@ import {
   formatPosibleAmbienteLabel,
 } from "@inventario/types";
 import { cn } from "./components";
-import { EstadoBienBadge, inventarioDepreciacionFila } from "./inventario-table-cells";
+import { EstadoBienBadge, fechaAdquisicionToneClass, inventarioDepreciacionFila } from "./inventario-table-cells";
 import { ObservacionActivoDisplay } from "./observacion-activo-display";
 import { Sheet } from "./sheet";
 
@@ -310,7 +310,11 @@ export function ActivoDetalleSheet({
           />
           <DetalleField
             label="Fecha adquisición"
-            value={formatFechaISOToCortoES(activo.fecha_adquisicion)}
+            value={
+              <span className={activo.fecha_adquisicion ? fechaAdquisicionToneClass(activo.valor_es_mercado) : undefined}>
+                {formatFechaISOToCortoES(activo.fecha_adquisicion) || "—"}
+              </span>
+            }
             hideIfEmpty={false}
           />
           <DetalleField label="Responsable" value={activo.responsable} hideIfEmpty={false} />

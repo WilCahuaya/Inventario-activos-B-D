@@ -10,12 +10,14 @@ import {
   normalizeResponsableDni,
   normalizeResponsableNombre,
   parseImportAmbienteFila,
+  toImportProgress,
   validateImportAmbienteDuplicado,
   type ImportAmbienteErrorItem,
   type ImportAmbienteFila,
   type ImportAmbienteRowData,
   type ImportAmbientesContext,
   type ImportAmbientesResult,
+  type ImportProgress,
 } from "@inventario/types";
 import { isOnline, listMasterDomain } from "./master-cache";
 import { fetchProfile } from "./profile";
@@ -184,6 +186,10 @@ async function resolveResponsableId(
 export async function importAmbientes(
   entidadId: string,
   filas: ImportAmbienteFila[],
+  options?: {
+    filaOffset?: number;
+    onProgress?: (progress: ImportProgress) => void;
+  },
 ): Promise<{ data?: ImportAmbientesResult; error?: string }> {
   const profile = await fetchProfile();
   if (!profile) return { error: "Sesión no válida." };
@@ -220,10 +226,14 @@ export async function importAmbientes(
 
   const errores: ImportAmbienteErrorItem[] = [];
   let importados = 0;
+  const filaOffset = options?.filaOffset ?? 0;
+  const onProgress = options?.onProgress;
+  onProgress?.(toImportProgress(0, filas.length));
 
   for (let i = 0; i < filas.length; i++) {
+    try {
     const fila = filas[i]!;
-    const filaExcel = i + 2;
+    const filaExcel = filaOffset + i + 2;
 
     const parsed = parseImportAmbienteFila(fila);
     if (!parsed.ok) {
@@ -290,6 +300,9 @@ export async function importAmbientes(
     existingKeys.add(dup.key);
     batchKeys.add(dup.key);
     importados += 1;
+    } finally {
+      onProgress?.(toImportProgress(i + 1, filas.length));
+    }
   }
 
   return {

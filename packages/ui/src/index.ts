@@ -31,5 +31,6 @@ export * from "./preregistro-gestion-toolbar";
 export * from "./eliminar-preregistro-dialog";
 export * from "./eliminar-activos-por-codigos-button";
 export * from "./eliminar-activos-por-codigos-dialog";
+export * from "./import-progress-bar";
 export * from "./toast";
 export * from "./observacion-activo-display";

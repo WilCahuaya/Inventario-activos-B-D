@@ -195,28 +195,19 @@ export interface UpdateResponsableInput extends CreateResponsableInput {
   activo?: boolean;
 }
 
-export function normalizeResponsableNombre(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
+export {
+  normalizeResponsableNombre,
+  normalizeResponsableDni,
+  normalizeResponsableTelefono,
+  validarResponsableEmail,
+  validarResponsableTelefono,
+  validarCreateResponsableInput,
+} from "./responsable-validacion";
 
-/** Normaliza DNI peruano: solo dígitos. */
-export function normalizeResponsableDni(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
-export function validarCreateResponsableInput(input: CreateResponsableInput): string | null {
-  if (!normalizeResponsableNombre(input.nombre)) {
-    return "El nombre del responsable es obligatorio.";
-  }
-  const dni = normalizeResponsableDni(input.dni ?? "");
-  if (dni && dni.length !== 8) {
-    return "El DNI debe tener 8 dígitos.";
-  }
-  return null;
-}
+import { normalizeResponsableDni as normalizeResponsableDniForAdmin } from "./responsable-validacion";
 
 export function validarAdminEntidadDni(dni: string | undefined): string | null {
-  const normalized = normalizeResponsableDni(dni ?? "");
+  const normalized = normalizeResponsableDniForAdmin(dni ?? "");
   if (!normalized) {
     return "El DNI del administrador es obligatorio.";
   }
@@ -256,7 +247,7 @@ export interface Activo {
   responsable: string | null;
   valor_es_mercado: boolean;
   estado_registro: EstadoRegistro;
-  estado_bien: EstadoBien;
+  estado_bien: EstadoBien | null;
   categoria: CategoriaBien;
   valor_adquisicion: number | null;
   fecha_adquisicion: string | null;
@@ -304,7 +295,7 @@ export interface UpdateActivosSimilaresInput {
   color?: string | null;
   medidas?: string | null;
   caracteristicas?: string | null;
-  estado_bien?: EstadoBien;
+  estado_bien?: EstadoBien | null;
   depreciacion?: string | null;
   vida_util_meses?: number | null;
   /** Solo contador: cuenta contable propia del lote. */
@@ -760,26 +751,23 @@ export function resolveCuentaContableActivo(
   };
 }
 
-/** Normaliza y persiste cuenta contable en columnas del activo (texto, sin FK). */
+/**
+ * Normaliza y persiste cuenta contable en columnas del activo (texto, sin FK).
+ * Vacío o solo nombre → null (se usa la recomendación del catálogo).
+ * No fuerza 2524.
+ */
 export function buildActivoCuentaContablePayload(
   cuentaCodigo?: string | null,
   cuentaNombre?: string | null,
-  categoria: CategoriaBien = "ACTIVO",
+  _categoria: CategoriaBien = "ACTIVO",
 ): { cuenta_contable_codigo: string | null; cuenta_contable_nombre: string | null } {
-  if (categoria === "CUENTA_ORDEN") {
-    const normalized = normalizeCuentaContableFields(
-      cuentaCodigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
-      cuentaNombre,
-    );
-    return {
-      cuenta_contable_codigo: normalized.cuenta_codigo,
-      cuenta_contable_nombre: normalized.contabilidad,
-    };
-  }
-  if (!cuentaCodigo?.trim() && !cuentaNombre?.trim()) {
+  const codigo = cuentaCodigo?.trim() ?? "";
+  const nombre = cuentaNombre?.trim() ?? "";
+  // Solo nombre (sin código) = como vacío → heredar del catálogo
+  if (!codigo) {
     return { cuenta_contable_codigo: null, cuenta_contable_nombre: null };
   }
-  const normalized = normalizeCuentaContableFields(cuentaCodigo, cuentaNombre);
+  const normalized = normalizeCuentaContableFields(codigo, nombre || null);
   return {
     cuenta_contable_codigo: normalized.cuenta_codigo,
     cuenta_contable_nombre: normalized.contabilidad,
@@ -799,6 +787,11 @@ export function debePersistirCuentaContableEnActivo(input: {
   const nombre = input.cuentaNombre.trim();
   const refCodigo = input.referenciaCodigo.trim();
   const refNombre = input.referenciaNombre.trim();
+
+  // Solo nombre (sin código) = como vacío → heredar catálogo
+  if (!codigo) {
+    return input.esEdicion && input.activoTienePropia;
+  }
 
   if (input.esEdicion && input.activoTienePropia) return true;
 
@@ -980,7 +973,8 @@ export function buildDescripcionBien(
   return caracteristicasPartes(marca, modelo, serie, color, medidas).join(", ");
 }
 
-export function estadoBienLabel(estado: EstadoBien): string {
+export function estadoBienLabel(estado: EstadoBien | null | undefined): string {
+  if (!estado) return "—";
   if (estado === "BUENO") return "Bueno";
   if (estado === "REGULAR") return "Regular";
   return "Malo";
@@ -1353,7 +1347,8 @@ export function validarCuentaContableParaCatalogo(
 ): string | null {
   const codigoRaw = cuentaCodigo?.trim() ?? "";
   const nombreRaw = nombre?.trim() ?? "";
-  if (!codigoRaw && !nombreRaw) return null;
+  // Vacío o solo nombre → heredar recomendación del catálogo (opcional)
+  if (!codigoRaw) return null;
 
   const cuenta = normalizeCuentaContableFields(cuentaCodigo, nombre);
   if (!cuenta.cuenta_codigo) {
@@ -1645,6 +1640,9 @@ export {
   importErrorFilaFromItem,
   mapImportHeaders,
   normalizeImportDepreciacionRaw,
+  normalizeImportCodigoCatalogoNacional,
+  normalizeImportCodigoCatalogoPropio,
+  normalizeImportCodigoCatalogoRaw,
   normalizeImportKey,
   validateImportActivoFila,
   type ImportActivoCatalogoContabilidadUpdate,
@@ -1685,6 +1683,12 @@ export {
   type ImportAmbientesContext,
   type ImportAmbientesResult,
 } from "./import-ambientes";
+
+export {
+  IMPORT_PROGRESS_CHUNK_SIZE,
+  toImportProgress,
+  type ImportProgress,
+} from "./import-progress";
 
 export {
   assessLabelPrintWarnings,

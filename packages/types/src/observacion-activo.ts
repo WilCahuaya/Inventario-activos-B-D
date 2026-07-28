@@ -1,4 +1,4 @@
-type EstadoBienLocal = "BUENO" | "REGULAR" | "MALO";
+type EstadoBienLocal = "BUENO" | "REGULAR" | "MALO" | null;
 
 export const OBSERVACION_ADMIN_SEPARATOR = "\n---ADMIN---\n";
 
@@ -55,6 +55,7 @@ export function resolveObservacionAdmin(
 }
 
 function labelEstadoBien(estado: EstadoBienLocal): string {
+  if (!estado) return "sin especificar";
   if (estado === "BUENO") return "Bueno";
   if (estado === "REGULAR") return "Regular";
   return "Malo";

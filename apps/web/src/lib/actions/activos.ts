@@ -32,7 +32,7 @@ export interface CreateActivoInput {
   descripcion?: string;
   caracteristicas?: string;
   categoria?: CategoriaBien;
-  estado_bien?: EstadoBien;
+  estado_bien?: EstadoBien | null;
   marca?: string;
   modelo?: string;
   serie?: string;
@@ -138,7 +138,7 @@ export async function createActivo(input: CreateActivoInput) {
     descripcion: input.descripcion?.trim() || null,
     caracteristicas: input.caracteristicas?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
-    estado_bien: input.estado_bien ?? "BUENO",
+    estado_bien: input.estado_bien ?? null,
     marca: input.marca?.trim() || null,
     modelo: input.modelo?.trim() || null,
     serie: input.serie?.trim() || null,
@@ -272,7 +272,7 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         descripcion: input.descripcion?.trim() || null,
         caracteristicas: input.caracteristicas?.trim() || null,
         categoria: input.categoria ?? "ACTIVO",
-        estado_bien: input.estado_bien ?? "BUENO",
+        estado_bien: input.estado_bien ?? null,
         marca: input.marca?.trim() || null,
         modelo: input.modelo?.trim() || null,
         serie: input.serie?.trim() || null,
@@ -317,8 +317,9 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         return { error: "El ambiente no pertenece a la sede seleccionada." };
       }
 
-      const estadoAnterior = existing.estado_bien as EstadoBien;
-      const estadoNuevo = input.estado_bien ?? estadoAnterior;
+      const estadoAnterior = existing.estado_bien as EstadoBien | null;
+      const estadoNuevo =
+        input.estado_bien !== undefined ? input.estado_bien : estadoAnterior;
       const { contador, admin } = splitObservacionActivo(existing.observacion as string | null);
       const adminActualizado = resolveObservacionAdmin(
         input.observacion_admin ?? admin,
@@ -347,7 +348,7 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         descripcion: input.descripcion?.trim() || null,
         caracteristicas: input.caracteristicas?.trim() || null,
         categoria: input.categoria ?? "ACTIVO",
-        estado_bien: input.estado_bien ?? "BUENO",
+        estado_bien: input.estado_bien ?? null,
         marca: input.marca?.trim() || null,
         modelo: input.modelo?.trim() || null,
         serie: input.serie?.trim() || null,
@@ -379,7 +380,7 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         descripcion: input.descripcion?.trim() || null,
         caracteristicas: input.caracteristicas?.trim() || null,
         categoria: input.categoria ?? "ACTIVO",
-        estado_bien: input.estado_bien ?? "BUENO",
+        estado_bien: input.estado_bien ?? null,
         marca: input.marca?.trim() || null,
         modelo: input.modelo?.trim() || null,
         serie: input.serie?.trim() || null,

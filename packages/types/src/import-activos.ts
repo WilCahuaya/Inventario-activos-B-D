@@ -1,9 +1,13 @@
-import { CODIGO_BARRAS_CATALOGO_DIGITS } from "./codigo-barras";
+import {
+  CODIGO_BARRAS_CATALOGO_DIGITS,
+  decodeCatalogoPropioDesdeSimbolo,
+} from "./codigo-barras";
 
 type CategoriaBien = "ACTIVO" | "CUENTA_ORDEN";
 type EstadoBien = "BUENO" | "REGULAR" | "MALO";
 
 const IMPORT_CUENTA_CODIGO_RE = /^\d{1,6}$/;
+const CATALOGO_PROPIO_IMPORT_RE = /^BD(\d{1,6})$/i;
 
 function parseFechaDDMMYYYY(text: string): string | null {
   const trimmed = text.trim();
@@ -37,7 +41,9 @@ function parsePorcentajeDepreciacion(text: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-/** Normaliza % Deprec. desde Excel (0.2 → "20 %") o texto ("10", "10 %"). */
+/** Normaliza % Deprec. desde Excel (0.2 → "20 %") o texto ("10", "10 %").
+ *  0 / 0 % → vacío (opcional). Número sin % → se le agrega " %".
+ */
 export function normalizeImportDepreciacionRaw(raw: string): string {
   const trimmed = raw.replace(/\u00a0/g, " ").trim();
   if (!trimmed) return "";
@@ -47,7 +53,9 @@ export function normalizeImportDepreciacionRaw(raw: string): string {
   if (!numMatch) return trimmed;
 
   let value = Number(numMatch[1]!.replace(",", "."));
-  if (!Number.isFinite(value) || value <= 0) return trimmed;
+  if (!Number.isFinite(value)) return trimmed;
+  // 0 (o 0 %) = sin depreciación → no guardar nada
+  if (value <= 0) return "";
 
   // Excel almacena 20 % como 0.2 cuando la celda tiene formato Porcentaje.
   if (!hasPct && value > 0 && value <= 1) {
@@ -58,6 +66,7 @@ export function normalizeImportDepreciacionRaw(raw: string): string {
   const texto = Number.isInteger(rounded)
     ? String(rounded)
     : rounded.toFixed(2).replace(/\.?0+$/, "");
+  // Si venía sin %, se agrega
   return `${texto} %`;
 }
 
@@ -140,7 +149,7 @@ export interface ImportActivoInsertPayload {
   codigo_catalogo: string;
   nombre: string;
   categoria: CategoriaBien;
-  estado_bien: EstadoBien;
+  estado_bien: EstadoBien | null;
   caracteristicas: string | null;
   marca: string | null;
   modelo: string | null;
@@ -283,7 +292,7 @@ function parseCategoria(text: string): CategoriaBien | null {
     .replace(/\./g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (!key) return "ACTIVO";
+  if (!key) return null;
   if (key === "activo" || key === "act") return "ACTIVO";
   if (
     key === "cuenta de orden" ||
@@ -297,13 +306,14 @@ function parseCategoria(text: string): CategoriaBien | null {
   return null;
 }
 
-function parseEstadoBien(text: string): EstadoBien | null {
+/** Vacío → null; bueno/Bueno/etc. case-insensitive. */
+function parseEstadoBien(text: string): EstadoBien | null | undefined {
   const key = normalizeImportKey(text);
-  if (!key) return "BUENO";
+  if (!key) return null;
   if (key === "bueno") return "BUENO";
   if (key === "regular") return "REGULAR";
   if (key === "malo") return "MALO";
-  return null;
+  return undefined;
 }
 
 function parsePrecio(text: string): number | null {
@@ -315,30 +325,95 @@ function parsePrecio(text: string): number | null {
   return value;
 }
 
-function normalizeCodigoCatalogo(text: string): string {
+/** Código catálogo nacional: dígitos; permite más de 8; rellena si tiene menos. */
+export function normalizeImportCodigoCatalogoNacional(text: string): string {
   const digits = text.replace(/\D/g, "");
-  if (digits.length >= CODIGO_BARRAS_CATALOGO_DIGITS) {
-    return digits.slice(0, CODIGO_BARRAS_CATALOGO_DIGITS);
+  if (!digits) return "";
+  if (digits.length < CODIGO_BARRAS_CATALOGO_DIGITS) {
+    return digits.padStart(CODIGO_BARRAS_CATALOGO_DIGITS, "0");
   }
-  return digits.padStart(CODIGO_BARRAS_CATALOGO_DIGITS, "0");
+  return digits;
 }
 
+/**
+ * Código catálogo propio: BD000001, dígitos (1→BD000001) o símbolo 24000001.
+ */
+export function normalizeImportCodigoCatalogoPropio(text: string): string | null {
+  const trimmed = text.replace(/\u00a0/g, " ").trim();
+  if (!trimmed) return null;
+
+  const bdMatch = trimmed.match(CATALOGO_PROPIO_IMPORT_RE);
+  if (bdMatch) {
+    return `BD${bdMatch[1]!.padStart(6, "0")}`;
+  }
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+
+  const fromSymbol = decodeCatalogoPropioDesdeSimbolo(digits);
+  if (fromSymbol) return fromSymbol;
+
+  if (digits.length <= 6) {
+    return `BD${digits.padStart(6, "0")}`;
+  }
+
+  return null;
+}
+
+/**
+ * Normaliza código de catálogo según categoría (para precargar lookups).
+ * Sin categoría válida intenta nacional y propio.
+ */
+export function normalizeImportCodigoCatalogoRaw(
+  text: string,
+  categoria?: CategoriaBien | null,
+): string[] {
+  const candidates: string[] = [];
+  if (categoria === "CUENTA_ORDEN") {
+    const propio = normalizeImportCodigoCatalogoPropio(text);
+    if (propio) candidates.push(propio);
+    return candidates;
+  }
+  if (categoria === "ACTIVO") {
+    const nacional = normalizeImportCodigoCatalogoNacional(text);
+    if (nacional) candidates.push(nacional);
+    return candidates;
+  }
+  const nacional = normalizeImportCodigoCatalogoNacional(text);
+  if (nacional) candidates.push(nacional);
+  const propio = normalizeImportCodigoCatalogoPropio(text);
+  if (propio) candidates.push(propio);
+  return candidates;
+}
+
+/**
+ * Resuelve cuenta contable del Excel contra `cuentas_contables`.
+ * - Vacío o solo nombre → SKIP (usar catálogo del ítem)
+ * - Solo código → debe existir
+ * - Código + nombre inexistente → create
+ * - Código existente → nombre de BD gana
+ */
 function resolveImportCuentaContable(
   codigoRaw: string,
   nombreRaw: string,
   cuentaLookup: Map<string, string>,
 ):
-  | { ok: true; cuenta_codigo: string; contabilidad: string; lookup: Map<string, string> }
+  | {
+      ok: true;
+      mode: "override";
+      cuenta_codigo: string;
+      contabilidad: string;
+      lookup: Map<string, string>;
+      create?: { codigo: string; nombre: string };
+    }
+  | { ok: false; motivo: "SKIP" }
   | { ok: false; motivo: string } {
   const codigoInput = codigoRaw.trim();
   const nombreInput = nombreRaw.trim();
 
-  if (!codigoInput && !nombreInput) {
+  if (!codigoInput) {
+    // Solo nombre o ambos vacíos → heredar del catálogo
     return { ok: false, motivo: "SKIP" };
-  }
-
-  if (!codigoInput && nombreInput) {
-    return { ok: false, motivo: "Indique el código de cuenta contable." };
   }
 
   const codigo = normalizeImportCuentaCodigo(codigoInput);
@@ -351,28 +426,44 @@ function resolveImportCuentaContable(
     return { ok: false, motivo: "Nombre cuenta contable inválido." };
   }
 
-  const nombreCatalogo = cuentaLookup.get(codigo) ?? null;
+  const nombreBd = cuentaLookup.get(codigo) ?? null;
 
   if (!nombreExplicito) {
-    if (!nombreCatalogo) {
+    if (!nombreBd) {
       return {
         ok: false,
-        motivo: `Cuenta contable "${codigo}" no registrada. Indique el nombre.`,
+        motivo: `Cuenta contable "${codigo}" no registrada. Indique también el nombre para crearla.`,
       };
     }
-    return { ok: true, cuenta_codigo: codigo, contabilidad: nombreCatalogo, lookup: cuentaLookup };
+    return {
+      ok: true,
+      mode: "override",
+      cuenta_codigo: codigo,
+      contabilidad: nombreBd,
+      lookup: cuentaLookup,
+    };
   }
 
-  if (
-    nombreCatalogo &&
-    normalizeImportKey(nombreCatalogo) !== normalizeImportKey(nombreExplicito)
-  ) {
-    return { ok: true, cuenta_codigo: codigo, contabilidad: nombreCatalogo, lookup: cuentaLookup };
+  if (nombreBd) {
+    return {
+      ok: true,
+      mode: "override",
+      cuenta_codigo: codigo,
+      contabilidad: nombreBd,
+      lookup: cuentaLookup,
+    };
   }
 
   const nextLookup = new Map(cuentaLookup);
   nextLookup.set(codigo, nombreExplicito);
-  return { ok: true, cuenta_codigo: codigo, contabilidad: nombreExplicito, lookup: nextLookup };
+  return {
+    ok: true,
+    mode: "override",
+    cuenta_codigo: codigo,
+    contabilidad: nombreExplicito,
+    lookup: nextLookup,
+    create: { codigo, nombre: nombreExplicito },
+  };
 }
 
 export function validateImportActivoFila(
@@ -381,26 +472,58 @@ export function validateImportActivoFila(
   ubicacionLookup: Map<string, { sede_id: string; ambiente_id: string }>,
   catalogoByCodigo: Map<string, ImportActivoCatalogoItem>,
   cuentaLookup: Map<string, string>,
-): { ok: true; payload: ImportActivoInsertPayload; cuentaLookup: Map<string, string> } | { ok: false; motivo: string } {
-  const codigoCatalogo = normalizeCodigoCatalogo(fila["Código catálogo"]);
-  if (!codigoCatalogo || codigoCatalogo.length !== CODIGO_BARRAS_CATALOGO_DIGITS) {
-    return { ok: false, motivo: "Código catálogo inválido (8 dígitos)." };
+):
+  | {
+      ok: true;
+      payload: ImportActivoInsertPayload;
+      cuentaLookup: Map<string, string>;
+      cuentaToCreate?: { codigo: string; nombre: string };
+    }
+  | { ok: false; motivo: string } {
+  const categoria = parseCategoria(fila.Categoría);
+  if (!categoria) {
+    return {
+      ok: false,
+      motivo: 'Categoría es obligatoria. Use "Activo", "Act.", "Cuenta de orden" o "Cta. Orden".',
+    };
+  }
+
+  let codigoCatalogo: string;
+  if (categoria === "CUENTA_ORDEN") {
+    const propio = normalizeImportCodigoCatalogoPropio(fila["Código catálogo"]);
+    if (!propio) {
+      return {
+        ok: false,
+        motivo: 'Código catálogo inválido para cuenta de orden (ej. BD000001).',
+      };
+    }
+    codigoCatalogo = propio;
+  } else {
+    codigoCatalogo = normalizeImportCodigoCatalogoNacional(fila["Código catálogo"]);
+    if (!codigoCatalogo) {
+      return { ok: false, motivo: "Código catálogo inválido." };
+    }
   }
 
   const catalogoItem = catalogoByCodigo.get(codigoCatalogo);
   if (!catalogoItem) {
-    return { ok: false, motivo: `Código catálogo "${codigoCatalogo}" no existe en el catálogo nacional.` };
+    if (categoria === "CUENTA_ORDEN") {
+      return {
+        ok: false,
+        motivo: `Código catálogo "${codigoCatalogo}" no existe en el catálogo propio.`,
+      };
+    }
+    return {
+      ok: false,
+      motivo: `Código catálogo "${codigoCatalogo}" no existe en el catálogo nacional.`,
+    };
   }
 
-  const categoria = parseCategoria(fila.Categoría);
-  if (!categoria) {
-    return { ok: false, motivo: 'Categoría inválida. Use "Activo", "Act.", "Cuenta de orden" o "Cta. Orden".' };
-  }
-
-  const estadoBien = parseEstadoBien(fila.Estado);
-  if (!estadoBien) {
+  const estadoParsed = parseEstadoBien(fila.Estado);
+  if (estadoParsed === undefined) {
     return { ok: false, motivo: 'Estado inválido. Use "Bueno", "Regular" o "Malo".' };
   }
+  const estadoBien: EstadoBien | null = estadoParsed;
 
   const precioRaw = fila["Precio de adquisición (S/)"].trim();
   const mercadoRaw = fila["Valor de mercado (S/)"].trim();
@@ -440,10 +563,6 @@ export function validateImportActivoFila(
     fechaAdquisicion = parseFechaDDMMYYYY(fechaRaw);
   }
 
-  if (tienePrecio && !fechaAdquisicion) {
-    return { ok: false, motivo: "Fecha de adquisición es obligatoria con precio de adquisición." };
-  }
-
   const deprecRaw = normalizeImportDepreciacionRaw(fila["% Deprec."].trim());
   let depreciacion: string | null = null;
   let vidaUtilMeses: number | null = null;
@@ -460,6 +579,7 @@ export function validateImportActivoFila(
   let nextCuentaLookup = cuentaLookup;
   let cuentaActivoCodigo: string | null = null;
   let cuentaActivoNombre: string | null = null;
+  let cuentaToCreate: { codigo: string; nombre: string } | undefined;
   const cuentaResolved = resolveImportCuentaContable(
     fila["Código cuenta contable"],
     fila["Nombre cuenta contable"],
@@ -470,18 +590,12 @@ export function validateImportActivoFila(
     if (cuentaResolved.motivo !== "SKIP") {
       return { ok: false, motivo: cuentaResolved.motivo };
     }
-    if (categoria === "CUENTA_ORDEN") {
-      cuentaActivoCodigo = "2524";
-      cuentaActivoNombre =
-        catalogoItem.contabilidad?.trim() || cuentaLookup.get("2524") || null;
-    } else if (catalogoItem.cuenta_codigo?.trim()) {
-      cuentaActivoCodigo = catalogoItem.cuenta_codigo.trim();
-      cuentaActivoNombre = catalogoItem.contabilidad?.trim() || null;
-    }
+    // Vacío / solo nombre → sin override; al mostrar se usa la del catálogo
   } else {
     nextCuentaLookup = cuentaResolved.lookup;
     cuentaActivoCodigo = cuentaResolved.cuenta_codigo;
     cuentaActivoNombre = cuentaResolved.contabilidad;
+    cuentaToCreate = cuentaResolved.create;
   }
 
   const sucursal = fila.Sucursal.trim();
@@ -506,6 +620,7 @@ export function validateImportActivoFila(
   return {
     ok: true,
     cuentaLookup: nextCuentaLookup,
+    ...(cuentaToCreate ? { cuentaToCreate } : {}),
     payload: {
       entidad_id: entidadId,
       codigo_catalogo: codigoCatalogo,

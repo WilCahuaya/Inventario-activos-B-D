@@ -7,15 +7,44 @@ import { CATALOGO_SEARCH_MAX_RESULTS, minCatalogoQueryLength } from "@inventario
 import { computeFloatingMenuLayout, type FloatingMenuLayout } from "./dropdown-position";
 import { Input, Label } from "./components";
 
+export type CatalogoPickerVariant = "nacional" | "propio";
+
+const CATALOGO_PICKER_COPY: Record<
+  CatalogoPickerVariant,
+  { label: string; hint: string; placeholder: string; empty: string }
+> = {
+  nacional: {
+    label: "Código catálogo nacional",
+    hint: "Escriba código o denominación del catálogo.",
+    placeholder: "Buscar por código o denominación…",
+    empty: "Sin coincidencias en el catálogo nacional.",
+  },
+  propio: {
+    label: "Código catálogo propio",
+    hint: "Escriba código o denominación del catálogo.",
+    placeholder: "Buscar por código o denominación…",
+    empty: "Sin coincidencias en el catálogo propio.",
+  },
+};
+
 export interface CatalogoPickerProps {
   onSelect: (item: CatalogoNacional) => void;
   onClear?: () => void;
   selectedCodigo?: string;
   selectedDenominacion?: string;
   disabled?: boolean;
+  /** Nacional (SBN) o propio (BD…). Cambia título y mensajes. */
+  variant?: CatalogoPickerVariant;
   searchCatalogo: (query: string, limit?: number) => Promise<CatalogoNacional[]>;
   resolveCodigo?: (codigo: string) => Promise<CatalogoNacional | null>;
   renderAddMissing?: (query: string) => ReactNode;
+}
+
+function looksLikeCatalogoCodigo(trimmed: string, variant: CatalogoPickerVariant): boolean {
+  if (variant === "propio") {
+    return /^BD\d{1,6}$/i.test(trimmed) || /^\d{1,8}$/.test(trimmed);
+  }
+  return /^\d{1,12}$/.test(trimmed);
 }
 
 export function CatalogoPicker({
@@ -24,10 +53,12 @@ export function CatalogoPicker({
   selectedCodigo,
   selectedDenominacion,
   disabled,
+  variant = "nacional",
   searchCatalogo,
   resolveCodigo,
   renderAddMissing,
 }: CatalogoPickerProps) {
+  const copy = CATALOGO_PICKER_COPY[variant];
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CatalogoNacional[]>([]);
   const [open, setOpen] = useState(false);
@@ -199,16 +230,14 @@ export function CatalogoPicker({
 
   return (
     <div ref={containerRef} className={open ? "relative z-50 space-y-2" : "space-y-2"}>
-      <Label htmlFor="catalogo_search">Código catálogo nacional</Label>
-      <p className="text-xs text-muted-foreground">
-        Escriba varias palabras de la denominación o los 8 dígitos del código para acotar la lista.
-      </p>
+      <Label htmlFor="catalogo_search">{copy.label}</Label>
+      <p className="text-xs text-muted-foreground">{copy.hint}</p>
       <div ref={anchorRef} className="relative">
         <Input
           id="catalogo_search"
           type="search"
           autoComplete="off"
-          placeholder="Buscar por código (8 dígitos) o denominación…"
+          placeholder={copy.placeholder}
           value={query}
           disabled={disabled}
           onChange={(event) => {
@@ -224,7 +253,7 @@ export function CatalogoPicker({
           onBlur={() => {
             if (pickingRef.current || !resolveCodigoRef.current) return;
             const trimmed = query.trim();
-            if (/^\d{8}$/.test(trimmed) && trimmed !== selectedCodigo) {
+            if (looksLikeCatalogoCodigo(trimmed, variant) && trimmed !== selectedCodigo) {
               void resolveExactCodigo(trimmed);
             }
           }}
@@ -238,14 +267,13 @@ export function CatalogoPicker({
               handleSelect(exact);
               return;
             }
-            if (resolveCodigoRef.current && /^\d{8}$/.test(trimmed)) {
+            if (resolveCodigoRef.current && looksLikeCatalogoCodigo(trimmed, variant)) {
               void resolveExactCodigo(trimmed);
               return;
             }
             if (results[0]) handleSelect(results[0]);
           }}
         />
-
       </div>
 
       {typeof document !== "undefined" && listbox ? createPortal(listbox, document.body) : null}
@@ -258,7 +286,7 @@ export function CatalogoPicker({
 
       {showNoResults && (
         <div className="space-y-1 text-xs text-muted-foreground">
-          <p>Sin coincidencias en el catálogo nacional.</p>
+          <p>{copy.empty}</p>
           {renderAddMissing?.(trimmedQuery)}
         </div>
       )}

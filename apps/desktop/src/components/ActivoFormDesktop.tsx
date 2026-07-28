@@ -30,6 +30,8 @@ import {
   validarCuentaContableParaCatalogo,
   vidaUtilMesesFromPorcentaje,
   entidadMuestraSelectorSede,
+  isCatalogoNacionalOficial,
+  isCatalogoPropio,
   sedeIdSinSelector,
   type ActivoAtributoCampo,
   type UpdateActivosSimilaresInput,
@@ -52,7 +54,7 @@ import {
   Select,
   Textarea,
 } from "@inventario/ui";
-import { panelFieldsetClass, panelLegendClass, panelModalClass } from "@inventario/ui/panel";
+import { panelFieldsetClass, panelLegendClass, panelModalClass, fechaAdquisicionToneClass } from "@inventario/ui/panel";
 import type { ActivoConUbicacion } from "../lib/activos";
 import {
   applyActivosSimilaresPatchLocal,
@@ -80,7 +82,8 @@ import {
   listCatalogoClases,
   listCatalogoGrupos,
   registerCatalogoOpcionPersonalizada,
-  searchCatalogo,
+  searchCatalogoNacionalOficial,
+  searchCatalogoPropio,
   searchCuentasContables,
   suggestCatalogoGrupo,
   upsertCuentaContable,
@@ -142,9 +145,40 @@ export function ActivoFormDesktop({
   const [nombre, setNombre] = useState(activo?.nombre ?? "");
   const [nombreEtiqueta, setNombreEtiqueta] = useState(activo?.nombre_etiqueta ?? "");
   const [categoria, setCategoria] = useState<CategoriaBien>(activo?.categoria ?? "ACTIVO");
-  const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">(
-    activo?.estado_bien ?? "BUENO",
+  const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO" | null>(
+    activo?.estado_bien ?? null,
   );
+
+  const searchCatalogoByCategoria = useCallback(
+    (query: string, limit?: number) =>
+      categoria === "CUENTA_ORDEN"
+        ? searchCatalogoPropio(query, limit)
+        : searchCatalogoNacionalOficial(query, limit),
+    [categoria],
+  );
+
+  function handleCategoriaChange(next: CategoriaBien) {
+    setCategoria(next);
+    if (!catalogo || isEdit) return;
+    const esPropio = isCatalogoPropio(catalogo);
+    if (next === "ACTIVO" && esPropio) {
+      setCatalogo(null);
+      setNombre("");
+      setNombreEtiqueta("");
+      setDepreciacion("");
+      setVidaUtilMeses("");
+      setCuentaCodigo("");
+      setCuentaNombre("");
+    } else if (next === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
+      setCatalogo(null);
+      setNombre("");
+      setNombreEtiqueta("");
+      setDepreciacion("");
+      setVidaUtilMeses("");
+      setCuentaCodigo("");
+      setCuentaNombre("");
+    }
+  }
   const [marca, setMarca] = useState(activo?.marca ?? "");
   const [modelo, setModelo] = useState(activo?.modelo ?? "");
   const [serie, setSerie] = useState(activo?.serie ?? "");
@@ -363,8 +397,8 @@ export function ActivoFormDesktop({
       setDepreciacion("");
       setVidaUtilMeses("");
       if (mostrarCuentaContable || mostrarCuentaContableBulk) {
-        setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
-        setCuentaNombre("");
+        setCuentaCodigo(catalogo?.cuenta_codigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+        setCuentaNombre(catalogo?.contabilidad?.trim() || "");
       }
     }
   }, [categoria, mostrarCuentaContable, mostrarCuentaContableBulk]);
@@ -372,12 +406,11 @@ export function ActivoFormDesktop({
   useEffect(() => {
     if (!catalogo || isEdit) return;
     if (categoria === "CUENTA_ORDEN") {
-      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
-      setCuentaNombre("");
-      cuentaReferenciaRef.current = {
-        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
-        nombre: "",
-      };
+      const codigo = catalogo.cuenta_codigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD;
+      const nombre = catalogo.contabilidad?.trim() || "";
+      setCuentaCodigo(codigo);
+      setCuentaNombre(nombre);
+      cuentaReferenciaRef.current = { codigo, nombre };
       return;
     }
     const codigo = catalogo.cuenta_codigo ?? "";
@@ -390,12 +423,11 @@ export function ActivoFormDesktop({
   useEffect(() => {
     if (!isEdit || !activo || !catalogo || activoTieneCuentaContablePropia(activo)) return;
     if (categoria === "CUENTA_ORDEN") {
-      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
-      setCuentaNombre("");
-      cuentaReferenciaRef.current = {
-        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
-        nombre: "",
-      };
+      const codigo = catalogo.cuenta_codigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD;
+      const nombre = catalogo.contabilidad?.trim() || "";
+      setCuentaCodigo(codigo);
+      setCuentaNombre(nombre);
+      cuentaReferenciaRef.current = { codigo, nombre };
       return;
     }
     const codigo = catalogo.cuenta_codigo ?? "";
@@ -414,28 +446,33 @@ export function ActivoFormDesktop({
     (item: CatalogoNacional) => {
       setCatalogo(item);
       setNombre(item.denominacion);
-      if (item.origen === "PROPIO") {
+      if (isCatalogoPropio(item)) {
         setCategoria("CUENTA_ORDEN");
+      } else {
+        setCategoria("ACTIVO");
       }
-      if (categoria !== "CUENTA_ORDEN" && item.origen !== "PROPIO" && item.depreciacion) {
+      if (!isCatalogoPropio(item) && item.depreciacion) {
         setDepreciacion(item.depreciacion);
         const pct = parsePorcentajeDepreciacion(item.depreciacion);
         if (pct) setVidaUtilMeses(String(vidaUtilMesesFromPorcentaje(pct)));
+      } else {
+        setDepreciacion("");
+        setVidaUtilMeses("");
       }
       if (!isEdit) {
         void previewCodigoBarras(entidadId, item.codigo).then(setCodigoBarrasPreview);
       }
       if (mostrarCuentaContable) {
-        if (item.origen === "PROPIO" || categoria === "CUENTA_ORDEN") {
-          setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
-          setCuentaNombre("");
-        } else {
-          setCuentaCodigo(item.cuenta_codigo ?? "");
-          setCuentaNombre(item.contabilidad ?? "");
-        }
+        const codigo =
+          item.cuenta_codigo?.trim() ||
+          (isCatalogoPropio(item) ? CATALOGO_CUENTA_ORDEN_CONTABILIDAD : "");
+        const nombre = item.contabilidad?.trim() || "";
+        setCuentaCodigo(codigo);
+        setCuentaNombre(nombre);
+        cuentaReferenciaRef.current = { codigo, nombre };
       }
     },
-    [entidadId, isEdit, categoria, mostrarCuentaContable],
+    [entidadId, isEdit, mostrarCuentaContable],
   );
 
   useEffect(() => {
@@ -505,7 +542,11 @@ export function ActivoFormDesktop({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!catalogo) {
-      setMessage("Seleccione un ítem del catálogo nacional.");
+      setMessage(
+        categoria === "CUENTA_ORDEN"
+          ? "Seleccione un ítem del catálogo propio."
+          : "Seleccione un ítem del catálogo nacional.",
+      );
       return;
     }
 
@@ -540,12 +581,22 @@ export function ActivoFormDesktop({
     try {
     if (
       mostrarCuentaContable &&
-      categoria === "ACTIVO" &&
       (cuentaCodigo.trim() || cuentaNombre.trim())
     ) {
       const cuentaError = validarCuentaContableParaCatalogo(cuentaCodigo, cuentaNombre);
       if (cuentaError) {
         setMessage(cuentaError);
+        return;
+      }
+    }
+
+    if (catalogo) {
+      if (categoria === "ACTIVO" && isCatalogoPropio(catalogo)) {
+        setMessage("Para categoría Activo use un código del catálogo nacional.");
+        return;
+      }
+      if (categoria === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
+        setMessage("Para cuenta de orden use un código del catálogo propio (BD…).");
         return;
       }
     }
@@ -574,10 +625,18 @@ export function ActivoFormDesktop({
           cuentaNombre,
           referenciaCodigo: cuentaReferenciaRef.current.codigo,
           referenciaNombre: cuentaReferenciaRef.current.nombre,
-        }) && {
-          cuenta_contable_codigo: cuentaCodigo.trim() || null,
-          cuenta_contable_nombre: cuentaNombre.trim() || null,
-        }),
+        }) &&
+        (() => {
+          const cuentaPayload = buildActivoCuentaContablePayload(
+            cuentaCodigo,
+            cuentaNombre,
+            categoria,
+          );
+          return {
+            cuenta_contable_codigo: cuentaPayload.cuenta_contable_codigo,
+            cuenta_contable_nombre: cuentaPayload.cuenta_contable_nombre,
+          };
+        })()),
       observacion: observacion || undefined,
       valor_adquisicion: valor ? Number(valor) : undefined,
       valor_es_mercado: valorEsMercado,
@@ -706,7 +765,7 @@ export function ActivoFormDesktop({
         responsable: activo?.responsable ?? null,
         valor_es_mercado: payload.valor_es_mercado ?? false,
         estado_registro: activo?.estado_registro ?? "REGISTRADO",
-        estado_bien: payload.estado_bien ?? "BUENO",
+        estado_bien: payload.estado_bien ?? null,
         categoria: payload.categoria ?? "ACTIVO",
         valor_adquisicion: payload.valor_adquisicion ?? null,
         fecha_adquisicion: payload.fecha_adquisicion ?? null,
@@ -978,7 +1037,7 @@ export function ActivoFormDesktop({
             <legend className={panelLegendClass}>Categoría</legend>
             <CategoriaBienSelector
               value={categoria}
-              onChange={setCategoria}
+              onChange={handleCategoriaChange}
               ayuda={CATEGORIA_BIEN_AYUDA}
               opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
                 key,
@@ -994,9 +1053,9 @@ export function ActivoFormDesktop({
                   onNombreChange={setCuentaNombre}
                   searchCuentas={searchCuentasContables}
                   onCreateCuenta={upsertCuentaContable}
-                  disabled={pending || categoria === "CUENTA_ORDEN"}
+                  disabled={pending}
                   codigoId="activo_cuenta_codigo_bulk"
-                  allowCreateNew={categoria !== "CUENTA_ORDEN"}
+                  allowCreateNew
                 />
               </div>
             )}
@@ -1090,9 +1149,17 @@ export function ActivoFormDesktop({
                 placeholder="DD/MM/AAAA"
                 maxLength={10}
                 aria-invalid={Boolean(fechaAdquisicionError)}
+                className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
               />
               {fechaAdquisicionError && (
                 <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+              )}
+              {!fechaAdquisicionError && fechaAdquisicion && (
+                <p className="text-xs text-muted-foreground">
+                  {valorEsMercado
+                    ? "Color ámbar: fecha aproximada (valor de mercado)."
+                    : "Color azul: fecha segura (precio / factura)."}
+                </p>
               )}
             </div>
             {!valorEsMercado && (
@@ -1199,9 +1266,12 @@ export function ActivoFormDesktop({
               <Label htmlFor="estado_bien_bulk">Estado</Label>
               <Select
                 id="estado_bien_bulk"
-                value={estadoBien}
-                onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+                value={estadoBien ?? ""}
+                onChange={(value) =>
+                  setEstadoBien(value === "" ? null : (value as "BUENO" | "REGULAR" | "MALO"))
+                }
                 options={[
+                  { value: "", label: "Sin especificar" },
                   { value: "BUENO", label: "Bueno" },
                   { value: "REGULAR", label: "Regular" },
                   { value: "MALO", label: "Malo" },
@@ -1283,8 +1353,19 @@ export function ActivoFormDesktop({
       <fieldset className={fieldsetCompact}>
         <legend className={panelLegendClass}>Identificación</legend>
 
+        <CategoriaBienSelector
+          value={categoria}
+          onChange={handleCategoriaChange}
+          ayuda={CATEGORIA_BIEN_AYUDA}
+          opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
+            key,
+            ...CATEGORIA_BIEN_LABELS[key],
+          }))}
+        />
+
         <CatalogoPicker
-          searchCatalogo={searchCatalogo}
+          variant={categoria === "CUENTA_ORDEN" ? "propio" : "nacional"}
+          searchCatalogo={searchCatalogoByCategoria}
           resolveCodigo={getCatalogoByCodigo}
           onSelect={(item) => {
             setCatalogoAlta(null);
@@ -1296,20 +1377,23 @@ export function ActivoFormDesktop({
           disabled={pending || esEdicionMasiva || Boolean(catalogoAlta)}
           renderAddMissing={(q) => (
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-              <button
-                type="button"
-                className="font-medium text-primary underline-offset-2 hover:underline"
-                onClick={() => setCatalogoAlta({ variant: "nacional", query: q })}
-              >
-                Crear en catálogo nacional
-              </button>
-              <button
-                type="button"
-                className="font-medium text-primary underline-offset-2 hover:underline"
-                onClick={() => setCatalogoAlta({ variant: "propio", query: q })}
-              >
-                Crear en catálogo propio
-              </button>
+              {categoria === "ACTIVO" ? (
+                <button
+                  type="button"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                  onClick={() => setCatalogoAlta({ variant: "nacional", query: q })}
+                >
+                  Crear en catálogo nacional
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                  onClick={() => setCatalogoAlta({ variant: "propio", query: q })}
+                >
+                  Crear en catálogo propio
+                </button>
+              )}
             </div>
           )}
         />
@@ -1318,16 +1402,6 @@ export function ActivoFormDesktop({
           <Label>Código de barras</Label>
           <Input readOnly value={codigoBarrasDisplay} className="bg-muted font-mono text-sm" />
         </div>
-
-        <CategoriaBienSelector
-          value={categoria}
-          onChange={setCategoria}
-          ayuda={CATEGORIA_BIEN_AYUDA}
-          opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
-            key,
-            ...CATEGORIA_BIEN_LABELS[key],
-          }))}
-        />
 
         <div className="space-y-2">
           <Label htmlFor="nombre">Nombre del bien</Label>
@@ -1347,9 +1421,9 @@ export function ActivoFormDesktop({
             onNombreChange={setCuentaNombre}
             searchCuentas={searchCuentasContables}
             onCreateCuenta={upsertCuentaContable}
-            disabled={pending || categoria === "CUENTA_ORDEN"}
+            disabled={pending}
             codigoId="activo_cuenta_codigo"
-            allowCreateNew={categoria !== "CUENTA_ORDEN"}
+            allowCreateNew
           />
         )}
 
@@ -1459,9 +1533,12 @@ export function ActivoFormDesktop({
           <Label htmlFor="estado_bien">Estado del bien</Label>
           <Select
             id="estado_bien"
-            value={estadoBien}
-            onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+            value={estadoBien ?? ""}
+            onChange={(value) =>
+              setEstadoBien(value === "" ? null : (value as "BUENO" | "REGULAR" | "MALO"))
+            }
             options={[
+              { value: "", label: "Sin especificar" },
               { value: "BUENO", label: "Bueno" },
               { value: "REGULAR", label: "Regular" },
               { value: "MALO", label: "Malo" },
@@ -1531,9 +1608,17 @@ export function ActivoFormDesktop({
               placeholder="DD/MM/AAAA"
               maxLength={10}
               aria-invalid={Boolean(fechaAdquisicionError)}
+              className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
             />
             {fechaAdquisicionError && (
               <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+            )}
+            {!fechaAdquisicionError && fechaAdquisicion && (
+              <p className="text-xs text-muted-foreground">
+                {valorEsMercado
+                  ? "Color ámbar: fecha aproximada (valor de mercado)."
+                  : "Color azul: fecha segura (precio / factura)."}
+              </p>
             )}
           </div>
         </div>

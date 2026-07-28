@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Entidad, ImportAmbientesResult } from "@inventario/types";
-import { Button, Dialog, FileInput, Label } from "@inventario/ui";
+import type {
+  Entidad,
+  ImportAmbienteErrorItem,
+  ImportAmbientesResult,
+  ImportProgress,
+} from "@inventario/types";
+import { IMPORT_PROGRESS_CHUNK_SIZE, toImportProgress } from "@inventario/types";
+import { Button, Dialog, FileInput, ImportProgressBar, Label } from "@inventario/ui";
 import { importAmbientes } from "@/lib/actions/import-ambientes";
 import {
   downloadImportAmbientesErrores,
@@ -28,6 +34,7 @@ export function AmbientesImportDialog({
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportAmbientesResult | null>(null);
@@ -37,6 +44,7 @@ export function AmbientesImportDialog({
     if (!open) {
       setFile(null);
       setPending(false);
+      setProgress(null);
       setParseError(null);
       setActionError(null);
       setResult(null);
@@ -60,6 +68,7 @@ export function AmbientesImportDialog({
   async function handleImport() {
     if (!file) return;
     setPending(true);
+    setProgress(null);
     setParseError(null);
     setActionError(null);
     setResult(null);
@@ -71,23 +80,49 @@ export function AmbientesImportDialog({
         return;
       }
 
-      const response = await importAmbientes(entidad.id, parsed.filas);
-      if (response.error) {
-        setActionError(response.error);
-        return;
-      }
-      if (response.data) {
-        setResult(response.data);
-        if (response.data.importados > 0) {
-          onImported?.();
-          router.refresh();
+      const filas = parsed.filas;
+      const total = filas.length;
+      setProgress(toImportProgress(0, total));
+
+      let importados = 0;
+      let sedesCreadas = 0;
+      let responsablesCreados = 0;
+      const errores: ImportAmbienteErrorItem[] = [];
+
+      for (let i = 0; i < filas.length; i += IMPORT_PROGRESS_CHUNK_SIZE) {
+        const chunk = filas.slice(i, i + IMPORT_PROGRESS_CHUNK_SIZE);
+        const response = await importAmbientes(entidad.id, chunk, { filaOffset: i });
+        if (response.error) {
+          setActionError(response.error);
+          return;
         }
+        if (response.data) {
+          importados += response.data.importados;
+          sedesCreadas += response.data.sedesCreadas;
+          responsablesCreados += response.data.responsablesCreados;
+          errores.push(...response.data.errores);
+        }
+        setProgress(toImportProgress(Math.min(i + chunk.length, total), total));
+      }
+
+      const aggregated: ImportAmbientesResult = {
+        totalFilas: total,
+        importados,
+        sedesCreadas,
+        responsablesCreados,
+        errores,
+      };
+      setResult(aggregated);
+      if (importados > 0) {
+        onImported?.();
+        router.refresh();
       }
     } catch (err) {
       console.error(err);
       setActionError("No se pudo completar la importación.");
     } finally {
       setPending(false);
+      setProgress(null);
     }
   }
 
@@ -114,7 +149,7 @@ export function AmbientesImportDialog({
             type="button"
             variant="outline"
             size="sm"
-            disabled={templatePending}
+            disabled={templatePending || pending}
             onClick={() => void handleDownloadPlantilla()}
           >
             {templatePending ? "Generando…" : "Descargar plantilla"}
@@ -138,6 +173,8 @@ export function AmbientesImportDialog({
             }}
           />
         </div>
+
+        {pending && progress && <ImportProgressBar progress={progress} />}
 
         {parseError && (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -197,7 +234,7 @@ export function AmbientesImportDialog({
           </Button>
           {!result && (
             <Button type="button" size="sm" disabled={!canImport} onClick={() => void handleImport()}>
-              {pending ? "Importando…" : "Importar"}
+              {pending ? `Importando… ${progress?.percent ?? 0}%` : "Importar"}
             </Button>
           )}
         </div>

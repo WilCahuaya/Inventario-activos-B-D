@@ -87,7 +87,7 @@ export interface CreateActivoInput {
   descripcion?: string;
   caracteristicas?: string;
   categoria?: CategoriaBien;
-  estado_bien?: EstadoBien;
+  estado_bien?: EstadoBien | null;
   marca?: string;
   modelo?: string;
   serie?: string;
@@ -362,7 +362,7 @@ export async function createActivo(
     descripcion: input.descripcion?.trim() || null,
     caracteristicas: input.caracteristicas?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
-    estado_bien: input.estado_bien ?? "BUENO",
+    estado_bien: input.estado_bien ?? null,
     marca: input.marca?.trim() || null,
     modelo: input.modelo?.trim() || null,
     serie: input.serie?.trim() || null,
@@ -435,7 +435,7 @@ export async function updateActivo(
     descripcion: input.descripcion?.trim() || null,
     caracteristicas: input.caracteristicas?.trim() || null,
     categoria: input.categoria ?? "ACTIVO",
-    estado_bien: input.estado_bien ?? "BUENO",
+    estado_bien: input.estado_bien ?? null,
     marca: input.marca?.trim() || null,
     modelo: input.modelo?.trim() || null,
     serie: input.serie?.trim() || null,

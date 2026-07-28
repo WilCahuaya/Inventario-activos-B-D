@@ -60,6 +60,7 @@ export function ResponsableFormFields({
           name="email"
           type="email"
           placeholder="Opcional"
+          title="Formato de correo válido"
           defaultValue={responsable?.email ?? ""}
         />
       </div>
@@ -68,7 +69,10 @@ export function ResponsableFormFields({
         <Input
           id={`${idPrefix}_telefono`}
           name="telefono"
-          placeholder="Opcional"
+          inputMode="numeric"
+          maxLength={9}
+          placeholder="9 dígitos (opcional)"
+          title="Celular Perú: 9 dígitos"
           defaultValue={responsable?.telefono ?? ""}
         />
       </div>

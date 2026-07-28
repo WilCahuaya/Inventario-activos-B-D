@@ -278,7 +278,10 @@ function FullTableBody<T extends Activo>({
             <InventarioTextCell title={descripcion} lineClamp2>
               {descripcion}
             </InventarioTextCell>
-            <InventarioFechaCell fecha={activo.fecha_adquisicion} />
+            <InventarioFechaCell
+              fecha={activo.fecha_adquisicion}
+              valorEsMercado={activo.valor_es_mercado}
+            />
             {!modoAdmin && <CuentaContableCell activo={activo} />}
             <td className={`${tdBase} text-center`}>
               <EstadoBienBadge estado={activo.estado_bien} />

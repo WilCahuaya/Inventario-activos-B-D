@@ -32,6 +32,8 @@ import {
   vidaUtilMesesFromPorcentaje,
   debePersistirCuentaContableEnActivo,
   entidadMuestraSelectorSede,
+  isCatalogoNacionalOficial,
+  isCatalogoPropio,
   sedeIdSinSelector,
   splitObservacionActivo,
   type ActivoAtributoCampo,
@@ -55,6 +57,7 @@ import {
   Select,
   Textarea,
 } from "@inventario/ui";
+import { fechaAdquisicionToneClass } from "@inventario/ui/panel";
 import {
   createActivo,
   previewCodigoBarras,
@@ -73,7 +76,8 @@ import {
   listCatalogoClases,
   listCatalogoGrupos,
   registerCatalogoOpcionPersonalizada,
-  searchCatalogo,
+  searchCatalogoNacionalOficial,
+  searchCatalogoPropio,
   searchCuentasContables,
   suggestCatalogoGrupo,
   upsertCuentaContable,
@@ -172,7 +176,38 @@ export function ActivoForm({
   /** Bulk: contador siempre ve cuenta/depreciación/vida útil (incluso en preregistro). */
   const mostrarCuentaContableBulk = esBulkContador;
   const mostrarDepreciacionBulk = esBulkContador && categoria !== "CUENTA_ORDEN";
-  const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO">("BUENO");
+
+  const searchCatalogoByCategoria = useCallback(
+    (query: string, limit?: number) =>
+      categoria === "CUENTA_ORDEN"
+        ? searchCatalogoPropio(query, limit)
+        : searchCatalogoNacionalOficial(query, limit),
+    [categoria],
+  );
+
+  function handleCategoriaChange(next: CategoriaBien) {
+    setCategoria(next);
+    if (!catalogo) return;
+    const esPropio = isCatalogoPropio(catalogo);
+    if (next === "ACTIVO" && esPropio) {
+      setCatalogo(null);
+      setNombre("");
+      setNombreEtiqueta("");
+      setDepreciacion("");
+      setVidaUtilMeses("");
+      setCuentaCodigo("");
+      setCuentaNombre("");
+    } else if (next === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
+      setCatalogo(null);
+      setNombre("");
+      setNombreEtiqueta("");
+      setDepreciacion("");
+      setVidaUtilMeses("");
+      setCuentaCodigo("");
+      setCuentaNombre("");
+    }
+  }
+  const [estadoBien, setEstadoBien] = useState<"BUENO" | "REGULAR" | "MALO" | null>(null);
   const [marca, setMarca] = useState("");
   const [modelo, setModelo] = useState("");
   const [serie, setSerie] = useState("");
@@ -318,12 +353,11 @@ export function ActivoForm({
   useEffect(() => {
     if (!catalogo || isEdit) return;
     if (categoria === "CUENTA_ORDEN") {
-      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
-      setCuentaNombre("");
-      cuentaReferenciaRef.current = {
-        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
-        nombre: "",
-      };
+      const codigo = catalogo.cuenta_codigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD;
+      const nombre = catalogo.contabilidad?.trim() || "";
+      setCuentaCodigo(codigo);
+      setCuentaNombre(nombre);
+      cuentaReferenciaRef.current = { codigo, nombre };
       return;
     }
     const codigo = catalogo.cuenta_codigo ?? "";
@@ -336,12 +370,11 @@ export function ActivoForm({
   useEffect(() => {
     if (!isEdit || !activo || !catalogo || activoTieneCuentaContablePropia(activo)) return;
     if (categoria === "CUENTA_ORDEN") {
-      setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
-      setCuentaNombre("");
-      cuentaReferenciaRef.current = {
-        codigo: CATALOGO_CUENTA_ORDEN_CONTABILIDAD,
-        nombre: "",
-      };
+      const codigo = catalogo.cuenta_codigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD;
+      const nombre = catalogo.contabilidad?.trim() || "";
+      setCuentaCodigo(codigo);
+      setCuentaNombre(nombre);
+      cuentaReferenciaRef.current = { codigo, nombre };
       return;
     }
     const codigo = catalogo.cuenta_codigo ?? "";
@@ -356,8 +389,8 @@ export function ActivoForm({
       setDepreciacion("");
       setVidaUtilMeses("");
       if (mostrarCuentaContable) {
-        setCuentaCodigo(CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
-        setCuentaNombre("");
+        setCuentaCodigo(catalogo?.cuenta_codigo?.trim() || CATALOGO_CUENTA_ORDEN_CONTABILIDAD);
+        setCuentaNombre(catalogo?.contabilidad?.trim() || "");
       }
     }
   }, [categoria, mostrarCuentaContable]);
@@ -541,7 +574,7 @@ export function ActivoForm({
     setNombre("");
     setNombreEtiqueta("");
     setCategoria("ACTIVO");
-    setEstadoBien("BUENO");
+    setEstadoBien(null);
     setMarca("");
     setModelo("");
     setSerie("");
@@ -680,7 +713,11 @@ export function ActivoForm({
     }
 
     if (!catalogo) {
-      setMessage("Seleccione un ítem del catálogo nacional.");
+      setMessage(
+        categoria === "CUENTA_ORDEN"
+          ? "Seleccione un ítem del catálogo propio."
+          : "Seleccione un ítem del catálogo nacional.",
+      );
       return;
     }
 
@@ -727,13 +764,25 @@ export function ActivoForm({
 
     if (
       mostrarCuentaContable &&
-      categoria === "ACTIVO" &&
       (cuentaCodigo.trim() || cuentaNombre.trim())
     ) {
       const cuentaError = validarCuentaContableParaCatalogo(cuentaCodigo, cuentaNombre);
       if (cuentaError) {
         setPending(false);
         setMessage(cuentaError);
+        return;
+      }
+    }
+
+    if (catalogo) {
+      if (categoria === "ACTIVO" && isCatalogoPropio(catalogo)) {
+        setPending(false);
+        setMessage("Para categoría Activo use un código del catálogo nacional.");
+        return;
+      }
+      if (categoria === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
+        setPending(false);
+        setMessage("Para cuenta de orden use un código del catálogo propio (BD…).");
         return;
       }
     }
@@ -785,8 +834,9 @@ export function ActivoForm({
         referenciaNombre: cuentaReferenciaRef.current.nombre,
       })
     ) {
-      payload.cuenta_contable_codigo = cuentaCodigo.trim() || null;
-      payload.cuenta_contable_nombre = cuentaNombre.trim() || null;
+      const cuentaPayload = buildActivoCuentaContablePayload(cuentaCodigo, cuentaNombre, categoria);
+      payload.cuenta_contable_codigo = cuentaPayload.cuenta_contable_codigo;
+      payload.cuenta_contable_nombre = cuentaPayload.cuenta_contable_nombre;
     }
 
     let bulkPatch: UpdateActivosSimilaresInput | null = null;
@@ -1060,7 +1110,7 @@ export function ActivoForm({
             <legend className={panelLegendClass}>Categoría</legend>
             <CategoriaBienSelector
               value={categoria}
-              onChange={setCategoria}
+              onChange={handleCategoriaChange}
               ayuda={CATEGORIA_BIEN_AYUDA}
               opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
                 key,
@@ -1079,9 +1129,9 @@ export function ActivoForm({
                 onNombreChange={setCuentaNombre}
                 searchCuentas={searchCuentasContables}
                 onCreateCuenta={upsertCuentaContable}
-                disabled={pending || categoria === "CUENTA_ORDEN"}
+                disabled={pending}
                 codigoId="activo_cuenta_codigo_bulk"
-                allowCreateNew={categoria !== "CUENTA_ORDEN"}
+                allowCreateNew
               />
             </fieldset>
           )}
@@ -1174,9 +1224,17 @@ export function ActivoForm({
                 placeholder="DD/MM/AAAA"
                 maxLength={10}
                 aria-invalid={Boolean(fechaAdquisicionError)}
+                className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
               />
               {fechaAdquisicionError && (
                 <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+              )}
+              {!fechaAdquisicionError && fechaAdquisicion && (
+                <p className="text-xs text-muted-foreground">
+                  {valorEsMercado
+                    ? "Color ámbar: fecha aproximada (valor de mercado)."
+                    : "Color azul: fecha segura (precio / factura)."}
+                </p>
               )}
             </div>
             {!valorEsMercado && (
@@ -1267,9 +1325,12 @@ export function ActivoForm({
               <Label htmlFor="estado_bien_bulk">Estado</Label>
               <Select
                 id="estado_bien_bulk"
-                value={estadoBien}
-                onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+                value={estadoBien ?? ""}
+                onChange={(value) =>
+                  setEstadoBien(value === "" ? null : (value as "BUENO" | "REGULAR" | "MALO"))
+                }
                 options={[
+                  { value: "", label: "Sin especificar" },
                   { value: "BUENO", label: "Bueno" },
                   { value: "REGULAR", label: "Regular" },
                   { value: "MALO", label: "Malo" },
@@ -1378,16 +1439,31 @@ export function ActivoForm({
           </div>
         )}
 
+        <CategoriaBienSelector
+          value={categoria}
+          onChange={handleCategoriaChange}
+          ayuda={CATEGORIA_BIEN_AYUDA}
+          opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
+            key,
+            ...CATEGORIA_BIEN_LABELS[key],
+          }))}
+          className={categoriaGridClass}
+          headerClassName={isGridForm ? "sm:col-span-2" : ""}
+        />
+
         <CatalogoPicker
-          searchCatalogo={searchCatalogo}
+          variant={categoria === "CUENTA_ORDEN" ? "propio" : "nacional"}
+          searchCatalogo={searchCatalogoByCategoria}
           resolveCodigo={getCatalogoByCodigo}
           selectedCodigo={catalogo?.codigo}
           selectedDenominacion={catalogo?.denominacion}
           disabled={pending || esEdicionMasiva || Boolean(catalogoAlta)}
           onSelect={(item) => {
             setCatalogoAlta(null);
-            if (item.origen === "PROPIO") {
+            if (isCatalogoPropio(item)) {
               setCategoria("CUENTA_ORDEN");
+            } else {
+              setCategoria("ACTIVO");
             }
             setCatalogo(item);
           }}
@@ -1403,20 +1479,23 @@ export function ActivoForm({
           }}
           renderAddMissing={(q) => (
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-              <button
-                type="button"
-                className="font-medium text-primary underline-offset-2 hover:underline"
-                onClick={() => setCatalogoAlta({ variant: "nacional", query: q })}
-              >
-                Crear en catálogo nacional
-              </button>
-              <button
-                type="button"
-                className="font-medium text-primary underline-offset-2 hover:underline"
-                onClick={() => setCatalogoAlta({ variant: "propio", query: q })}
-              >
-                Crear en catálogo propio
-              </button>
+              {categoria === "ACTIVO" ? (
+                <button
+                  type="button"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                  onClick={() => setCatalogoAlta({ variant: "nacional", query: q })}
+                >
+                  Crear en catálogo nacional
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                  onClick={() => setCatalogoAlta({ variant: "propio", query: q })}
+                >
+                  Crear en catálogo propio
+                </button>
+              )}
             </div>
           )}
         />
@@ -1433,18 +1512,6 @@ export function ActivoForm({
             className="bg-muted font-mono text-sm"
           />
         </div>
-
-        <CategoriaBienSelector
-          value={categoria}
-          onChange={setCategoria}
-          ayuda={CATEGORIA_BIEN_AYUDA}
-          opciones={(["ACTIVO", "CUENTA_ORDEN"] as const).map((key) => ({
-            key,
-            ...CATEGORIA_BIEN_LABELS[key],
-          }))}
-          className={categoriaGridClass}
-          headerClassName={isGridForm ? "sm:col-span-2" : ""}
-        />
 
         <div className="space-y-2">
           <Label htmlFor="nombre">Nombre del bien</Label>
@@ -1464,9 +1531,9 @@ export function ActivoForm({
             onNombreChange={setCuentaNombre}
             searchCuentas={searchCuentasContables}
             onCreateCuenta={upsertCuentaContable}
-            disabled={pending || categoria === "CUENTA_ORDEN"}
+            disabled={pending}
             codigoId="activo_cuenta_codigo"
-            allowCreateNew={categoria !== "CUENTA_ORDEN"}
+            allowCreateNew
           />
         )}
 
@@ -1577,9 +1644,12 @@ export function ActivoForm({
           <Label htmlFor="estado_bien">Estado del bien</Label>
           <Select
             id="estado_bien"
-            value={estadoBien}
-            onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+            value={estadoBien ?? ""}
+            onChange={(value) =>
+              setEstadoBien(value === "" ? null : (value as "BUENO" | "REGULAR" | "MALO"))
+            }
             options={[
+              { value: "", label: "Sin especificar" },
               { value: "BUENO", label: "Bueno" },
               { value: "REGULAR", label: "Regular" },
               { value: "MALO", label: "Malo" },
@@ -1659,9 +1729,17 @@ export function ActivoForm({
               placeholder="DD/MM/AAAA"
               maxLength={10}
               aria-invalid={Boolean(fechaAdquisicionError)}
+              className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
             />
             {fechaAdquisicionError && (
               <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+            )}
+            {!fechaAdquisicionError && fechaAdquisicion && (
+              <p className="text-xs text-muted-foreground">
+                {valorEsMercado
+                  ? "Color ámbar: fecha aproximada (valor de mercado)."
+                  : "Color azul: fecha segura (precio / factura)."}
+              </p>
             )}
           </div>
         </div>
@@ -1902,9 +1980,12 @@ export function ActivoForm({
               <Label htmlFor="estado_bien_admin">Estado</Label>
               <Select
                 id="estado_bien_admin"
-                value={estadoBien}
-                onChange={(value) => setEstadoBien(value as typeof estadoBien)}
+                value={estadoBien ?? ""}
+                onChange={(value) =>
+                  setEstadoBien(value === "" ? null : (value as "BUENO" | "REGULAR" | "MALO"))
+                }
                 options={[
+                  { value: "", label: "Sin especificar" },
                   { value: "BUENO", label: "Bueno" },
                   { value: "REGULAR", label: "Regular" },
                   { value: "MALO", label: "Malo" },

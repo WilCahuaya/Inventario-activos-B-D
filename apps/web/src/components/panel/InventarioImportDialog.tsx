@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Entidad } from "@inventario/types";
-import type { ImportActivosResult } from "@inventario/types";
-import { Button, Dialog, FileInput, Label, Select } from "@inventario/ui";
+import type {
+  Entidad,
+  ImportActivoErrorItem,
+  ImportActivosResult,
+  ImportProgress,
+} from "@inventario/types";
+import { IMPORT_PROGRESS_CHUNK_SIZE, toImportProgress } from "@inventario/types";
+import { Button, Dialog, FileInput, ImportProgressBar, Label, Select } from "@inventario/ui";
 import { getImportActivosUbicaciones, importActivos } from "@/lib/actions/import-activos";
 import {
   downloadImportActivosErrores,
@@ -32,6 +37,7 @@ export function InventarioImportDialog({
   const [entidadId, setEntidadId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportActivosResult | null>(null);
@@ -45,6 +51,7 @@ export function InventarioImportDialog({
       setEntidadId("");
       setFile(null);
       setPending(false);
+      setProgress(null);
       setParseError(null);
       setActionError(null);
       setResult(null);
@@ -78,6 +85,7 @@ export function InventarioImportDialog({
   async function handleImport() {
     if (!resolvedEntidadId || !file) return;
     setPending(true);
+    setProgress(null);
     setParseError(null);
     setActionError(null);
     setResult(null);
@@ -89,23 +97,43 @@ export function InventarioImportDialog({
         return;
       }
 
-      const response = await importActivos(resolvedEntidadId, parsed.filas);
-      if (response.error) {
-        setActionError(response.error);
-        return;
-      }
-      if (response.data) {
-        setResult(response.data);
-        if (response.data.importados > 0) {
-          onImported?.();
-          router.refresh();
+      const filas = parsed.filas;
+      const total = filas.length;
+      setProgress(toImportProgress(0, total));
+
+      let importados = 0;
+      const errores: ImportActivoErrorItem[] = [];
+
+      for (let i = 0; i < filas.length; i += IMPORT_PROGRESS_CHUNK_SIZE) {
+        const chunk = filas.slice(i, i + IMPORT_PROGRESS_CHUNK_SIZE);
+        const response = await importActivos(resolvedEntidadId, chunk, { filaOffset: i });
+        if (response.error) {
+          setActionError(response.error);
+          return;
         }
+        if (response.data) {
+          importados += response.data.importados;
+          errores.push(...response.data.errores);
+        }
+        setProgress(toImportProgress(Math.min(i + chunk.length, total), total));
+      }
+
+      const aggregated: ImportActivosResult = {
+        totalFilas: total,
+        importados,
+        errores,
+      };
+      setResult(aggregated);
+      if (importados > 0) {
+        onImported?.();
+        router.refresh();
       }
     } catch (err) {
       console.error(err);
       setActionError("No se pudo completar la importación.");
     } finally {
       setPending(false);
+      setProgress(null);
     }
   }
 
@@ -154,7 +182,7 @@ export function InventarioImportDialog({
             type="button"
             variant="outline"
             size="sm"
-            disabled={!resolvedEntidadId || templatePending}
+            disabled={!resolvedEntidadId || templatePending || pending}
             onClick={() => void handleDownloadPlantilla()}
           >
             {templatePending ? "Generando…" : "Descargar plantilla"}
@@ -178,6 +206,8 @@ export function InventarioImportDialog({
             }}
           />
         </div>
+
+        {pending && progress && <ImportProgressBar progress={progress} />}
 
         {parseError && (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -218,7 +248,7 @@ export function InventarioImportDialog({
           </Button>
           {!result && (
             <Button type="button" size="sm" disabled={!canImport} onClick={() => void handleImport()}>
-              {pending ? "Importando…" : "Importar"}
+              {pending ? `Importando… ${progress?.percent ?? 0}%` : "Importar"}
             </Button>
           )}
         </div>

@@ -1,22 +1,22 @@
 import { normalizeImportKey } from "./import-activos";
+import {
+  normalizeResponsableDni,
+  normalizeResponsableNombre,
+  validarCreateResponsableInput,
+} from "./responsable-validacion";
 
-function normalizeResponsableNombre(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function normalizeResponsableDni(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
-function validarResponsableImport(nombre: string, dni: string | null): string | null {
-  if (!normalizeResponsableNombre(nombre)) {
-    return "El nombre del responsable es obligatorio.";
-  }
-  const dniNorm = normalizeResponsableDni(dni ?? "");
-  if (dniNorm && dniNorm.length !== 8) {
-    return "El DNI debe tener 8 dígitos.";
-  }
-  return null;
+function validarResponsableImport(
+  nombre: string,
+  dni: string | null,
+  email: string | null,
+  telefono: string | null,
+): string | null {
+  return validarCreateResponsableInput({
+    nombre,
+    dni: dni ?? "",
+    email: email ?? undefined,
+    telefono: telefono ?? undefined,
+  });
 }
 
 export const MAX_IMPORT_AMBIENTES_FILAS = 500;
@@ -235,7 +235,12 @@ export function parseImportAmbienteFila(
     return { ok: false, motivo: "Indique el nombre del responsable o deje vacíos todos sus datos." };
   }
 
-  const validationError = validarResponsableImport(data.responsableNombre, data.responsableDni);
+  const validationError = validarResponsableImport(
+    data.responsableNombre,
+    data.responsableDni,
+    data.responsableEmail,
+    data.responsableTelefono,
+  );
   if (validationError) {
     return { ok: false, motivo: validationError };
   }

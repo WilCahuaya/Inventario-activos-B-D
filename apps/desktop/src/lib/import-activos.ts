@@ -1,12 +1,14 @@
 import {
-  buildCuentaContableLookup,
   buildUbicacionLookup,
+  normalizeImportCodigoCatalogoRaw,
+  toImportProgress,
   validateImportActivoFila,
   type ImportActivoCatalogoItem,
   type ImportActivoErrorItem,
   type ImportActivoFila,
   type ImportActivosResult,
   type ImportActivoInsertPayload,
+  type ImportProgress,
   type ImportUbicacionRef,
 } from "@inventario/types";
 import type { Activo } from "@inventario/types";
@@ -14,7 +16,7 @@ import {
   type ActivoConUbicacion,
   type CreateActivoInput,
 } from "./activos";
-import { getCatalogoByCodigo } from "./catalogo";
+import { getCatalogoByCodigo, upsertCuentaContable } from "./catalogo";
 import { isOnline, listMasterDomain } from "./master-cache";
 import { enqueueOfflineCreate, upsertCachedActivo } from "./offline";
 import { fetchProfile } from "./profile";
@@ -78,17 +80,30 @@ async function loadCatalogoForImport(codigos: string[]): Promise<Map<string, Imp
   return map;
 }
 
-async function loadCuentaContableLookup(): Promise<Map<string, string>> {
+async function loadCuentasContablesLookup(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
   if (!isOnline()) {
-    return new Map();
+    return map;
   }
 
   const supabase = getSupabaseClient();
-  const { data } = await supabase
-    .from("catalogo_nacional")
-    .select("cuenta_codigo, contabilidad")
-    .not("cuenta_codigo", "is", null);
-  return buildCuentaContableLookup(data ?? []);
+  const { data } = await supabase.from("cuentas_contables").select("codigo, nombre");
+  for (const row of data ?? []) {
+    const codigo = String(row.codigo ?? "").trim();
+    if (!codigo) continue;
+    map.set(codigo, String(row.nombre ?? "").trim() || codigo);
+  }
+  return map;
+}
+
+function collectImportCatalogoCodigos(filas: ImportActivoFila[]): string[] {
+  const codes = new Set<string>();
+  for (const fila of filas) {
+    for (const code of normalizeImportCodigoCatalogoRaw(fila["Código catálogo"])) {
+      codes.add(code);
+    }
+  }
+  return [...codes];
 }
 
 function buildCreateActivoInput(payload: ImportActivoInsertPayload): CreateActivoInput {
@@ -196,6 +211,10 @@ async function insertActivoImportOffline(
 export async function importActivos(
   entidadId: string,
   filas: ImportActivoFila[],
+  options?: {
+    filaOffset?: number;
+    onProgress?: (progress: ImportProgress) => void;
+  },
 ): Promise<{ data?: ImportActivosResult; error?: string }> {
   const profile = await fetchProfile();
   if (!profile || profile.rol !== "CONTADOR") {
@@ -225,19 +244,23 @@ export async function importActivos(
   const responsableByAmbiente = new Map(
     ubicaciones.map((u) => [u.ambienteId, u.responsable?.trim() || null] as const),
   );
-  const codigos = filas.map((f) => f["Código catálogo"].replace(/\D/g, "").padStart(8, "0").slice(-8));
+  const codigos = collectImportCatalogoCodigos(filas);
   const [catalogoByCodigo, cuentaLookupSeed] = await Promise.all([
     loadCatalogoForImport(codigos),
-    loadCuentaContableLookup(),
+    loadCuentasContablesLookup(),
   ]);
 
   const errores: ImportActivoErrorItem[] = [];
   let importados = 0;
   let cuentaLookup = cuentaLookupSeed;
+  const filaOffset = options?.filaOffset ?? 0;
+  const onProgress = options?.onProgress;
+  onProgress?.(toImportProgress(0, filas.length));
 
   for (let i = 0; i < filas.length; i++) {
+    try {
     const fila = filas[i]!;
-    const filaExcel = i + 2;
+    const filaExcel = filaOffset + i + 2;
     const validated = validateImportActivoFila(
       fila,
       entidadId,
@@ -251,6 +274,14 @@ export async function importActivos(
     }
 
     cuentaLookup = validated.cuentaLookup;
+    if (validated.cuentaToCreate) {
+      const created = await upsertCuentaContable(validated.cuentaToCreate);
+      if (created.error) {
+        errores.push({ fila: filaExcel, datos: fila, motivo: created.error });
+        continue;
+      }
+    }
+
     const payload = validated.payload;
     const responsable = responsableByAmbiente.get(payload.ambiente_id) ?? null;
 
@@ -302,6 +333,9 @@ export async function importActivos(
     }
 
     importados += 1;
+    } finally {
+      onProgress?.(toImportProgress(i + 1, filas.length));
+    }
   }
 
   return {

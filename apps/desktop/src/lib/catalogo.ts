@@ -16,8 +16,10 @@ import {
   buildUpdateCatalogoPropioPayload,
   buildUpdateCatalogoNacionalContabilidadPayload,
   CATALOGO_CONSULTA_MAX_RESULTS,
+  CATALOGO_SEARCH_MAX_RESULTS,
   CATALOGO_PROPIO_CODIGO_RE,
   isCatalogoNacionalOficial,
+  isCatalogoPropio,
   minCatalogoQueryLength,
   nextCodigoCatalogoPropioFromMax,
   normalizeCuentaCodigo,
@@ -178,6 +180,14 @@ export async function searchCatalogoNacionalOficial(
 ): Promise<CatalogoNacional[]> {
   const items = await searchCatalogo(query, limit);
   return items.filter(isCatalogoNacionalOficial);
+}
+
+export async function searchCatalogoPropio(
+  query: string,
+  limit = CATALOGO_SEARCH_MAX_RESULTS,
+): Promise<CatalogoNacional[]> {
+  const items = await searchCatalogo(query, limit);
+  return items.filter(isCatalogoPropio);
 }
 
 export async function getCatalogoByCodigo(codigo: string): Promise<CatalogoNacional | null> {

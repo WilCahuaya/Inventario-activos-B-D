@@ -98,7 +98,14 @@ export const inventarioThStd =
 export const inventarioThAccent =
   "inventario-th-accent max-w-0 border-b border-r border-border/50 px-2.5 py-2 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-primary last:border-r-0";
 
-export function EstadoBienBadge({ estado }: { estado: EstadoBien }) {
+export function EstadoBienBadge({ estado }: { estado: EstadoBien | null | undefined }) {
+  if (!estado) {
+    return (
+      <span className="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-semibold text-muted-foreground sm:text-xs">
+        —
+      </span>
+    );
+  }
   const label = estadoBienLabel(estado);
   const className =
     estado === "BUENO"
@@ -323,11 +330,33 @@ export function InventarioValorPaVmCell({ activo }: { activo: Activo }) {
   return <ValorBienCell activo={activo} />;
 }
 
-export function InventarioFechaCell({ fecha }: { fecha?: string | null }) {
+/** Color de fecha: segura (precio/factura) vs aproximada (valor de mercado). */
+export function fechaAdquisicionToneClass(valorEsMercado?: boolean | null): string {
+  if (valorEsMercado) {
+    return "text-amber-700 dark:text-amber-300";
+  }
+  return "text-sky-700 dark:text-sky-300";
+}
+
+export function InventarioFechaCell({
+  fecha,
+  valorEsMercado,
+}: {
+  fecha?: string | null;
+  valorEsMercado?: boolean | null;
+}) {
   const corto = formatFechaISOToCortoES(fecha);
   const tabla = formatFechaISOToDDMMYYYY(fecha) || "—";
+  const tone =
+    fecha && valorEsMercado != null
+      ? fechaAdquisicionToneClass(valorEsMercado)
+      : "text-foreground";
+  const titulo =
+    fecha && valorEsMercado != null
+      ? `${corto || tabla} · ${valorEsMercado ? "Fecha aproximada (valor de mercado)" : "Fecha segura (adquisición)"}`
+      : corto || undefined;
   return (
-    <td className={inventarioTdFechaClass} title={corto || undefined}>
+    <td className={`${inventarioTdFechaClass} ${tone}`} title={titulo}>
       {tabla}
     </td>
   );
