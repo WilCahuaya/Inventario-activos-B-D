@@ -11,6 +11,7 @@ import {
   formatFechaISOToCortoES,
   formatMonedaPE,
   formatPosibleAmbienteLabel,
+  valorActivoEfectivo,
 } from "@inventario/types";
 import { cn } from "./components";
 import { EstadoBienBadge, fechaAdquisicionToneClass, inventarioDepreciacionFila } from "./inventario-table-cells";
@@ -193,8 +194,15 @@ export function ActivoDetalleSheet({
   const periodoTexto = periodo > 0 ? String(Math.round(periodo)) : "—";
   const esMercado = activo.valor_es_mercado;
   const precioLabel = esMercado ? "Valor mercado" : "Precio adquisición";
-  const precioValor =
-    activo.valor_adquisicion != null ? `S/ ${formatMonedaPE(activo.valor_adquisicion)}` : "—";
+  const valorEfectivo = valorActivoEfectivo(activo.valor_adquisicion, activo.valor_incremento);
+  const precioValor = valorEfectivo != null ? `S/ ${formatMonedaPE(valorEfectivo)}` : "—";
+  const mejoraTexto =
+    activo.valor_incremento != null && Number(activo.valor_incremento) > 0
+      ? [
+          activo.incremento_detalle?.trim() || "Mejora",
+          `+ S/ ${formatMonedaPE(activo.valor_incremento)}`,
+        ].join(" · ")
+      : null;
   const valorNetoTexto = valorNeto != null ? `S/ ${formatMonedaPE(valorNeto)}` : "—";
   const depAcumTexto = depAcum != null ? `S/ ${formatMonedaPE(depAcum)}` : "—";
 
@@ -259,7 +267,11 @@ export function ActivoDetalleSheet({
         </div>
 
         <div className="detalle-surface flex overflow-hidden bg-muted/15">
-          <DetalleMetric label={precioLabel} value={precioValor} />
+          <DetalleMetric
+            label={precioLabel}
+            value={precioValor}
+            sub={mejoraTexto ?? undefined}
+          />
           <DetalleMetric label="Valor neto" value={valorNetoTexto} highlight />
           <DetalleMetric
             label="Depreciación"

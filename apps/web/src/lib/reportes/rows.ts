@@ -10,6 +10,8 @@ import {
   formatCuentaContableDisplay,
   formatFechaISOToDDMMYYYY,
   formatMonedaPE,
+  resolveFechaInicioDepreciacion,
+  valorActivoEfectivo,
 } from "@inventario/types";
 import {
   FICHA_ASIGNACION_TITULO,
@@ -271,17 +273,21 @@ function ubicacionReporteLabel(activo: ActivoReporte, reporteId: ReporteId): str
 }
 
 function valoresMonetariosFila(activo: ActivoReporte, fechaCorte: Date): string[] {
-  const precioAdq = !activo.valor_es_mercado ? activo.valor_adquisicion : null;
-  const valorMercado = activo.valor_es_mercado ? activo.valor_adquisicion : null;
+  const valorEfectivo = valorActivoEfectivo(activo.valor_adquisicion, activo.valor_incremento);
+  const precioAdq = !activo.valor_es_mercado ? valorEfectivo : null;
+  const valorMercado = activo.valor_es_mercado ? valorEfectivo : null;
   const dadoDeBaja = activo.estado_registro === "DADO_DE_BAJA";
-  const periodo = calcPeriodoMesesHasta(activo.fecha_adquisicion, fechaCorte);
+  const periodo = calcPeriodoMesesHasta(
+    resolveFechaInicioDepreciacion(activo.fecha_inicio_depreciacion, activo.fecha_adquisicion),
+    fechaCorte,
+  );
   const depAcum = calcDepreciacionAcumulada(
-    activo.valor_adquisicion,
+    valorEfectivo,
     activo.vida_util_meses,
     periodo,
     dadoDeBaja,
   );
-  const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum, dadoDeBaja);
+  const valorNeto = calcValorNeto(valorEfectivo, depAcum, dadoDeBaja);
 
   return [
     precioAdq != null ? `S/ ${formatMonedaPE(precioAdq)}` : "—",

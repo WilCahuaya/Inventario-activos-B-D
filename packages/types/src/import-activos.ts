@@ -157,6 +157,8 @@ export interface ImportActivoInsertPayload {
   color: string | null;
   medidas: string | null;
   fecha_adquisicion: string | null;
+  /** Derivado del mes siguiente a la adquisición al importar. */
+  fecha_inicio_depreciacion: string | null;
   valor_adquisicion: number | null;
   valor_es_mercado: boolean;
   depreciacion: string | null;
@@ -634,6 +636,14 @@ export function validateImportActivoFila(
       color: fila.Color.trim() || null,
       medidas: fila.Medidas.trim() || null,
       fecha_adquisicion: fechaAdquisicion,
+      fecha_inicio_depreciacion: fechaAdquisicion
+        ? (() => {
+            const [y, m] = fechaAdquisicion.split("-").map(Number);
+            if (!y || !m || m < 1 || m > 12) return null;
+            const next = new Date(y, m, 1);
+            return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+          })()
+        : null,
       valor_adquisicion: valorAdquisicion,
       valor_es_mercado: valorEsMercado,
       depreciacion,

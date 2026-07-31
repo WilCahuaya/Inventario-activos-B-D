@@ -47,6 +47,9 @@ export interface CreateActivoInput {
   valor_adquisicion?: number;
   valor_es_mercado?: boolean;
   fecha_adquisicion?: string;
+  fecha_inicio_depreciacion?: string;
+  incremento_detalle?: string | null;
+  valor_incremento?: number | null;
   vida_util_meses?: number;
   sede_id?: string;
   ambiente_id?: string;
@@ -152,6 +155,9 @@ export async function createActivo(input: CreateActivoInput) {
     valor_adquisicion: input.valor_adquisicion ?? null,
     valor_es_mercado: input.valor_es_mercado ?? false,
     fecha_adquisicion: input.fecha_adquisicion || null,
+    fecha_inicio_depreciacion: input.fecha_inicio_depreciacion || null,
+    incremento_detalle: input.incremento_detalle?.trim() || null,
+    valor_incremento: input.valor_incremento ?? null,
   };
 
   if (esPreregistro) {
@@ -287,6 +293,9 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         valor_adquisicion: input.valor_adquisicion ?? null,
         valor_es_mercado: input.valor_es_mercado ?? false,
         fecha_adquisicion: input.fecha_adquisicion || null,
+        fecha_inicio_depreciacion: input.fecha_inicio_depreciacion || null,
+        incremento_detalle: input.incremento_detalle?.trim() || null,
+        valor_incremento: input.valor_incremento ?? null,
         vida_util_meses: null,
         comprobante_serie: input.comprobante_serie?.trim() || null,
         posible_ambiente_id: input.posible_ambiente_id ?? null,
@@ -363,6 +372,9 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         valor_adquisicion: input.valor_adquisicion ?? null,
         valor_es_mercado: input.valor_es_mercado ?? false,
         fecha_adquisicion: input.fecha_adquisicion || null,
+        fecha_inicio_depreciacion: input.fecha_inicio_depreciacion || null,
+        incremento_detalle: input.incremento_detalle?.trim() || null,
+        valor_incremento: input.valor_incremento ?? null,
         vida_util_meses: input.vida_util_meses ?? null,
         comprobante_serie: input.comprobante_serie?.trim() || null,
         posible_ambiente_id: input.posible_ambiente_id ?? null,
@@ -395,6 +407,9 @@ export async function updateActivo(activoId: string, input: UpdateActivoInput) {
         valor_adquisicion: input.valor_adquisicion ?? null,
         valor_es_mercado: input.valor_es_mercado ?? false,
         fecha_adquisicion: input.fecha_adquisicion || null,
+        fecha_inicio_depreciacion: input.fecha_inicio_depreciacion || null,
+        incremento_detalle: input.incremento_detalle?.trim() || null,
+        valor_incremento: input.valor_incremento ?? null,
         vida_util_meses: input.vida_util_meses ?? null,
         sede_id: input.sede_id || null,
         ambiente_id: ambienteId,

@@ -98,6 +98,9 @@ export interface CreateActivoInput {
   valor_adquisicion?: number;
   valor_es_mercado?: boolean;
   fecha_adquisicion?: string;
+  fecha_inicio_depreciacion?: string;
+  incremento_detalle?: string | null;
+  valor_incremento?: number | null;
   vida_util_meses?: number;
   comprobante_serie?: string;
   cuenta_contable_codigo?: string | null;
@@ -395,6 +398,9 @@ export async function createActivo(
     valor_adquisicion: input.valor_adquisicion ?? null,
     valor_es_mercado: input.valor_es_mercado ?? false,
     fecha_adquisicion: input.fecha_adquisicion || null,
+    fecha_inicio_depreciacion: input.fecha_inicio_depreciacion || null,
+    incremento_detalle: input.incremento_detalle?.trim() || null,
+    valor_incremento: input.valor_incremento ?? null,
     vida_util_meses: input.vida_util_meses ?? null,
     comprobante_serie: input.comprobante_serie?.trim() || null,
   };
@@ -468,6 +474,9 @@ export async function updateActivo(
     valor_adquisicion: input.valor_adquisicion ?? null,
     valor_es_mercado: input.valor_es_mercado ?? false,
     fecha_adquisicion: input.fecha_adquisicion || null,
+    fecha_inicio_depreciacion: input.fecha_inicio_depreciacion || null,
+    incremento_detalle: input.incremento_detalle?.trim() || null,
+    valor_incremento: input.valor_incremento ?? null,
     vida_util_meses: input.vida_util_meses ?? null,
     comprobante_serie: input.comprobante_serie?.trim() || null,
   };
@@ -978,6 +987,9 @@ export async function createActivosSimilares(
         valor_adquisicion: template.valor_adquisicion ?? undefined,
         valor_es_mercado: template.valor_es_mercado ?? undefined,
         fecha_adquisicion: template.fecha_adquisicion ?? undefined,
+        fecha_inicio_depreciacion: template.fecha_inicio_depreciacion ?? undefined,
+        incremento_detalle: template.incremento_detalle ?? undefined,
+        valor_incremento: template.valor_incremento ?? undefined,
         vida_util_meses: template.vida_util_meses ?? undefined,
         comprobante_serie: template.comprobante_serie ?? undefined,
         cuenta_contable_codigo: template.cuenta_contable_codigo,
@@ -1102,6 +1114,9 @@ function activoEsSimilarLocal(a: ActivoConUbicacion, t: ActivoConUbicacion): boo
     (a.valor_adquisicion ?? null) === (t.valor_adquisicion ?? null) &&
     (a.valor_es_mercado ?? null) === (t.valor_es_mercado ?? null) &&
     (a.fecha_adquisicion ?? null) === (t.fecha_adquisicion ?? null) &&
+    (a.fecha_inicio_depreciacion ?? null) === (t.fecha_inicio_depreciacion ?? null) &&
+    norm(a.incremento_detalle) === norm(t.incremento_detalle) &&
+    (a.valor_incremento ?? null) === (t.valor_incremento ?? null) &&
     norm(a.comprobante_serie) === norm(t.comprobante_serie) &&
     norm(a.depreciacion) === norm(t.depreciacion) &&
     a.estado_registro !== "DADO_DE_BAJA"

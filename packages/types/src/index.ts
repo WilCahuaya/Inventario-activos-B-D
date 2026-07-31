@@ -250,7 +250,13 @@ export interface Activo {
   estado_bien: EstadoBien | null;
   categoria: CategoriaBien;
   valor_adquisicion: number | null;
+  /** Descripción de la mejora/componente (ej. memoria RAM). */
+  incremento_detalle?: string | null;
+  /** Monto de la mejora; el valor efectivo es adquisición + incremento. */
+  valor_incremento?: number | null;
   fecha_adquisicion: string | null;
+  /** Primer día del mes en que inicia la depreciación (editable). */
+  fecha_inicio_depreciacion?: string | null;
   vida_util_meses: number | null;
   foto_path: string | null;
   comprobante_path: string | null;
@@ -302,8 +308,11 @@ export interface UpdateActivosSimilaresInput {
   cuenta_contable_codigo?: string | null;
   cuenta_contable_nombre?: string | null;
   valor_adquisicion?: number | null;
+  incremento_detalle?: string | null;
+  valor_incremento?: number | null;
   valor_es_mercado?: boolean;
   fecha_adquisicion?: string | null;
+  fecha_inicio_depreciacion?: string | null;
   comprobante_serie?: string | null;
   comprobante_path?: string | null;
   foto_path?: string | null;
@@ -484,7 +493,7 @@ export function formatFechaISOToDDMMYYYY(iso: string | null | undefined): string
 }
 
 /**
- * Inicio de depreciación: primer día del mes siguiente a la adquisición (ISO YYYY-MM-DD).
+ * Inicio de depreciación por defecto: primer día del mes siguiente a la adquisición (ISO).
  * Ej. 15/03/2026 → 2026-04-01.
  */
 export function fechaInicioDepreciacionDesdeAdquisicion(
@@ -499,6 +508,41 @@ export function fechaInicioDepreciacionDesdeAdquisicion(
   // Date(year, month, 1) con month 1-based → primer día del mes siguiente
   const next = new Date(year, month, 1);
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** Fecha efectiva de inicio: valor guardado, o default desde adquisición. */
+export function resolveFechaInicioDepreciacion(
+  fechaInicio: string | null | undefined,
+  fechaAdquisicion: string | null | undefined,
+): string | null {
+  const stored = fechaInicio?.trim().slice(0, 10);
+  if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) return stored;
+  return fechaInicioDepreciacionDesdeAdquisicion(fechaAdquisicion);
+}
+
+/**
+ * Actualiza el input DD/MM/AAAA de inicio de depreciación al cambiar la adquisición,
+ * sin pisar un valor editado manualmente por el usuario.
+ */
+export function syncFechaInicioDepreciacionInput(
+  currentInicioDDMMYYYY: string,
+  prevAdquisicionDDMMYYYY: string,
+  nextAdquisicionDDMMYYYY: string,
+): string {
+  const nextIso = fechaInicioDepreciacionDesdeAdquisicion(
+    nextAdquisicionDDMMYYYY.trim() ? parseFechaDDMMYYYY(nextAdquisicionDDMMYYYY) : null,
+  );
+  if (!nextIso) return currentInicioDDMMYYYY;
+  const nextDefault = formatFechaISOToDDMMYYYY(nextIso);
+  const prevIso = fechaInicioDepreciacionDesdeAdquisicion(
+    prevAdquisicionDDMMYYYY.trim() ? parseFechaDDMMYYYY(prevAdquisicionDDMMYYYY) : null,
+  );
+  const prevDefault = prevIso ? formatFechaISOToDDMMYYYY(prevIso) : "";
+  const current = currentInicioDDMMYYYY.trim();
+  if (!current || current === prevDefault || current === nextDefault) {
+    return nextDefault;
+  }
+  return currentInicioDDMMYYYY;
 }
 
 const MESES_CORTO_ES = [
@@ -881,6 +925,32 @@ export function validarFechaDDMMYYYY(text: string): string | null {
   return null;
 }
 
+/**
+ * Valida formato y que la fecha de inicio no sea anterior al primer día
+ * del mes siguiente a la adquisición.
+ */
+export function validarFechaInicioDepreciacion(
+  fechaInicioDDMMYYYY: string,
+  fechaAdquisicionDDMMYYYY: string,
+): string | null {
+  const formatError = validarFechaDDMMYYYY(fechaInicioDDMMYYYY);
+  if (formatError) return formatError;
+  if (!fechaInicioDDMMYYYY.trim()) return null;
+
+  const adquisicionIso = fechaAdquisicionDDMMYYYY.trim()
+    ? parseFechaDDMMYYYY(fechaAdquisicionDDMMYYYY)
+    : null;
+  const minIso = fechaInicioDepreciacionDesdeAdquisicion(adquisicionIso);
+  if (!minIso) return null;
+
+  const inicioIso = parseFechaDDMMYYYY(fechaInicioDDMMYYYY);
+  if (!inicioIso) return "Fecha inválida.";
+  if (inicioIso < minIso) {
+    return `No puede ser anterior al ${formatFechaISOToDDMMYYYY(minIso)} (primer día del mes siguiente a la adquisición).`;
+  }
+  return null;
+}
+
 function parseFechaToDate(fecha: string | null): Date | null {
   if (!fecha?.trim()) return null;
   const iso = fecha.includes("/") ? parseFechaDDMMYYYY(fecha.trim()) : fecha.trim();
@@ -907,6 +977,20 @@ export function calcPeriodoMesesHasta(fechaAdquisicion: string | null, fechaHast
 
 /** Valor neto mínimo mientras el activo está vigente (no dado de baja). */
 export const VALOR_NETO_MINIMO_ACTIVO = 1;
+
+/** Valor contable efectivo: precio/valor de adquisición + incremento de mejora. */
+export function valorActivoEfectivo(
+  valorAdquisicion: number | null | undefined,
+  valorIncremento?: number | null,
+): number | null {
+  if (valorAdquisicion == null && (valorIncremento == null || Number(valorIncremento) === 0)) {
+    return null;
+  }
+  const base = Number(valorAdquisicion ?? 0);
+  const extra = Number(valorIncremento ?? 0);
+  if (Number.isNaN(base) || Number.isNaN(extra)) return null;
+  return base + extra;
+}
 
 export function calcDepreciacionAcumulada(
   valor: number | null,

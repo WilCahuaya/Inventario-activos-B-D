@@ -7,6 +7,8 @@ import {
   calcDepreciacionAcumulada,
   calcPeriodoMeses,
   calcValorNeto,
+  resolveFechaInicioDepreciacion,
+  valorActivoEfectivo,
   categoriaBienLetra,
   estadoBienLabel,
   formatActivoCodigoDisplay,
@@ -242,7 +244,7 @@ export function InventarioCategoriaCell({ activo }: { activo: Activo }) {
 
 export function ValorBienCell({ activo }: { activo: Activo }) {
   const esMercado = activo.valor_es_mercado;
-  const monto = activo.valor_adquisicion;
+  const monto = valorActivoEfectivo(activo.valor_adquisicion, activo.valor_incremento);
 
   if (monto == null) {
     return (
@@ -252,12 +254,19 @@ export function ValorBienCell({ activo }: { activo: Activo }) {
     );
   }
 
-  const etiqueta = esMercado ? "VM" : "PA";
   const titulo = esMercado ? "Valor mercado" : "Precio adquisición";
   const badgeKind: InventarioTablaBadgeKind = esMercado ? "VM" : "PA";
+  const detalleMejora = activo.incremento_detalle?.trim();
+  const titleExtra =
+    activo.valor_incremento != null && Number(activo.valor_incremento) > 0
+      ? ` · Incluye incremento${detalleMejora ? `: ${detalleMejora}` : ""}`
+      : "";
 
   return (
-    <td className={`${tdBase} text-right tabular-nums`} title={`${titulo}: S/ ${formatMonedaPE(monto)}`}>
+    <td
+      className={`${tdBase} text-right tabular-nums`}
+      title={`${titulo}: S/ ${formatMonedaPE(monto)}${titleExtra}`}
+    >
       <span className="inline-flex max-w-full items-center justify-end gap-1">
         <InventarioTablaLeyendaBadge kind={badgeKind} />
         <span className="truncate text-[11px] sm:text-xs">{formatMonedaPE(monto)}</span>
@@ -405,13 +414,16 @@ export function inventarioDescripcion(activo: Activo): string {
 }
 
 export function inventarioDepreciacionFila(activo: Activo, inactivo: boolean) {
-  const periodo = calcPeriodoMeses(activo.fecha_adquisicion);
+  const periodo = calcPeriodoMeses(
+    resolveFechaInicioDepreciacion(activo.fecha_inicio_depreciacion, activo.fecha_adquisicion),
+  );
+  const valor = valorActivoEfectivo(activo.valor_adquisicion, activo.valor_incremento);
   const depAcum = calcDepreciacionAcumulada(
-    activo.valor_adquisicion,
+    valor,
     activo.vida_util_meses,
     periodo,
     inactivo,
   );
-  const valorNeto = calcValorNeto(activo.valor_adquisicion, depAcum, inactivo);
+  const valorNeto = calcValorNeto(valor, depAcum, inactivo);
   return { periodo, depAcum, valorNeto };
 }

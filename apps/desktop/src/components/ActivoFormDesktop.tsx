@@ -16,10 +16,12 @@ import {
   calcPeriodoMeses,
   calcValorNeto,
   formatComprobanteSerieInput,
-  fechaInicioDepreciacionDesdeAdquisicion,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
   formatLabelPrintWarnings,
+  resolveFechaInicioDepreciacion,
+  syncFechaInicioDepreciacionInput,
+  valorActivoEfectivo,
   formatPorcentajeDepreciacion,
   nombreRequiereEtiquetaOverride,
   parseFechaDDMMYYYY,
@@ -28,6 +30,7 @@ import {
   resolveNombreEtiqueta,
   suggestNombreEtiqueta,
   validarFechaDDMMYYYY,
+  validarFechaInicioDepreciacion,
   validarCuentaContableParaCatalogo,
   vidaUtilMesesFromPorcentaje,
   entidadMuestraSelectorSede,
@@ -47,6 +50,7 @@ import {
   CuentaContableFields,
   Dialog,
   FileInput,
+  IncrementoMejoraField,
   Input,
   Label,
   LabelPrintTextPreview,
@@ -193,11 +197,25 @@ export function ActivoFormDesktop({
   const [valor, setValor] = useState(
     activo?.valor_adquisicion != null ? String(activo.valor_adquisicion) : "",
   );
+  const [incrementoDetalle, setIncrementoDetalle] = useState(activo?.incremento_detalle ?? "");
+  const [valorIncremento, setValorIncremento] = useState(
+    activo?.valor_incremento != null ? String(activo.valor_incremento) : "",
+  );
   const [valorEsMercado, setValorEsMercado] = useState(activo?.valor_es_mercado ?? false);
   const [fechaAdquisicion, setFechaAdquisicion] = useState(
     formatFechaISOToDDMMYYYY(activo?.fecha_adquisicion),
   );
   const [fechaAdquisicionError, setFechaAdquisicionError] = useState<string | null>(null);
+  const [fechaInicioDepreciacion, setFechaInicioDepreciacion] = useState(() => {
+    const inicioIso = resolveFechaInicioDepreciacion(
+      activo?.fecha_inicio_depreciacion,
+      activo?.fecha_adquisicion,
+    );
+    return inicioIso ? formatFechaISOToDDMMYYYY(inicioIso) : "";
+  });
+  const [fechaInicioDepreciacionError, setFechaInicioDepreciacionError] = useState<string | null>(
+    null,
+  );
   const [observacion, setObservacion] = useState(activo?.observacion ?? "");
   const [aplicarObservacionLote, setAplicarObservacionLote] = useState(false);
   const [comprobanteSerie, setComprobanteSerie] = useState(
@@ -353,15 +371,34 @@ export function ActivoFormDesktop({
     () => (fechaAdquisicion.trim() ? parseFechaDDMMYYYY(fechaAdquisicion) : null),
     [fechaAdquisicion],
   );
-  const fechaInicioDepreciacionDisplay = useMemo(() => {
-    const iso = fechaInicioDepreciacionDesdeAdquisicion(fechaAdquisicionIso);
-    return iso ? formatFechaISOToDDMMYYYY(iso) : "";
-  }, [fechaAdquisicionIso]);
-  const periodoMeses = useMemo(
-    () => calcPeriodoMeses(fechaAdquisicionIso),
-    [fechaAdquisicionIso],
+  const fechaInicioDepreciacionIso = useMemo(
+    () =>
+      resolveFechaInicioDepreciacion(
+        fechaInicioDepreciacion.trim() ? parseFechaDDMMYYYY(fechaInicioDepreciacion) : null,
+        fechaAdquisicionIso,
+      ),
+    [fechaInicioDepreciacion, fechaAdquisicionIso],
   );
-  const valorNum = valor ? Number(valor) : null;
+  const periodoMeses = useMemo(
+    () => calcPeriodoMeses(fechaInicioDepreciacionIso),
+    [fechaInicioDepreciacionIso],
+  );
+  const tieneIncremento =
+    Boolean(incrementoDetalle.trim()) ||
+    (valorIncremento.trim() !== "" && Number(valorIncremento) > 0);
+  const valorIncrementoNum = useMemo(() => {
+    if (!tieneIncremento || !valorIncremento.trim()) return null;
+    const n = Number(valorIncremento);
+    return Number.isNaN(n) ? null : n;
+  }, [tieneIncremento, valorIncremento]);
+  const valorNum = useMemo(
+    () =>
+      valorActivoEfectivo(
+        valor.trim() ? Number(valor) : null,
+        valorIncrementoNum,
+      ),
+    [valor, valorIncrementoNum],
+  );
   const vidaUtilNum = vidaUtilMeses ? Number(vidaUtilMeses) : null;
   const depreciacionAcumulada = useMemo(
     () => calcDepreciacionAcumulada(valorNum, vidaUtilNum, periodoMeses),
@@ -514,12 +551,30 @@ export function ActivoFormDesktop({
   }
 
   function handleFechaAdquisicionChange(value: string) {
-    setFechaAdquisicion(formatFechaInputDDMMYYYY(value));
+    const next = formatFechaInputDDMMYYYY(value);
+    setFechaInicioDepreciacion((current) =>
+      syncFechaInicioDepreciacionInput(current, fechaAdquisicion, next),
+    );
+    setFechaAdquisicion(next);
     if (fechaAdquisicionError) setFechaAdquisicionError(null);
   }
 
   function handleFechaAdquisicionBlur() {
     setFechaAdquisicionError(validarFechaDDMMYYYY(fechaAdquisicion));
+    setFechaInicioDepreciacionError(
+      validarFechaInicioDepreciacion(fechaInicioDepreciacion, fechaAdquisicion),
+    );
+  }
+
+  function handleFechaInicioDepreciacionChange(value: string) {
+    setFechaInicioDepreciacion(formatFechaInputDDMMYYYY(value));
+    if (fechaInicioDepreciacionError) setFechaInicioDepreciacionError(null);
+  }
+
+  function handleFechaInicioDepreciacionBlur() {
+    setFechaInicioDepreciacionError(
+      validarFechaInicioDepreciacion(fechaInicioDepreciacion, fechaAdquisicion),
+    );
   }
 
   function handleValorEsMercadoChange(checked: boolean) {
@@ -559,6 +614,15 @@ export function ActivoFormDesktop({
     if (fechaError) {
       setFechaAdquisicionError(fechaError);
       setMessage(fechaError);
+      return;
+    }
+    const fechaInicioError = validarFechaInicioDepreciacion(
+      fechaInicioDepreciacion,
+      fechaAdquisicion,
+    );
+    if (fechaInicioError) {
+      setFechaInicioDepreciacionError(fechaInicioError);
+      setMessage(fechaInicioError);
       return;
     }
 
@@ -646,6 +710,13 @@ export function ActivoFormDesktop({
       valor_adquisicion: valor ? Number(valor) : undefined,
       valor_es_mercado: valorEsMercado,
       fecha_adquisicion: parseFechaDDMMYYYY(fechaAdquisicion) || undefined,
+      fecha_inicio_depreciacion: fechaInicioDepreciacionIso || undefined,
+      incremento_detalle: tieneIncremento ? incrementoDetalle.trim() || null : null,
+      valor_incremento: tieneIncremento
+        ? valorIncremento.trim()
+          ? Number(valorIncremento)
+          : null
+        : null,
       ...(!valorEsMercado && { comprobante_serie: comprobanteSerie.trim() || undefined }),
       ...(mostrarPosibleAmbiente
         ? {
@@ -677,6 +748,9 @@ export function ActivoFormDesktop({
         valor_adquisicion: payload.valor_adquisicion ?? null,
         valor_es_mercado: payload.valor_es_mercado,
         fecha_adquisicion: payload.fecha_adquisicion ?? null,
+        fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion ?? null,
+        incremento_detalle: payload.incremento_detalle ?? null,
+        valor_incremento: payload.valor_incremento ?? null,
       };
       if (aplicarObservacionLote) {
         bulkPatch.observacion = observacion.trim() || null;
@@ -798,6 +872,9 @@ export function ActivoFormDesktop({
         categoria: payload.categoria ?? "ACTIVO",
         valor_adquisicion: payload.valor_adquisicion ?? null,
         fecha_adquisicion: payload.fecha_adquisicion ?? null,
+        fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion ?? null,
+        incremento_detalle: payload.incremento_detalle ?? null,
+        valor_incremento: payload.valor_incremento ?? null,
         vida_util_meses: payload.vida_util_meses ?? null,
         foto_path: activo?.foto_path ?? null,
         comprobante_path: valorEsMercado ? null : (activo?.comprobante_path ?? null),
@@ -854,6 +931,9 @@ export function ActivoFormDesktop({
         valor_adquisicion: payload.valor_adquisicion ?? null,
         valor_es_mercado: payload.valor_es_mercado,
         fecha_adquisicion: payload.fecha_adquisicion ?? null,
+        fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion ?? null,
+        incremento_detalle: payload.incremento_detalle ?? null,
+        valor_incremento: payload.valor_incremento ?? null,
       };
       if (aplicarObservacionLote) {
         bulkPatch.observacion = observacion.trim() || null;
@@ -1143,20 +1223,22 @@ export function ActivoFormDesktop({
           <fieldset className={panelFieldsetClass}>
             <legend className={panelLegendClass}>Valoración y documentación</legend>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="valor_bulk">
-                  {valorEsMercado ? "Valor de mercado (S/)" : "Precio de adquisición (S/)"}
-                </Label>
-                <Input
-                  id="valor_bulk"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={valor}
-                  onChange={(e) => setValor(e.target.value)}
-                />
-              </div>
-              <div className="flex items-end gap-2 pb-2">
+              <IncrementoMejoraField
+                idPrefix="incremento_bulk"
+                valorId="valor_bulk"
+                valorLabel={
+                  valorEsMercado ? "Valor de mercado (S/)" : "Precio de adquisición (S/)"
+                }
+                detalle={incrementoDetalle}
+                incremento={valorIncremento}
+                valorBase={valor}
+                onValorBaseChange={setValor}
+                onChange={({ detalle, incremento }) => {
+                  setIncrementoDetalle(detalle);
+                  setValorIncremento(incremento);
+                }}
+              />
+              <div className="flex flex-col justify-end gap-2 pb-2">
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -1196,14 +1278,20 @@ export function ActivoFormDesktop({
                 <Label htmlFor="fecha_inicio_depreciacion_bulk">Fecha de inicio de depreciación</Label>
                 <Input
                   id="fecha_inicio_depreciacion_bulk"
-                  value={fechaInicioDepreciacionDisplay}
-                  readOnly
-                  placeholder="Mes siguiente a la adquisición"
-                  className="bg-muted/40"
+                  inputMode="numeric"
+                  value={fechaInicioDepreciacion}
+                  onChange={(e) => handleFechaInicioDepreciacionChange(e.target.value)}
+                  onBlur={handleFechaInicioDepreciacionBlur}
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  aria-invalid={Boolean(fechaInicioDepreciacionError)}
                 />
-                {fechaInicioDepreciacionDisplay && (
+                {fechaInicioDepreciacionError && (
+                  <p className="text-xs text-destructive">{fechaInicioDepreciacionError}</p>
+                )}
+                {!fechaInicioDepreciacionError && (
                   <p className="text-xs text-muted-foreground">
-                    Por defecto: primer día del mes siguiente a la adquisición.
+                    Por defecto: primer día del mes siguiente. Puede editarla.
                   </p>
                 )}
               </div>
@@ -1289,7 +1377,7 @@ export function ActivoFormDesktop({
                 <div className="mt-4 grid grid-cols-1 gap-4 rounded-md bg-muted/50 p-3 sm:grid-cols-3">
                   <div>
                     <p className="text-xs text-muted-foreground">Periodo (meses)</p>
-                    <p className="font-medium">{fechaAdquisicionIso ? periodoMeses : "—"}</p>
+                    <p className="font-medium">{fechaInicioDepreciacionIso ? periodoMeses : "—"}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Depreciación acumulada</p>
@@ -1618,20 +1706,22 @@ export function ActivoFormDesktop({
           {categoria === "CUENTA_ORDEN" ? "Valoración" : "Valoración y depreciación"}
         </legend>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="valor">
-              {valorEsMercado ? "Valor de mercado (S/)" : "Precio de adquisición (S/)"}
-            </Label>
-            <Input
-              id="valor"
-              type="number"
-              step="0.01"
-              min="0"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-            />
-          </div>
-          <div className="flex items-end gap-2 pb-2">
+          <IncrementoMejoraField
+            idPrefix="incremento"
+            valorId="valor"
+            valorLabel={
+              valorEsMercado ? "Valor de mercado (S/)" : "Precio de adquisición (S/)"
+            }
+            detalle={incrementoDetalle}
+            incremento={valorIncremento}
+            valorBase={valor}
+            onValorBaseChange={setValor}
+            onChange={({ detalle, incremento }) => {
+              setIncrementoDetalle(detalle);
+              setValorIncremento(incremento);
+            }}
+          />
+          <div className="flex flex-col justify-end gap-2 pb-2">
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -1671,14 +1761,20 @@ export function ActivoFormDesktop({
             <Label htmlFor="fecha_inicio_depreciacion">Fecha de inicio de depreciación</Label>
             <Input
               id="fecha_inicio_depreciacion"
-              value={fechaInicioDepreciacionDisplay}
-              readOnly
-              placeholder="Mes siguiente a la adquisición"
-              className="bg-muted/40"
+              inputMode="numeric"
+              value={fechaInicioDepreciacion}
+              onChange={(e) => handleFechaInicioDepreciacionChange(e.target.value)}
+              onBlur={handleFechaInicioDepreciacionBlur}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+              aria-invalid={Boolean(fechaInicioDepreciacionError)}
             />
-            {fechaInicioDepreciacionDisplay && (
+            {fechaInicioDepreciacionError && (
+              <p className="text-xs text-destructive">{fechaInicioDepreciacionError}</p>
+            )}
+            {!fechaInicioDepreciacionError && (
               <p className="text-xs text-muted-foreground">
-                Por defecto: primer día del mes siguiente a la adquisición.
+                Por defecto: primer día del mes siguiente. Puede editarla.
               </p>
             )}
           </div>
@@ -1770,7 +1866,7 @@ export function ActivoFormDesktop({
         <div className="grid grid-cols-1 gap-4 rounded-md bg-muted/50 p-3 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">Periodo (meses)</p>
-            <p className="font-medium">{fechaAdquisicionIso ? periodoMeses : "—"}</p>
+            <p className="font-medium">{fechaInicioDepreciacionIso ? periodoMeses : "—"}</p>
             <p className="mt-1 text-xs text-muted-foreground">Meses desde la fecha de adquisición</p>
           </div>
           <div>

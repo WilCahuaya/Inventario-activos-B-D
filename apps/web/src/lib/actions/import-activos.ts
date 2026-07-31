@@ -153,6 +153,7 @@ export async function importActivos(
       color: payload.color,
       medidas: payload.medidas,
       fecha_adquisicion: payload.fecha_adquisicion,
+      fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion ?? undefined,
       valor_adquisicion: payload.valor_adquisicion,
       valor_es_mercado: payload.valor_es_mercado,
       depreciacion: payload.depreciacion,

@@ -19,6 +19,7 @@ export * from "./cuenta-contable-fields";
 export * from "./nuevo-activo-ubicacion-dialog";
 export * from "./activo-historial-panel";
 export * from "./confirm-dialog";
+export * from "./incremento-mejora-field";
 export * from "./responsables-panel";
 export * from "./responsable-form-fields";
 export * from "./crear-responsable-dialog";
