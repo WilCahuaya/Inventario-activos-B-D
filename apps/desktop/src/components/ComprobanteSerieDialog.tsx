@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import {
   formatComprobanteSerieInput,
@@ -17,7 +15,6 @@ export type ComprobanteFacturaDatos = {
 interface ComprobanteSerieDialogProps {
   open: boolean;
   file?: File | null;
-  /** Ruta en storage si no hay File local (edición / PDF ya guardado). */
   path?: string | null;
   fileName?: string;
   initialSerie?: string;
@@ -162,7 +159,6 @@ export function ComprobanteSerieDialog({
           {previewUrl ? (
             <div className="flex min-h-[45vh] flex-1 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30 lg:min-h-0">
               {asImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewUrl}
                   alt={displayName ?? "Vista previa del comprobante"}

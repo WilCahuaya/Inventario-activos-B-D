@@ -93,7 +93,9 @@ import {
   suggestCatalogoGrupo,
   upsertCuentaContable,
 } from "../lib/catalogo";
-import { FotoPreviewDialog, PdfPreviewDialog } from "./ActivoMediaDialogs";
+import { FotoPreviewDialog } from "./ActivoMediaDialogs";
+import { ComprobanteSerieDialog } from "./ComprobanteSerieDialog";
+import { getSignedStorageUrl } from "../lib/storage-url";
 
 const fieldsetCompact = `${panelFieldsetClass} lg:col-span-1`;
 const fieldsetWide = `${panelFieldsetClass} col-span-1 lg:col-span-2`;
@@ -256,8 +258,9 @@ export function ActivoFormDesktop({
   );
   const [fotoFile, setFotoFile] = useState<File | null>(null);
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
+  const [pendingComprobanteFile, setPendingComprobanteFile] = useState<File | null>(null);
+  const [serieDialogOpen, setSerieDialogOpen] = useState(false);
   const [fotoPreviewOpen, setFotoPreviewOpen] = useState(false);
-  const [comprobantePreviewOpen, setComprobantePreviewOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [labelWarnOpen, setLabelWarnOpen] = useState(false);
@@ -577,11 +580,51 @@ export function ActivoFormDesktop({
     );
   }
 
+  function handleComprobanteFileSelect(file: File | null) {
+    if (!file) {
+      setComprobanteFile(null);
+      return;
+    }
+    setPendingComprobanteFile(file);
+    setSerieDialogOpen(true);
+  }
+
+  function openComprobanteDatosDialog() {
+    setSerieDialogOpen(true);
+  }
+
+  function confirmComprobanteSerie(datos: {
+    serie: string;
+    fecha: string;
+    monto: string;
+  }) {
+    setComprobanteSerie(formatComprobanteSerieInput(datos.serie));
+    if (datos.fecha.trim()) {
+      handleFechaAdquisicionChange(datos.fecha);
+      setFechaAdquisicionError(validarFechaDDMMYYYY(datos.fecha));
+    }
+    if (datos.monto.trim()) {
+      setValor(datos.monto.trim());
+    }
+    if (pendingComprobanteFile) {
+      setComprobanteFile(pendingComprobanteFile);
+    }
+    setPendingComprobanteFile(null);
+    setSerieDialogOpen(false);
+  }
+
+  function cancelComprobanteSerie() {
+    setPendingComprobanteFile(null);
+    setSerieDialogOpen(false);
+  }
+
   function handleValorEsMercadoChange(checked: boolean) {
     setValorEsMercado(checked);
     if (checked) {
       setComprobanteSerie("");
       setComprobanteFile(null);
+      setPendingComprobanteFile(null);
+      setSerieDialogOpen(false);
     }
   }
 
@@ -1316,7 +1359,7 @@ export function ActivoFormDesktop({
                     id="comprobante_bulk"
                     accept={ACTIVO_COMPROBANTE_ACCEPT}
                     file={comprobanteFile}
-                    onFileChange={setComprobanteFile}
+                    onFileChange={handleComprobanteFileSelect}
                     buttonLabel="Seleccionar PDF"
                     emptyLabel="Sin archivo adjunto"
                     hint={
@@ -1326,7 +1369,7 @@ export function ActivoFormDesktop({
                     }
                     canPreview={Boolean(comprobanteFile || activo.comprobante_path)}
                     previewLabel="Previsualizar comprobante"
-                    onPreview={() => setComprobantePreviewOpen(true)}
+                    onPreview={openComprobanteDatosDialog}
                   />
                 </div>
               </div>
@@ -1797,7 +1840,7 @@ export function ActivoFormDesktop({
                 id="comprobante"
                 accept={ACTIVO_COMPROBANTE_ACCEPT}
                 file={comprobanteFile}
-                onFileChange={setComprobanteFile}
+                onFileChange={handleComprobanteFileSelect}
                 buttonLabel="Seleccionar PDF"
                 emptyLabel="Sin archivo adjunto"
                 hint={
@@ -1807,7 +1850,7 @@ export function ActivoFormDesktop({
                 }
                 canPreview={Boolean(comprobanteFile || (isEdit && activo?.comprobante_path))}
                 previewLabel="Previsualizar comprobante"
-                onPreview={() => setComprobantePreviewOpen(true)}
+                onPreview={openComprobanteDatosDialog}
               />
             </div>
           </div>
@@ -2072,16 +2115,26 @@ export function ActivoFormDesktop({
       titulo={nombreConsolidado || "Foto del activo"}
     />
 
-    <PdfPreviewDialog
-      open={comprobantePreviewOpen}
-      onClose={() => setComprobantePreviewOpen(false)}
-      file={comprobanteFile}
-      path={!comprobanteFile ? activo?.comprobante_path : null}
-      titulo={
-        comprobanteSerie.trim()
-          ? `Comprobante ${comprobanteSerie.trim()}`
-          : "Comprobante de adquisición"
+    <ComprobanteSerieDialog
+      open={serieDialogOpen}
+      file={pendingComprobanteFile ?? comprobanteFile}
+      path={
+        !pendingComprobanteFile && !comprobanteFile
+          ? (activo?.comprobante_path ?? null)
+          : null
       }
+      fileName={
+        pendingComprobanteFile?.name ??
+        comprobanteFile?.name ??
+        (comprobanteSerie.trim() || undefined)
+      }
+      initialSerie={comprobanteSerie}
+      initialFecha={fechaAdquisicion}
+      initialMonto={valor}
+      confirmLabel={pendingComprobanteFile ? "Confirmar" : "Guardar"}
+      loadPathUrl={(p) => getSignedStorageUrl("comprobantes-activos", p)}
+      onConfirm={confirmComprobanteSerie}
+      onCancel={cancelComprobanteSerie}
     />
     </>
   );
