@@ -416,13 +416,26 @@ async function processMasterOp(
       const t = v?.trim();
       return t ? t : null;
     };
+    const telefono = trimOrNull(input.telefono);
+    if (payload.soloTelefonoAdmin) {
+      const { error } = await supabase
+        .from("responsables")
+        .update({ telefono })
+        .eq("id", String(payload.responsableId));
+      if (error) throw new Error(error.message);
+      await supabase
+        .from("entidades")
+        .update({ admin_telefono: telefono })
+        .eq("id", item.entidad_id);
+      return;
+    }
     const { error } = await supabase
       .from("responsables")
       .update({
         nombre: normalizeResponsableNombre(input.nombre),
         dni: normalizeResponsableDni(input.dni) || null,
         email: trimOrNull(input.email),
-        telefono: trimOrNull(input.telefono),
+        telefono,
         ...(input.activo !== undefined ? { activo: input.activo } : {}),
       })
       .eq("id", String(payload.responsableId));

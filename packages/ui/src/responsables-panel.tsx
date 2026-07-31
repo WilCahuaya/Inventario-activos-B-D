@@ -391,8 +391,8 @@ export function ResponsablesPanel({
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => void handleEdit(e)}>
             {editTarget.es_administrador && (
               <p className="sm:col-span-2 text-xs text-muted-foreground">
-                Este responsable es el administrador de la entidad. Los datos principales se
-                actualizan al editar la entidad; aquí puede ajustar el contacto.
+                ponsable es Este resel administrador de la entidad. Solo puede editar el teléfono;
+                el resto de datos se muestran y los actualiza el contador en la ficha de la entidad.
               </p>
             )}
             <div className="sm:col-span-2">

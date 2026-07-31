@@ -155,7 +155,7 @@ export async function updateResponsable(
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("responsables")
-    .select("entidad_id, email")
+    .select("entidad_id, email, nombre, dni, telefono")
     .eq("id", responsableId)
     .maybeSingle();
 
@@ -167,13 +167,48 @@ export async function updateResponsable(
     return { error: e instanceof Error ? e.message : "No autorizado." };
   }
 
-  const validationError = validarCreateResponsableInput(input);
-  if (validationError) return { error: validationError };
-
   const trimOrNull = (v?: string) => {
     const t = v?.trim();
     return t ? t : null;
   };
+
+  const { data: entidad } = await supabase
+    .from("entidades")
+    .select("admin_email")
+    .eq("id", existing.entidad_id)
+    .maybeSingle();
+  const adminEmailNorm = entidad?.admin_email?.trim().toLowerCase() ?? "";
+  const esAdministrador = Boolean(
+    adminEmailNorm && (existing.email?.trim().toLowerCase() ?? "") === adminEmailNorm,
+  );
+
+  if (esAdministrador) {
+    const telefono = trimOrNull(input.telefono);
+    const validationError = validarCreateResponsableInput({
+      nombre: existing.nombre,
+      dni: existing.dni ?? "",
+      email: existing.email ?? "",
+      telefono: telefono ?? "",
+    });
+    if (validationError) return { error: validationError };
+
+    const { error } = await supabase
+      .from("responsables")
+      .update({ telefono })
+      .eq("id", responsableId);
+    if (error) return { error: error.message };
+
+    await supabase
+      .from("entidades")
+      .update({ admin_telefono: telefono })
+      .eq("id", existing.entidad_id);
+
+    revalidateEntidadResponsables(existing.entidad_id as string);
+    return {};
+  }
+
+  const validationError = validarCreateResponsableInput(input);
+  if (validationError) return { error: validationError };
 
   const { error } = await supabase
     .from("responsables")

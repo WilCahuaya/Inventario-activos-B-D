@@ -483,6 +483,24 @@ export function formatFechaISOToDDMMYYYY(iso: string | null | undefined): string
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
+/**
+ * Inicio de depreciación: primer día del mes siguiente a la adquisición (ISO YYYY-MM-DD).
+ * Ej. 15/03/2026 → 2026-04-01.
+ */
+export function fechaInicioDepreciacionDesdeAdquisicion(
+  fechaAdquisicionIso: string | null | undefined,
+): string | null {
+  if (!fechaAdquisicionIso?.trim()) return null;
+  const match = fechaAdquisicionIso.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]); // 1-based
+  if (!year || month < 1 || month > 12) return null;
+  // Date(year, month, 1) con month 1-based → primer día del mes siguiente
+  const next = new Date(year, month, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 const MESES_CORTO_ES = [
   "ene",
   "feb",

@@ -217,6 +217,35 @@ export async function updateResponsable(
     if (!found) return { error: "Responsable no encontrado." };
     const auth = await assertCanManageEntidad(found.entidadId);
     if (auth?.error) return auth;
+
+    if (found.data.es_administrador) {
+      const telefono = trimOrNull(input.telefono);
+      await upsertMasterItem("responsables", found.entidadId, {
+        ...found.data,
+        telefono,
+        updated_at: new Date().toISOString(),
+      });
+      const entidad = await findMasterItem<Entidad>("entidades", found.entidadId);
+      if (entidad) {
+        await upsertMasterItem("entidades", "", {
+          ...entidad.data,
+          admin_telefono: telefono,
+          updated_at: new Date().toISOString(),
+        });
+      }
+      await enqueueOfflineOp("responsable:update", found.entidadId, {
+        responsableId,
+        input: {
+          nombre: found.data.nombre,
+          dni: found.data.dni ?? "",
+          email: found.data.email ?? "",
+          telefono: telefono ?? "",
+        },
+        soloTelefonoAdmin: true,
+      });
+      return {};
+    }
+
     await upsertMasterItem("responsables", found.entidadId, {
       ...found.data,
       nombre: normalizeResponsableNombre(input.nombre),
@@ -236,7 +265,7 @@ export async function updateResponsable(
   const supabase = getSupabaseClient();
   const { data: existing } = await supabase
     .from("responsables")
-    .select("entidad_id")
+    .select("entidad_id, email, nombre, dni")
     .eq("id", responsableId)
     .maybeSingle();
 
@@ -244,6 +273,30 @@ export async function updateResponsable(
 
   const auth = await assertCanManageEntidad(existing.entidad_id as string);
   if (auth?.error) return auth;
+
+  const { data: entidad } = await supabase
+    .from("entidades")
+    .select("admin_email")
+    .eq("id", existing.entidad_id)
+    .maybeSingle();
+  const adminEmailNorm = entidad?.admin_email?.trim().toLowerCase() ?? "";
+  const esAdministrador = Boolean(
+    adminEmailNorm && (existing.email?.trim().toLowerCase() ?? "") === adminEmailNorm,
+  );
+
+  if (esAdministrador) {
+    const telefono = trimOrNull(input.telefono);
+    const { error } = await supabase
+      .from("responsables")
+      .update({ telefono })
+      .eq("id", responsableId);
+    if (error) return { error: error.message };
+    await supabase
+      .from("entidades")
+      .update({ admin_telefono: telefono })
+      .eq("id", existing.entidad_id);
+    return {};
+  }
 
   const { error } = await supabase
     .from("responsables")

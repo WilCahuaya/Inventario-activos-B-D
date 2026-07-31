@@ -17,6 +17,7 @@ import {
   calcPeriodoMeses,
   calcValorNeto,
   formatComprobanteSerieInput,
+  fechaInicioDepreciacionDesdeAdquisicion,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
   formatLabelPrintWarnings,
@@ -537,6 +538,10 @@ export function ActivoForm({
     () => (fechaAdquisicion.trim() ? parseFechaDDMMYYYY(fechaAdquisicion) : null),
     [fechaAdquisicion],
   );
+  const fechaInicioDepreciacionDisplay = useMemo(() => {
+    const iso = fechaInicioDepreciacionDesdeAdquisicion(fechaAdquisicionIso);
+    return iso ? formatFechaISOToDDMMYYYY(iso) : "";
+  }, [fechaAdquisicionIso]);
   const periodoMeses = useMemo(
     () => calcPeriodoMeses(fechaAdquisicionIso),
     [fechaAdquisicionIso],
@@ -1213,29 +1218,46 @@ export function ActivoForm({
                 </label>
               </div>
             </div>
-            <div className="mt-4 space-y-2">
-              <Label htmlFor="fecha_adquisicion_bulk">Fecha de adquisición</Label>
-              <Input
-                id="fecha_adquisicion_bulk"
-                inputMode="numeric"
-                value={fechaAdquisicion}
-                onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
-                onBlur={handleFechaAdquisicionBlur}
-                placeholder="DD/MM/AAAA"
-                maxLength={10}
-                aria-invalid={Boolean(fechaAdquisicionError)}
-                className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
-              />
-              {fechaAdquisicionError && (
-                <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
-              )}
-              {!fechaAdquisicionError && fechaAdquisicion && (
-                <p className="text-xs text-muted-foreground">
-                  {valorEsMercado
-                    ? "Color ámbar: fecha aproximada (valor de mercado)."
-                    : "Color azul: fecha segura (precio / factura)."}
-                </p>
-              )}
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="fecha_adquisicion_bulk">Fecha de adquisición</Label>
+                <Input
+                  id="fecha_adquisicion_bulk"
+                  inputMode="numeric"
+                  value={fechaAdquisicion}
+                  onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
+                  onBlur={handleFechaAdquisicionBlur}
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  aria-invalid={Boolean(fechaAdquisicionError)}
+                  className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
+                />
+                {fechaAdquisicionError && (
+                  <p className="text-xs text-destructive">{fechaAdquisicionError}</p>
+                )}
+                {!fechaAdquisicionError && fechaAdquisicion && (
+                  <p className="text-xs text-muted-foreground">
+                    {valorEsMercado
+                      ? "Color ámbar: fecha aproximada (valor de mercado)."
+                      : "Color azul: fecha segura (precio / factura)."}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fecha_inicio_depreciacion_bulk">Fecha de inicio de depreciación</Label>
+                <Input
+                  id="fecha_inicio_depreciacion_bulk"
+                  value={fechaInicioDepreciacionDisplay}
+                  readOnly
+                  placeholder="Mes siguiente a la adquisición"
+                  className="bg-muted/40"
+                />
+                {fechaInicioDepreciacionDisplay && (
+                  <p className="text-xs text-muted-foreground">
+                    Por defecto: primer día del mes siguiente a la adquisición.
+                  </p>
+                )}
+              </div>
             </div>
             {!valorEsMercado && (
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -1739,6 +1761,21 @@ export function ActivoForm({
                 {valorEsMercado
                   ? "Color ámbar: fecha aproximada (valor de mercado)."
                   : "Color azul: fecha segura (precio / factura)."}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fecha_inicio_depreciacion">Fecha de inicio de depreciación</Label>
+            <Input
+              id="fecha_inicio_depreciacion"
+              value={fechaInicioDepreciacionDisplay}
+              readOnly
+              placeholder="Mes siguiente a la adquisición"
+              className="bg-muted/40"
+            />
+            {fechaInicioDepreciacionDisplay && (
+              <p className="text-xs text-muted-foreground">
+                Por defecto: primer día del mes siguiente a la adquisición.
               </p>
             )}
           </div>
