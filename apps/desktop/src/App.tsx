@@ -214,7 +214,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
   const refreshActivosRef = useRef<() => Promise<void>>(async () => undefined);
   const refreshEstructuraRef = useRef<() => Promise<void>>(async () => undefined);
 
-  const { pending, syncing, lastResult, syncNow } = useSyncQueue(Boolean(profile), () => {
+  const { pending, syncing, blockingSync, lastResult, syncNow } = useSyncQueue(Boolean(profile), () => {
     void refreshEstructuraRef.current();
     void refreshActivosRef.current();
   });
@@ -434,7 +434,7 @@ function MainApp({ userId }: { userId: string; email: string }) {
   }
 
   async function handleSyncNow() {
-    void syncNow();
+    void syncNow({ blockUi: true });
     void catalog.syncNow();
     await refreshAllRemote();
   }
@@ -594,6 +594,9 @@ function MainApp({ userId }: { userId: string; email: string }) {
       online={online}
       pendingSync={pending}
       syncing={syncing}
+      blockingSync={blockingSync}
+      syncMessage={lastResult}
+      onSyncClick={() => void syncNow({ blockUi: true })}
       user={{ nombre: profile.nombre, email: profile.email }}
     >
       {mainNav === "dashboard" && !showEntityPortal && (
@@ -711,7 +714,10 @@ function MainApp({ userId }: { userId: string; email: string }) {
           }
           modoPreregistro={entidadesFlow.context.esAmbientePreregistro}
           initialCatalogoCodigo={entidadesFlow.initialCodigo}
-          onSuccess={() => goActivosListFromContext(entidadesFlow.context)}
+          onSuccess={() => {
+            goActivosListFromContext(entidadesFlow.context);
+            void refreshActivos();
+          }}
           onCancel={() => goActivosListFromContext(entidadesFlow.context)}
         />
       )}
@@ -724,7 +730,10 @@ function MainApp({ userId }: { userId: string; email: string }) {
           fixedSedeId={entidadesFlow.context.sedeId}
           fixedAmbienteId={entidadesFlow.context.ambienteId}
           activo={entidadesFlow.activo}
-          onSuccess={() => returnFromEntidadesEdit()}
+          onSuccess={() => {
+            returnFromEntidadesEdit();
+            void refreshActivos();
+          }}
           onCancel={() => returnFromEntidadesEdit()}
         />
       )}
@@ -763,7 +772,10 @@ function MainApp({ userId }: { userId: string; email: string }) {
           fixedSedeId={inventarioFlow.activo.sede_id ?? undefined}
           fixedAmbienteId={inventarioFlow.activo.ambiente_id ?? undefined}
           activo={inventarioFlow.activo}
-          onSuccess={() => setInventarioFlow({ type: "list" })}
+          onSuccess={() => {
+            setInventarioFlow({ type: "list" });
+            void refreshActivos();
+          }}
           onCancel={() => setInventarioFlow({ type: "list" })}
         />
       )}

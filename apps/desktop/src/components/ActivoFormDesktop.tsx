@@ -643,15 +643,21 @@ export function ActivoFormDesktop({
       fecha_adquisicion: parseFechaDDMMYYYY(fechaAdquisicion) || undefined,
       ...(!valorEsMercado && { comprobante_serie: comprobanteSerie.trim() || undefined }),
       ...(mostrarPosibleAmbiente
-        ? { posible_ambiente_id: posibleAmbienteId || null }
+        ? {
+            posible_ambiente_id: posibleAmbienteId || null,
+            estado_registro: "PREREGISTRADO" as const,
+          }
         : {
             sede_id: (fixedSedeId ?? sedeId) || undefined,
             ambiente_id: (fixedAmbienteId ?? ambienteId) || undefined,
+            estado_registro: "REGISTRADO" as const,
           }),
     };
 
-    const sedeNombre = sedes.find((s) => s.id === sedeId)?.nombre;
-    const ambienteNombre = ambientes.find((a) => a.id === ambienteId)?.nombre;
+    const resolvedSedeId = (fixedSedeId ?? sedeId) || "";
+    const resolvedAmbienteId = (fixedAmbienteId ?? ambienteId) || "";
+    const sedeNombre = sedes.find((s) => s.id === resolvedSedeId)?.nombre;
+    const ambienteNombre = ambientes.find((a) => a.id === resolvedAmbienteId)?.nombre;
     const online = navigator.onLine;
 
     if (!online && esEdicionMasiva && activo) {
@@ -702,17 +708,33 @@ export function ActivoFormDesktop({
         bulkPatch.comprobante_serie = comprobanteSerie.trim() || null;
       }
 
+      const files: {
+        fotoBase64?: string;
+        fotoName?: string;
+        fotoType?: string;
+        comprobanteBase64?: string;
+        comprobanteName?: string;
+        comprobanteType?: string;
+      } = {};
+      if (!valorEsMercado && comprobanteFile) {
+        files.comprobanteBase64 = await fileToBase64(comprobanteFile);
+        files.comprobanteName = comprobanteFile.name;
+        files.comprobanteType = comprobanteFile.type;
+      }
+      if (fotoFile) {
+        files.fotoBase64 = await fileToBase64(fotoFile);
+        files.fotoName = fotoFile.name;
+        files.fotoType = fotoFile.type;
+      }
+
       await enqueueOfflineOp("activos:updateSimilares", entidadId, {
         activoId: activo.id,
         patch: bulkPatch,
+        files: Object.keys(files).length > 0 ? files : undefined,
       });
       const actualizados = await applyActivosSimilaresPatchLocal(entidadId, activo, bulkPatch);
-      const archivosOmitidos = Boolean(comprobanteFile || fotoFile);
       setMessage(
-        `${actualizados || ejemplaresTotal} ejemplares actualizados (guardado en cola offline, se sincronizarán al reconectar).` +
-          (archivosOmitidos
-            ? " Los archivos adjuntos no se aplicaron sin conexión; súbalos luego de sincronizar."
-            : ""),
+        `${actualizados || ejemplaresTotal} ejemplares actualizados (guardado en cola offline, se sincronizarán al reconectar).`,
       );
       onSuccess(activo);
       return;
@@ -743,8 +765,8 @@ export function ActivoFormDesktop({
         ...(activo ?? ({} as ActivoConUbicacion)),
         id: activo?.id ?? `pending-${crypto.randomUUID()}`,
         entidad_id: entidadId,
-        sede_id: sedeId || null,
-        ambiente_id: ambienteId || null,
+        sede_id: resolvedSedeId || null,
+        ambiente_id: resolvedAmbienteId || null,
         codigo_catalogo: payload.codigo_catalogo,
         correlativo: activo?.correlativo ?? null,
         codigo_barras: activo?.codigo_barras ?? codigoBarrasPreview,
@@ -764,7 +786,9 @@ export function ActivoFormDesktop({
         observacion: payload.observacion ?? null,
         responsable: activo?.responsable ?? null,
         valor_es_mercado: payload.valor_es_mercado ?? false,
-        estado_registro: activo?.estado_registro ?? "REGISTRADO",
+        estado_registro:
+          activo?.estado_registro ??
+          (mostrarPosibleAmbiente ? "PREREGISTRADO" : "REGISTRADO"),
         estado_bien: payload.estado_bien ?? null,
         categoria: payload.categoria ?? "ACTIVO",
         valor_adquisicion: payload.valor_adquisicion ?? null,

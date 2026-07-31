@@ -139,7 +139,12 @@ export async function listEntidades(): Promise<EntidadConConteo[]> {
 
 export async function createEntidad(
   input: CreateEntidadInput,
-): Promise<{ data?: Entidad; error?: string; inviteMessage?: string | null }> {
+): Promise<{
+  data?: Entidad;
+  error?: string;
+  inviteMessage?: string | null;
+  invitePendingOffline?: boolean;
+}> {
   const nombre = input.nombre.trim();
   const adminEmail = input.admin_email?.trim() || null;
   const adminNombre = input.admin_nombre?.trim() || null;
@@ -245,7 +250,8 @@ export async function createEntidad(
     return {
       data: entidad,
       inviteMessage:
-        "Entidad guardada offline. Se creará en el servidor y se enviará la invitación al reconectar.",
+        "Invitación pendiente: la entidad se guardó sin conexión. Al reconectar se creará en el servidor y se enviará la invitación al administrador.",
+      invitePendingOffline: true,
     };
   }
 
@@ -296,6 +302,7 @@ export async function updateEntidad(
   error?: string;
   inviteMessage?: string | null;
   inviteMode?: "invite" | "resend";
+  invitePendingOffline?: boolean;
 }> {
   const nombre = input.nombre.trim();
   const adminEmail = input.admin_email?.trim() || null;
@@ -327,8 +334,10 @@ export async function updateEntidad(
     await enqueueOfflineOp("entidad:update", entidadId, { input });
     return {
       data: updated,
-      inviteMessage: "Cambios guardados offline. Se sincronizarán al volver online.",
+      inviteMessage:
+        "Invitación pendiente: cambios guardados sin conexión. Al reconectar se sincronizarán y, si corresponde, se reenviará la invitación.",
       inviteMode: "resend",
+      invitePendingOffline: true,
     };
   }
 

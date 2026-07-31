@@ -1,15 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { Activo, Ambiente, Sede } from "@inventario/types";
+import type { Ambiente, Sede } from "@inventario/types";
 import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { Button, Dialog, Label, Select } from "@inventario/ui";
-import { cambiarUbicacionActivo } from "../lib/activos";
+import { cambiarUbicacionActivo, type ActivoConUbicacion } from "../lib/activos";
+import { isOnline } from "../lib/master-cache";
 import { listAmbientes, listSedes } from "../lib/ubicacion";
 
 interface CambiarAmbienteDialogProps {
   open: boolean;
   onClose: () => void;
-  activo: Activo;
-  onSuccess?: () => void;
+  activo: ActivoConUbicacion;
+  onSuccess?: (activo: ActivoConUbicacion) => void;
 }
 
 export function CambiarAmbienteDialog({
@@ -59,6 +60,11 @@ export function CambiarAmbienteDialog({
       return;
     }
 
+    if (sedeId === (activo.sede_id ?? "") && ambienteId === (activo.ambiente_id ?? "")) {
+      setError("Seleccione un ambiente distinto al actual.");
+      return;
+    }
+
     setPending(true);
     setError(null);
     try {
@@ -67,12 +73,18 @@ export function CambiarAmbienteDialog({
         setError(result.error);
         return;
       }
+      if (!result.data) {
+        setError("No se pudo actualizar la ubicación.");
+        return;
+      }
       onClose();
-      onSuccess?.();
+      onSuccess?.(result.data);
     } finally {
       setPending(false);
     }
   }
+
+  const offlineHint = !isOnline();
 
   return (
     <Dialog
@@ -83,22 +95,28 @@ export function CambiarAmbienteDialog({
       className="max-w-md"
     >
       <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
+        {offlineHint && (
+          <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+            Sin conexión: el cambio se guarda en este equipo y se sincronizará al reconectar.
+          </p>
+        )}
+
         {mostrarSelectorSede && (
-        <div className="space-y-2">
-          <Label htmlFor="cambiar_sede">Sede</Label>
-          <Select
-            id="cambiar_sede"
-            value={sedeId}
-            onChange={(value) => {
-              setSedeId(value);
-              setAmbienteId("");
-            }}
-            options={[
-              { value: "", label: "Seleccione sede…" },
-              ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
-            ]}
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="cambiar_sede">Sede</Label>
+            <Select
+              id="cambiar_sede"
+              value={sedeId}
+              onChange={(value) => {
+                setSedeId(value);
+                setAmbienteId("");
+              }}
+              options={[
+                { value: "", label: "Seleccione sede…" },
+                ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+              ]}
+            />
+          </div>
         )}
 
         <div className="space-y-2">
@@ -113,6 +131,12 @@ export function CambiarAmbienteDialog({
               ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
             ]}
           />
+          {sedeId && ambientes.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No hay ambientes disponibles en esta sede
+              {offlineHint ? " (caché local)." : "."}
+            </p>
+          )}
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

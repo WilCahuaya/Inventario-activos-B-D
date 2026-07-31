@@ -41,25 +41,35 @@ export async function listHistorialActivo(
     return { data: { items: [], lookups: { sedes: {}, ambientes: {} } } };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("historial_cambios")
-    .select("*, profiles(nombre)")
-    .eq("activo_id", activoId)
-    .order("created_at", { ascending: false });
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return { data: { items: [], lookups: { sedes: {}, ambientes: {} } } };
+  }
 
-  if (error) return { error: error.message };
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("historial_cambios")
+      .select("*, profiles(nombre)")
+      .eq("activo_id", activoId)
+      .order("created_at", { ascending: false });
 
-  const items: HistorialActivoItem[] = (data ?? []).map((row) => {
-    const { profiles, ...rest } = row as HistorialActivoItem & {
-      profiles: { nombre: string } | null;
-    };
+    if (error) return { error: error.message };
+
+    const items: HistorialActivoItem[] = (data ?? []).map((row) => {
+      const { profiles, ...rest } = row as HistorialActivoItem & {
+        profiles: { nombre: string } | null;
+      };
+      return {
+        ...rest,
+        usuario_nombre: profiles?.nombre,
+      };
+    });
+
+    const lookups = await buildHistorialLookups(items);
+    return { data: { items, lookups } };
+  } catch (err) {
     return {
-      ...rest,
-      usuario_nombre: profiles?.nombre,
+      error: err instanceof Error ? err.message : "No se pudo cargar el historial.",
     };
-  });
-
-  const lookups = await buildHistorialLookups(items);
-  return { data: { items, lookups } };
+  }
 }

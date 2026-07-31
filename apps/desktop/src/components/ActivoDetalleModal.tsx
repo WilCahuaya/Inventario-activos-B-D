@@ -323,8 +323,10 @@ export function ActivoDetalleModal({
           codigoCatalogo={activo.codigo_catalogo}
           posibleAmbienteId={activo.posible_ambiente_id}
           posibleAmbienteNombre={activo.posible_ambiente_nombre}
-          onSuccess={() => {
-            void refreshActivo();
+          onSuccess={(updated) => {
+            pushToast("Preregistro validado. El bien quedó registrado.", "success");
+            onActivoUpdated?.(updated);
+            onClose();
           }}
         />
       )}
@@ -370,7 +372,16 @@ export function ActivoDetalleModal({
         open={cambiarAmbienteOpen}
         onClose={() => setCambiarAmbienteOpen(false)}
         activo={activo}
-        onSuccess={() => void refreshActivo()}
+        onSuccess={(updated) => {
+          pushToast(
+            updated.ambiente_nombre
+              ? `Ubicación actualizada: ${updated.ambiente_nombre}.`
+              : "Ubicación actualizada.",
+            "success",
+          );
+          onActivoUpdated?.(updated);
+          onClose();
+        }}
       />
 
       <AgregarBienesSimilaresDialog
@@ -389,8 +400,13 @@ export function ActivoDetalleModal({
           onClose();
           onAbrirAmbienteDestino?.(destino);
         }}
-        onSuccess={(info) => {
-          if (!info.ambienteDestinoId) void refreshActivo();
+        onSuccess={() => {
+          pushToast(
+            "Bienes similares guardados. Se sincronizarán al reconectar si está sin conexión.",
+            "success",
+          );
+          onActivoUpdated?.(activo);
+          void refreshActivo();
         }}
       />
 

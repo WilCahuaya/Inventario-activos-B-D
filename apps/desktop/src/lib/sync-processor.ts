@@ -14,6 +14,7 @@ import {
 } from "./activos";
 import {
   base64ToFile,
+  removeCachedActivo,
   type QueuedFiles,
   type QueuedPayload,
   upsertCachedActivo,
@@ -78,9 +79,20 @@ async function processActivoOp(item: SyncQueueItem): Promise<void> {
   const body = JSON.parse(item.payload) as QueuedPayload;
 
   if (item.operation === "create") {
+    const queuedInput = body.input as Omit<CreateActivoInput, "entidad_id">;
+    const estadoFromLocal = body.localActivo?.estado_registro;
     const result = await createActivo({
       entidad_id: item.entidad_id,
-      ...(body.input as Omit<CreateActivoInput, "entidad_id">),
+      ...queuedInput,
+      estado_registro:
+        queuedInput.estado_registro ??
+        (estadoFromLocal === "PREREGISTRADO" || estadoFromLocal === "REGISTRADO"
+          ? estadoFromLocal
+          : queuedInput.sede_id && queuedInput.ambiente_id
+            ? "REGISTRADO"
+            : "PREREGISTRADO"),
+      sede_id: queuedInput.sede_id ?? body.localActivo?.sede_id ?? undefined,
+      ambiente_id: queuedInput.ambiente_id ?? body.localActivo?.ambiente_id ?? undefined,
     });
     if (result.error) throw new Error(result.error);
     const activoId = result.data!.id;
@@ -90,7 +102,15 @@ async function processActivoOp(item: SyncQueueItem): Promise<void> {
       body.files,
       body.input.comprobante_serie as string | undefined,
     );
-    await upsertCachedActivo(item.entidad_id, result.data as ActivoConUbicacion);
+    const localId = body.localActivo?.id;
+    if (localId && localId !== activoId && String(localId).startsWith("pending-")) {
+      await removeCachedActivo(item.entidad_id, localId);
+    }
+    await upsertCachedActivo(item.entidad_id, {
+      ...(result.data as ActivoConUbicacion),
+      sede_nombre: body.localActivo?.sede_nombre,
+      ambiente_nombre: body.localActivo?.ambiente_nombre,
+    });
     return;
   }
 
@@ -265,7 +285,7 @@ async function processMasterOp(
       direccion: (payload.direccion as string | null) ?? null,
       es_principal: false,
     });
-    if (error) throw new Error(error.message);
+    if (error && error.code !== "23505") throw new Error(error.message);
     return;
   }
 
@@ -306,7 +326,7 @@ async function processMasterOp(
       responsable_id: input.responsableId ?? null,
       espacio_id: input.espacioId ?? null,
     });
-    if (error) throw new Error(error.message);
+    if (error && error.code !== "23505") throw new Error(error.message);
     return;
   }
 
@@ -386,7 +406,7 @@ async function processMasterOp(
       telefono: trimOrNull(input.telefono),
       cargo: RESPONSABLE_CARGO_DEFAULT,
     });
-    if (error) throw new Error(error.message);
+    if (error && error.code !== "23505") throw new Error(error.message);
     return;
   }
 
@@ -482,6 +502,15 @@ async function processMasterOp(
       p_patch: patch,
     });
     if (error) throw new Error(error.message);
+    const files = payload.files as QueuedFiles | undefined;
+    if (files) {
+      await uploadQueuedFiles(
+        item.entidad_id,
+        activoId,
+        files,
+        typeof patch.comprobante_serie === "string" ? patch.comprobante_serie : undefined,
+      );
+    }
     return;
   }
 
@@ -581,6 +610,9 @@ async function processMasterOp(
       String(payload.ambienteId),
     );
     if (result.error) throw new Error(result.error);
+    if (result.data) {
+      await upsertCachedActivo(item.entidad_id, result.data);
+    }
     return;
   }
 
@@ -590,6 +622,9 @@ async function processMasterOp(
       ambienteId: String(payload.ambienteId),
     });
     if (result.error) throw new Error(result.error);
+    if (result.data) {
+      await upsertCachedActivo(item.entidad_id, result.data);
+    }
     return;
   }
 

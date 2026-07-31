@@ -135,6 +135,10 @@ export function AgregarBienesSimilaresDialog({
               ? `Código asignado: ${preview.primer_codigo}`
               : `Códigos: ${preview.primer_codigo} → ${preview.ultimo_codigo}`,
           );
+        } else if (preview.es_registrado) {
+          setPreviewText(
+            "Quedarán registrados; los códigos de barras se asignarán al sincronizar.",
+          );
         } else {
           setPreviewText("Quedarán como preregistrados (sin código hasta validación).");
         }

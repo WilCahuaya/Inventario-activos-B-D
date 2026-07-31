@@ -234,8 +234,8 @@ export function ActivosCampoAcciones({
         nombre={activo.nombre}
         esRegistrado={!esPreregistrado}
         onAbrirAmbienteDestino={onAbrirAmbienteDestino}
-        onSuccess={(info) => {
-          if (!info.ambienteDestinoId) onValidated?.(activo);
+          onSuccess={() => {
+          onValidated?.(activo);
         }}
       />
     </>

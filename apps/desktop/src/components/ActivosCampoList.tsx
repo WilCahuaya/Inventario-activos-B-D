@@ -112,6 +112,26 @@ export function ActivosCampoList({
   const isGlobal = variant === "global";
   const isAmbiente = variant === "ambiente";
   const isEntityInventario = variant === "entity-inventario";
+
+  const handleActivoUpdatedLocal = useCallback(
+    (updated: ActivoConUbicacion) => {
+      setActivosLocal((prev) => {
+        const idx = prev.findIndex((a) => a.id === updated.id);
+        if (idx < 0) return prev;
+        if (isAmbiente && esAmbientePreregistro && updated.estado_registro !== "PREREGISTRADO") {
+          return prev.filter((a) => a.id !== updated.id);
+        }
+        if (isAmbiente && fixedAmbienteId && updated.ambiente_id !== fixedAmbienteId) {
+          return prev.filter((a) => a.id !== updated.id);
+        }
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      });
+      onActivoUpdated(updated);
+    },
+    [esAmbientePreregistro, fixedAmbienteId, isAmbiente, onActivoUpdated],
+  );
   const hideUbicacionFilters = isAmbiente;
   const [filter, setFilter] = useState("");
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
@@ -645,7 +665,7 @@ export function ActivosCampoList({
           emptyMessage={emptyMessage}
           mostrarPosibleAmbiente={esAmbientePreregistro}
           onPrintLabel={onPrintLabel}
-          onActivoUpdated={onActivoUpdated}
+          onActivoUpdated={handleActivoUpdatedLocal}
           onActivoDeleted={onActivoDeleted}
           onPrintBatch={onPrintBatch}
           onEditActivo={onEditActivo}
@@ -669,7 +689,7 @@ export function ActivosCampoList({
           emptyMessage={emptyMessage}
           mostrarPosibleAmbiente={esAmbientePreregistro}
           onPrintLabel={onPrintLabel}
-          onActivoUpdated={onActivoUpdated}
+          onActivoUpdated={handleActivoUpdatedLocal}
           onActivoDeleted={onActivoDeleted}
           onPrintBatch={onPrintBatch}
           onEditActivo={onEditActivo}
@@ -789,7 +809,7 @@ export function ActivosCampoList({
         emptyMessage={emptyMessage}
         mostrarPosibleAmbiente={esAmbientePreregistro}
         onPrintLabel={onPrintLabel}
-        onActivoUpdated={onActivoUpdated}
+        onActivoUpdated={handleActivoUpdatedLocal}
         onActivoDeleted={onActivoDeleted}
         onPrintBatch={onPrintBatch}
         onEditActivo={onEditActivo}

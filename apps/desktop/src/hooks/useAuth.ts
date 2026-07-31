@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { extractOAuthRedirectTo, forceOAuthRedirectUrl } from "@shared/auth/oauth-url";
 import { getAuthCallbackUrl } from "../lib/auth-config";
+import { clearCachedProfile } from "../lib/profile";
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabase";
 
 export type AuthLoginDebug = {
@@ -269,6 +270,7 @@ export async function signInWithGoogle(
 }
 
 export async function signOut() {
+  clearCachedProfile();
   const supabase = getSupabaseClient();
   return supabase.auth.signOut();
 }

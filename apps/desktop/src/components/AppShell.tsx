@@ -7,6 +7,7 @@ import type { PanelBreadcrumbItem, PanelNavSection } from "@inventario/ui/panel"
 import { ThemeToggle } from "@inventario/ui/theme-toggle";
 import { signOut } from "../hooks/useAuth";
 import { ConnectionBadge } from "./ConnectionBadge";
+import { SyncBlockingOverlay } from "./SyncBlockingOverlay";
 import type { DesktopMainNav } from "../lib/panel-nav";
 import { isDesktopMainNav } from "../lib/panel-nav";
 
@@ -25,6 +26,9 @@ interface AppShellProps {
   online: boolean;
   pendingSync?: number;
   syncing?: boolean;
+  blockingSync?: boolean;
+  syncMessage?: string | null;
+  onSyncClick?: () => void;
   user: { nombre: string; email: string };
   children: ReactNode;
 }
@@ -37,6 +41,9 @@ export function AppShell({
   online,
   pendingSync = 0,
   syncing = false,
+  blockingSync = false,
+  syncMessage = null,
+  onSyncClick,
   user,
   children,
 }: AppShellProps) {
@@ -44,6 +51,7 @@ export function AppShell({
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-muted/30">
+      <SyncBlockingOverlay open={blockingSync} pending={pendingSync} message={syncMessage} />
       <header className="shrink-0 border-b border-border/70 bg-card shadow-sm">
         <div className="panel-shell-header">
           <div className="flex min-w-0 items-center gap-3">
@@ -64,10 +72,21 @@ export function AppShell({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <ConnectionBadge online={online} pending={pendingSync} syncing={syncing} />
+            <ConnectionBadge
+              online={online}
+              pending={pendingSync}
+              syncing={syncing}
+              message={syncMessage}
+              onSyncClick={onSyncClick}
+            />
             <ThemeToggle />
           </div>
         </div>
+        {!online && (
+          <div className="border-t border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-center text-xs text-amber-900 dark:text-amber-100 sm:px-4">
+            Sin conexión: puede trabajar con la caché local. Los cambios se enviarán al reconectar.
+          </div>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden md:flex-row">

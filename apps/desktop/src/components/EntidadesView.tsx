@@ -256,7 +256,9 @@ export function EntidadesView({
       setCreateOpen(false);
       form.reset();
       if (result.inviteMessage) setSuccess(result.inviteMessage);
-      inviteEntidadAdminInBackground(result.data!.id, input, setSuccess);
+      if (!result.invitePendingOffline) {
+        inviteEntidadAdminInBackground(result.data!.id, input, setSuccess);
+      }
     } finally {
       setPending(false);
     }
@@ -293,12 +295,14 @@ export function EntidadesView({
         ),
       );
       setEditEntidad(null);
-      inviteEntidadAdminInBackground(
-        editEntidad.id,
-        input,
-        setSuccess,
-        result.inviteMode ?? "resend",
-      );
+      if (!result.invitePendingOffline) {
+        inviteEntidadAdminInBackground(
+          editEntidad.id,
+          input,
+          setSuccess,
+          result.inviteMode ?? "resend",
+        );
+      }
     } finally {
       setPending(false);
     }
@@ -454,7 +458,13 @@ export function EntidadesView({
           />
 
           {success && (
-            <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">
+            <p
+              className={
+                success.toLowerCase().includes("invitación pendiente")
+                  ? "rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100"
+                  : "rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary"
+              }
+            >
               {success}
             </p>
           )}

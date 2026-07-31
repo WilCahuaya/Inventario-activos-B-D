@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { UsuariosGestionPanel } from "@inventario/ui";
 import { useAuth } from "../hooks/useAuth";
+import { useOnline } from "../hooks/useOnline";
 import {
   deleteUsuario,
   inviteContador,
@@ -12,12 +13,17 @@ import {
 
 export function UsuariosView() {
   const { user } = useAuth();
+  const online = useOnline();
   const currentUserId = user?.id ?? "";
   const [usuarios, setUsuarios] = useState<ProfileConEntidad[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   async function reloadUsuarios() {
+    if (!online) {
+      setError("Sin conexión. La gestión de usuarios requiere internet.");
+      return;
+    }
     const result = await listUsuarios();
     if (result.error) {
       setError(result.error);
@@ -28,6 +34,13 @@ export function UsuariosView() {
   }
 
   useEffect(() => {
+    if (!online) {
+      setLoading(false);
+      setError("Sin conexión. La gestión de usuarios requiere internet.");
+      setUsuarios([]);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     void listUsuarios()
@@ -50,11 +63,16 @@ export function UsuariosView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [online]);
 
   return (
     <div className="space-y-4">
-      {error && (
+      {!online && (
+        <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+          Sin conexión: no se pueden invitar, desactivar ni eliminar usuarios hasta reconectar.
+        </p>
+      )}
+      {error && online && (
         <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
@@ -65,10 +83,14 @@ export function UsuariosView() {
         loading={loading}
         pageTitle="Usuarios"
         pageSubtitle="Gestione contadores del estudio e invíte administradores al crear una entidad."
-        onInviteContador={inviteContador}
-        onResendInvitacion={resendInvitacionUsuario}
-        onSetUsuarioActivo={setUsuarioActivo}
-        onDeleteUsuario={deleteUsuario}
+        onInviteContador={online ? inviteContador : async () => ({ error: "Sin conexión." })}
+        onResendInvitacion={
+          online ? resendInvitacionUsuario : async () => ({ error: "Sin conexión." })
+        }
+        onSetUsuarioActivo={
+          online ? setUsuarioActivo : async () => ({ error: "Sin conexión." })
+        }
+        onDeleteUsuario={online ? deleteUsuario : async () => ({ error: "Sin conexión." })}
         onRefresh={reloadUsuarios}
       />
     </div>

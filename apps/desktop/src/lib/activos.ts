@@ -227,9 +227,16 @@ export async function listActivosForEntidad(entidadId: string): Promise<ActivoCo
         .order("created_at", { ascending: false });
       if (error) throw new Error(error.message);
       const mapped = await mapActivoRowsEnriched(data as Record<string, unknown>[]);
-      const { refreshActivosCache } = await import("./offline");
-      await refreshActivosCache(entidadId, mapped);
-      return mapped;
+      const { listCachedActivos, refreshActivosCache } = await import("./offline");
+      const cached = await listCachedActivos(entidadId);
+      const pendingLocal = cached.filter((a) => String(a.id).startsWith("pending-"));
+      const remoteIds = new Set(mapped.map((a) => a.id));
+      const merged = [
+        ...pendingLocal.filter((p) => !remoteIds.has(p.id)),
+        ...mapped,
+      ];
+      await refreshActivosCache(entidadId, merged);
+      return merged;
     } catch {
       /* caché */
     }
@@ -322,18 +329,28 @@ async function mapActivoRowsEnriched(
 }
 
 export async function getActivoById(activoId: string): Promise<ActivoConUbicacion | null> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("activos")
-    .select(ACTIVO_SELECT_SIN_ENTIDAD)
-    .eq("id", activoId)
-    .maybeSingle();
+  const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+  if (online) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from("activos")
+        .select(ACTIVO_SELECT_SIN_ENTIDAD)
+        .eq("id", activoId)
+        .maybeSingle();
 
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-  const mapped = mapActivoRow(data as Record<string, unknown>);
-  const [enriched] = await enrichPosibleSedeNombres([mapped]);
-  return enriched ?? mapped;
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      const mapped = mapActivoRow(data as Record<string, unknown>);
+      const [enriched] = await enrichPosibleSedeNombres([mapped]);
+      return enriched ?? mapped;
+    } catch {
+      /* caché */
+    }
+  }
+
+  const found = await findCachedActivoAcrossEntidades(activoId);
+  return found?.activo ?? null;
 }
 
 export async function createActivo(
@@ -341,7 +358,11 @@ export async function createActivo(
 ): Promise<{ data?: Activo; error?: string }> {
   const supabase = getSupabaseClient();
 
-  const esPreregistro = input.estado_registro !== "REGISTRADO";
+  // Con sede+ambiente se registra; sin ellos (o estado explícito) queda preregistro.
+  const tieneUbicacion = Boolean(input.sede_id && input.ambiente_id);
+  const esPreregistro =
+    input.estado_registro === "PREREGISTRADO" ||
+    (input.estado_registro !== "REGISTRADO" && !tieneUbicacion);
 
   let responsable: string | null = null;
   const ambienteResponsableId = esPreregistro ? input.posible_ambiente_id : input.ambiente_id;
@@ -576,7 +597,16 @@ export async function cambiarUbicacionActivo(
 
   const activo = await getActivoById(activoId);
   if (!activo) return { error: "Activo no encontrado tras actualizar." };
-  return { data: activo };
+
+  const { upsertCachedActivo } = await import("./offline");
+  const ambienteMaster = await findMasterItem<AmbienteConSede>("ambientes", ambienteId);
+  const updated: ActivoConUbicacion = {
+    ...activo,
+    sede_nombre: ambienteMaster?.data.sede_nombre ?? activo.sede_nombre,
+    ambiente_nombre: ambienteMaster?.data.nombre ?? activo.ambiente_nombre,
+  };
+  await upsertCachedActivo(existing.entidad_id, updated);
+  return { data: updated };
 }
 
 export async function darDeBajaActivo(
@@ -800,7 +830,16 @@ export async function registrarActivo(
 
   const activo = await getActivoById(activoId);
   if (!activo) return { error: "Activo no encontrado tras validar." };
-  return { data: activo };
+
+  const { upsertCachedActivo } = await import("./offline");
+  const ambiente = await findMasterItem<AmbienteConSede>("ambientes", destino.ambienteId);
+  const updated: ActivoConUbicacion = {
+    ...activo,
+    sede_nombre: ambiente?.data.sede_nombre ?? activo.sede_nombre,
+    ambiente_nombre: ambiente?.data.nombre ?? activo.ambiente_nombre,
+  };
+  await upsertCachedActivo(activo.entidad_id, updated);
+  return { data: updated };
 }
 
 export async function previewActivosSimilares(
@@ -810,6 +849,22 @@ export async function previewActivosSimilares(
 ): Promise<ActivosSimilaresPreview | null> {
   const qty = Math.floor(cantidad);
   if (qty < 1 || qty > MAX_ACTIVOS_SIMILARES_CANTIDAD) return null;
+
+  if (!isOnline()) {
+    const { listCachedActivos } = await import("./offline");
+    const cached = await listCachedActivos(entidadId);
+    const template = cached.find(
+      (a) =>
+        a.codigo_catalogo.trim() === codigoCatalogo.trim() &&
+        a.estado_registro !== "DADO_DE_BAJA",
+    );
+    if (!template) return null;
+    return {
+      es_registrado: template.estado_registro === "REGISTRADO",
+      primer_codigo: null,
+      ultimo_codigo: null,
+    };
+  }
 
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.rpc("preview_activos_similares_rango", {
@@ -844,6 +899,107 @@ export async function createActivosSimilares(
   const qty = Math.floor(cantidad);
   if (qty < 1 || qty > MAX_ACTIVOS_SIMILARES_CANTIDAD) {
     return { error: `La cantidad debe estar entre 1 y ${MAX_ACTIVOS_SIMILARES_CANTIDAD}.` };
+  }
+
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return { error: "Activo no encontrado en caché local." };
+    const { entidadId, activo: template } = found;
+
+    if (template.estado_registro === "DADO_DE_BAJA") {
+      return { error: "No puede duplicar un activo dado de baja." };
+    }
+
+    let sedeId = ubicacion?.sedeId ?? template.sede_id ?? "";
+    let ambienteId = ubicacion?.ambienteId ?? template.ambiente_id ?? "";
+    let sedeNombre = template.sede_nombre;
+    let ambienteNombre = template.ambiente_nombre;
+    let responsable = template.responsable;
+
+    if (ubicacion) {
+      const ambiente = await findMasterItem<AmbienteConSede>("ambientes", ubicacion.ambienteId);
+      if (!ambiente || ambiente.data.sede_id !== ubicacion.sedeId) {
+        return { error: "El ambiente no pertenece a la sede seleccionada." };
+      }
+      sedeId = ubicacion.sedeId;
+      ambienteId = ubicacion.ambienteId;
+      sedeNombre = ambiente.data.sede_nombre;
+      ambienteNombre = ambiente.data.nombre;
+      responsable = ambiente.data.responsable?.trim() || null;
+    }
+
+    if (template.estado_registro === "REGISTRADO" && (!sedeId || !ambienteId)) {
+      return { error: "Seleccione sede y ambiente para las copias." };
+    }
+
+    const { enqueueOfflineCreate, upsertCachedActivo } = await import("./offline");
+    const now = new Date().toISOString();
+    const esPreregistro = template.estado_registro === "PREREGISTRADO";
+
+    for (let i = 0; i < qty; i++) {
+      const localId = `pending-${crypto.randomUUID()}`;
+      const localActivo: ActivoConUbicacion = {
+        ...template,
+        id: localId,
+        correlativo: null,
+        codigo_barras: null,
+        serie: null,
+        foto_path: null,
+        comprobante_path: null,
+        sede_id: esPreregistro ? null : sedeId || null,
+        ambiente_id: esPreregistro ? (template.ambiente_id ?? null) : ambienteId || null,
+        posible_ambiente_id: esPreregistro
+          ? (ubicacion?.ambienteId ?? template.posible_ambiente_id)
+          : null,
+        responsable: esPreregistro ? template.responsable : responsable,
+        sede_nombre: esPreregistro ? template.sede_nombre : sedeNombre,
+        ambiente_nombre: esPreregistro ? template.ambiente_nombre : ambienteNombre,
+        created_at: now,
+        updated_at: now,
+        created_by: "",
+        updated_by: null,
+      };
+
+      const input: CreateActivoInput = {
+        entidad_id: entidadId,
+        codigo_catalogo: template.codigo_catalogo,
+        nombre: template.nombre,
+        nombre_etiqueta: template.nombre_etiqueta,
+        descripcion: template.descripcion ?? undefined,
+        caracteristicas: template.caracteristicas ?? undefined,
+        categoria: template.categoria,
+        estado_bien: template.estado_bien,
+        marca: template.marca ?? undefined,
+        modelo: template.modelo ?? undefined,
+        color: template.color ?? undefined,
+        medidas: template.medidas ?? undefined,
+        depreciacion: template.depreciacion ?? undefined,
+        observacion: template.observacion ?? undefined,
+        valor_adquisicion: template.valor_adquisicion ?? undefined,
+        valor_es_mercado: template.valor_es_mercado ?? undefined,
+        fecha_adquisicion: template.fecha_adquisicion ?? undefined,
+        vida_util_meses: template.vida_util_meses ?? undefined,
+        comprobante_serie: template.comprobante_serie ?? undefined,
+        cuenta_contable_codigo: template.cuenta_contable_codigo,
+        cuenta_contable_nombre: template.cuenta_contable_nombre,
+        estado_registro: template.estado_registro,
+        ...(esPreregistro
+          ? { posible_ambiente_id: localActivo.posible_ambiente_id }
+          : { sede_id: sedeId, ambiente_id: ambienteId }),
+      };
+
+      await enqueueOfflineCreate(entidadId, { input, localActivo });
+      await upsertCachedActivo(entidadId, localActivo);
+    }
+
+    return {
+      data: {
+        creados: qty,
+        estado_registro: template.estado_registro,
+        primer_codigo_barras: null,
+        ultimo_codigo_barras: null,
+      },
+    };
   }
 
   const supabase = getSupabaseClient();
@@ -885,6 +1041,19 @@ export async function createActivosSimilares(
 export async function getEjemplaresSimilaresResumen(
   activoId: string,
 ): Promise<EjemplaresSimilaresResumen | null> {
+  if (!isOnline()) {
+    const found = await findCachedActivoAcrossEntidades(activoId);
+    if (!found) return null;
+    const { listCachedActivos } = await import("./offline");
+    const cached = await listCachedActivos(found.entidadId);
+    const similares = cached.filter((a) => activoEsSimilarLocal(a, found.activo));
+    return {
+      total: similares.length,
+      registrados: similares.filter((a) => a.estado_registro === "REGISTRADO").length,
+      preregistrados: similares.filter((a) => a.estado_registro === "PREREGISTRADO").length,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.rpc("resumen_ejemplares_similares", {
     p_activo_id: activoId,

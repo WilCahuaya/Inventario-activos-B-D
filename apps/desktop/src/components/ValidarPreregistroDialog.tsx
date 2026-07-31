@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Ambiente, Sede } from "@inventario/types";
 import { entidadMuestraSelectorSede, sedeIdSinSelector } from "@inventario/types";
 import { Button, Dialog, Label, Select } from "@inventario/ui";
-import { registrarActivo } from "../lib/activos";
+import { registrarActivo, type ActivoConUbicacion } from "../lib/activos";
 import { listAmbientes, listSedes } from "../lib/ubicacion";
 
 interface ValidarPreregistroDialogProps {
@@ -14,7 +14,7 @@ interface ValidarPreregistroDialogProps {
   codigoCatalogo?: string;
   posibleAmbienteId?: string | null;
   posibleAmbienteNombre?: string | null;
-  onSuccess?: () => void;
+  onSuccess?: (activo: ActivoConUbicacion) => void;
 }
 
 export function ValidarPreregistroDialog({
@@ -96,7 +96,7 @@ export function ValidarPreregistroDialog({
         return;
       }
       onClose();
-      onSuccess?.();
+      if (result.data) onSuccess?.(result.data);
     } finally {
       setPending(false);
     }
