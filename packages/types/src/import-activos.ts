@@ -90,7 +90,7 @@ function normalizeImportNombreCuenta(cuentaCodigo: string, nombre: string): stri
   return texto.length >= 2 ? texto : null;
 }
 
-export const MAX_IMPORT_ACTIVOS_FILAS = 500;
+export const MAX_IMPORT_ACTIVOS_FILAS = 1000;
 
 export const IMPORT_ACTIVOS_COLUMN_ERROR = "Error" as const;
 

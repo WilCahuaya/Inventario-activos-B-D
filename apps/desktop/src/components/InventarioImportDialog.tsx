@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Entidad, ImportActivosResult, ImportProgress } from "@inventario/types";
-import { toImportProgress } from "@inventario/types";
+import { MAX_IMPORT_ACTIVOS_FILAS, toImportProgress } from "@inventario/types";
 import { Button, Dialog, FileInput, ImportProgressBar, Label, Select } from "@inventario/ui";
 import { getImportActivosUbicaciones, importActivos } from "../lib/import-activos";
 import {
@@ -131,12 +131,14 @@ export function InventarioImportDialog({
               Importe activos de <strong>{fixedEntidad.nombre}</strong> desde Excel. Al registrar, el
               correlativo y código de barras se asignan automáticamente. En columna Ambiente use
               «preregistro» o «Adquisicion {anioPreregistro}» para preregistrar sin código.
+              Máximo {MAX_IMPORT_ACTIVOS_FILAS} filas por archivo.
             </>
           ) : (
             <>
               Importe activos de una entidad desde Excel. Al registrar, el correlativo y código de
               barras se asignan automáticamente. En Ambiente use un local físico o «preregistro» /
-              «Adquisicion {anioPreregistro}» para preregistrar.
+              «Adquisicion {anioPreregistro}» para preregistrar. Máximo{" "}
+              {MAX_IMPORT_ACTIVOS_FILAS} filas por archivo.
             </>
           )}
         </p>

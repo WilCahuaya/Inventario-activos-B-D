@@ -17,4 +17,4 @@ export function toImportProgress(current: number, total: number): ImportProgress
 }
 
 /** Tamaño de lote para importaciones vía server actions (progreso en el cliente). */
-export const IMPORT_PROGRESS_CHUNK_SIZE = 10;
+export const IMPORT_PROGRESS_CHUNK_SIZE = 50;
