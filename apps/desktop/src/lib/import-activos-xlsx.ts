@@ -114,6 +114,8 @@ export async function downloadImportActivosPlantilla(
   ubicaciones: ImportUbicacionRef[],
 ): Promise<void> {
   const XLSX = await import("xlsx");
+  const fisicos = ubicaciones.filter((u) => !u.esPreregistro);
+  const ejemploUbicacion = fisicos[0] ?? ubicaciones[0];
   const ejemplo: ImportActivoFila = {
     Categoría: "Activo",
     "Código catálogo": "12345678",
@@ -131,14 +133,20 @@ export async function downloadImportActivosPlantilla(
     Observaciones: "",
     "Código cuenta contable": "",
     "Nombre cuenta contable": "",
-    Sucursal: ubicaciones[0]?.sedeNombre ?? "Principal",
-    Ambiente: ubicaciones[0]?.ambienteNombre ?? "",
+    Sucursal: ejemploUbicacion?.sedeNombre ?? "Principal",
+    Ambiente: ejemploUbicacion?.ambienteNombre ?? "",
   };
 
   const plantillaRows = [[...IMPORT_ACTIVOS_HEADERS], IMPORT_ACTIVOS_HEADERS.map((h) => ejemplo[h])];
   const ubicacionRows = [
-    ["Sucursal", "Ambiente"],
-    ...ubicaciones.map((u) => [u.sedeNombre, u.ambienteNombre]),
+    ["Sucursal", "Ambiente", "Uso en importación"],
+    ...ubicaciones.map((u) => [
+      u.sedeNombre,
+      u.ambienteNombre,
+      u.esPreregistro
+        ? "Preregistro (use este nombre o alias «preregistro» en columna Ambiente)"
+        : "Ubicación al registrar el activo",
+    ]),
   ];
 
   const wb = XLSX.utils.book_new();

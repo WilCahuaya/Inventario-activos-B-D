@@ -118,6 +118,7 @@ export function InventarioImportDialog({
     await downloadImportActivosErrores(entidad.nombre, result.errores);
   }
 
+  const anioPreregistro = new Date().getFullYear();
   const canImport = Boolean(resolvedEntidadId && file && !pending);
   const hasErrores = (result?.errores.length ?? 0) > 0;
 
@@ -127,13 +128,15 @@ export function InventarioImportDialog({
         <p className="text-sm text-muted-foreground">
           {fixedEntidad ? (
             <>
-              Importe activos de <strong>{fixedEntidad.nombre}</strong> desde Excel. El correlativo
-              y código de barras se asignan automáticamente.
+              Importe activos de <strong>{fixedEntidad.nombre}</strong> desde Excel. Al registrar, el
+              correlativo y código de barras se asignan automáticamente. En columna Ambiente use
+              «preregistro» o «Adquisicion {anioPreregistro}» para preregistrar sin código.
             </>
           ) : (
             <>
-              Importe activos de una entidad desde Excel. El correlativo y código de barras se asignan
-              automáticamente. Use las columnas Sucursal y Ambiente para ubicar cada bien.
+              Importe activos de una entidad desde Excel. Al registrar, el correlativo y código de
+              barras se asignan automáticamente. En Ambiente use un local físico o «preregistro» /
+              «Adquisicion {anioPreregistro}» para preregistrar.
             </>
           )}
         </p>

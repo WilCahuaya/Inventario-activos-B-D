@@ -5,6 +5,7 @@ import {
 
 type CategoriaBien = "ACTIVO" | "CUENTA_ORDEN";
 type EstadoBien = "BUENO" | "REGULAR" | "MALO";
+type EstadoRegistroImport = "PREREGISTRADO" | "REGISTRADO";
 
 const IMPORT_CUENTA_CODIGO_RE = /^\d{1,6}$/;
 const CATALOGO_PROPIO_IMPORT_RE = /^BD(\d{1,6})$/i;
@@ -128,6 +129,7 @@ export interface ImportUbicacionRef {
   ambienteId: string;
   ambienteNombre: string;
   responsable?: string | null;
+  esPreregistro?: boolean;
 }
 
 export interface ImportActivoCatalogoItem {
@@ -164,8 +166,10 @@ export interface ImportActivoInsertPayload {
   depreciacion: string | null;
   vida_util_meses: number | null;
   observacion: string | null;
-  sede_id: string;
-  ambiente_id: string;
+  estado_registro: EstadoRegistroImport;
+  sede_id: string | null;
+  ambiente_id: string | null;
+  posible_ambiente_id: string | null;
   cuenta_contable_codigo: string | null;
   cuenta_contable_nombre: string | null;
   /** @deprecated Ya no actualiza catálogo; conservado por compatibilidad interna. */
@@ -231,6 +235,36 @@ const HEADER_ALIASES: Record<string, ImportActivoHeader> = {
   "nombre de cuenta contable": "Nombre cuenta contable",
   contabilidad: "Nombre cuenta contable",
 };
+
+const PREREGISTRO_AMBIENTE_ALIASES = new Set([
+  "preregistro",
+  "preregistros",
+  "pre registro",
+  "pre-registro",
+  "preregistrado",
+  "preregistrados",
+  "preregistrar",
+]);
+
+/** Alias o nombre del ambiente sistema de preregistros (ej. «preregistros», «Adquisicion 2026»). */
+export function isImportPreregistroAmbienteAlias(text: string): boolean {
+  const key = normalizeImportKey(text);
+  if (!key) return false;
+  if (PREREGISTRO_AMBIENTE_ALIASES.has(key)) return true;
+  if (/^adquisicion \d{4}$/.test(key)) return true;
+  return key === normalizeImportKey(`Adquisicion ${new Date().getFullYear()}`);
+}
+
+function resolveImportEstadoRegistroFromAmbiente(
+  matchFisico: { sede_id: string; ambiente_id: string } | null,
+  matchTodos: { sede_id: string; ambiente_id: string } | null,
+  ambienteEsAliasPreregistro: boolean,
+): EstadoRegistroImport {
+  if (ambienteEsAliasPreregistro || (matchTodos && !matchFisico)) {
+    return "PREREGISTRADO";
+  }
+  return "REGISTRADO";
+}
 
 export function normalizeImportKey(text: string): string {
   return text
@@ -471,7 +505,7 @@ function resolveImportCuentaContable(
 export function validateImportActivoFila(
   fila: ImportActivoFila,
   entidadId: string,
-  ubicacionLookup: Map<string, { sede_id: string; ambiente_id: string }>,
+  ubicacionRefs: ImportUbicacionRef[],
   catalogoByCodigo: Map<string, ImportActivoCatalogoItem>,
   cuentaLookup: Map<string, string>,
 ):
@@ -602,21 +636,55 @@ export function validateImportActivoFila(
 
   const sucursal = fila.Sucursal.trim();
   const ambiente = fila.Ambiente.trim();
+  const ambienteEsAliasPreregistro = ambiente ? isImportPreregistroAmbienteAlias(ambiente) : false;
 
-  if (!sucursal) {
-    return { ok: false, motivo: "Sucursal es obligatoria." };
-  }
-  if (!ambiente) {
-    return { ok: false, motivo: "Ambiente es obligatorio." };
-  }
+  const fisicoLookup = buildUbicacionLookup(
+    ubicacionRefs.filter((ref) => !ref.esPreregistro),
+  );
+  const todoLookup = buildUbicacionLookup(ubicacionRefs);
+  const ubicacionKey =
+    sucursal && ambiente
+      ? `${normalizeImportKey(sucursal)}|${normalizeImportKey(ambiente)}`
+      : "";
+  const matchFisico = ubicacionKey ? fisicoLookup.get(ubicacionKey) : null;
+  const matchTodos = ubicacionKey ? todoLookup.get(ubicacionKey) : null;
 
-  const ubicacionKey = `${normalizeImportKey(sucursal)}|${normalizeImportKey(ambiente)}`;
-  const ubicacion = ubicacionLookup.get(ubicacionKey);
-  if (!ubicacion) {
-    return {
-      ok: false,
-      motivo: `Ambiente "${ambiente}" no encontrado en sucursal "${sucursal}".`,
-    };
+  const estadoRegistro = resolveImportEstadoRegistroFromAmbiente(
+    matchFisico ?? null,
+    matchTodos ?? null,
+    ambienteEsAliasPreregistro,
+  );
+
+  let sedeId: string | null = null;
+  let ambienteId: string | null = null;
+  let posibleAmbienteId: string | null = null;
+
+  if (estadoRegistro === "REGISTRADO") {
+    if (!sucursal) {
+      return { ok: false, motivo: "Sucursal es obligatoria." };
+    }
+    if (!ambiente) {
+      return { ok: false, motivo: "Ambiente es obligatorio." };
+    }
+    if (!matchFisico) {
+      return {
+        ok: false,
+        motivo: `Ambiente "${ambiente}" no encontrado en sucursal "${sucursal}".`,
+      };
+    }
+    sedeId = matchFisico.sede_id;
+    ambienteId = matchFisico.ambiente_id;
+  } else {
+    if (matchFisico) {
+      posibleAmbienteId = matchFisico.ambiente_id;
+    } else if (sucursal || ambiente) {
+      if (!ambienteEsAliasPreregistro && !matchTodos) {
+        return {
+          ok: false,
+          motivo: `Posible ambiente "${ambiente}" no encontrado en sucursal "${sucursal}".`,
+        };
+      }
+    }
   }
 
   return {
@@ -649,8 +717,10 @@ export function validateImportActivoFila(
       depreciacion,
       vida_util_meses: vidaUtilMeses,
       observacion: fila.Observaciones.trim() || null,
-      sede_id: ubicacion.sede_id,
-      ambiente_id: ubicacion.ambiente_id,
+      estado_registro: estadoRegistro,
+      sede_id: sedeId,
+      ambiente_id: ambienteId,
+      posible_ambiente_id: posibleAmbienteId,
       cuenta_contable_codigo: cuentaActivoCodigo,
       cuenta_contable_nombre: cuentaActivoNombre,
     },

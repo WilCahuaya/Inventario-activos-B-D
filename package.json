@@ -14,7 +14,8 @@
     "build:desktop": "pnpm --filter @inventario/desktop build",
     "build:desktop:installer": "pnpm --filter @inventario/desktop build:installer",
     "import:catalogo": "node scripts/import-catalogo.mjs",
-    "normalize:catalogo-seed": "node scripts/normalize-catalogo-seed.mjs"
+    "normalize:catalogo-seed": "node scripts/normalize-catalogo-seed.mjs",
+    "reset:piloto": "node scripts/reset-piloto-entidades.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.47.10",

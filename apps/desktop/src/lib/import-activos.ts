@@ -1,5 +1,4 @@
 import {
-  buildUbicacionLookup,
   normalizeImportCodigoCatalogoRaw,
   toImportProgress,
   validateImportActivoFila,
@@ -36,6 +35,7 @@ export async function getImportActivosUbicaciones(entidadId: string): Promise<Im
     ambienteId: a.id,
     ambienteNombre: a.nombre,
     responsable: a.responsable,
+    esPreregistro: a.es_preregistro,
   }));
 }
 
@@ -106,8 +106,21 @@ function collectImportCatalogoCodigos(filas: ImportActivoFila[]): string[] {
   return [...codes];
 }
 
+function responsableForImportPayload(
+  payload: ImportActivoInsertPayload,
+  ubicaciones: ImportUbicacionRef[],
+): string | null {
+  const ambienteId =
+    payload.estado_registro === "REGISTRADO"
+      ? payload.ambiente_id
+      : payload.posible_ambiente_id;
+  if (!ambienteId) return null;
+  const ref = ubicaciones.find((u) => u.ambienteId === ambienteId);
+  return ref?.responsable?.trim() || null;
+}
+
 function buildCreateActivoInput(payload: ImportActivoInsertPayload): CreateActivoInput {
-  return {
+  const base: CreateActivoInput = {
     entidad_id: payload.entidad_id,
     codigo_catalogo: payload.codigo_catalogo,
     nombre: payload.nombre,
@@ -128,9 +141,60 @@ function buildCreateActivoInput(payload: ImportActivoInsertPayload): CreateActiv
     observacion: payload.observacion ?? undefined,
     cuenta_contable_codigo: payload.cuenta_contable_codigo,
     cuenta_contable_nombre: payload.cuenta_contable_nombre,
-    sede_id: payload.sede_id,
-    ambiente_id: payload.ambiente_id,
-    estado_registro: "REGISTRADO",
+    estado_registro: payload.estado_registro,
+  };
+
+  if (payload.estado_registro === "REGISTRADO") {
+    base.sede_id = payload.sede_id ?? undefined;
+    base.ambiente_id = payload.ambiente_id ?? undefined;
+  } else {
+    base.posible_ambiente_id = payload.posible_ambiente_id;
+  }
+
+  return base;
+}
+
+function buildActivosInsertFromImport(
+  payload: ImportActivoInsertPayload,
+  responsable: string | null,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    entidad_id: payload.entidad_id,
+    codigo_catalogo: payload.codigo_catalogo,
+    nombre: payload.nombre,
+    caracteristicas: payload.caracteristicas,
+    categoria: payload.categoria,
+    estado_bien: payload.estado_bien,
+    marca: payload.marca,
+    modelo: payload.modelo,
+    serie: payload.serie,
+    color: payload.color,
+    medidas: payload.medidas,
+    fecha_adquisicion: payload.fecha_adquisicion,
+    fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion,
+    valor_adquisicion: payload.valor_adquisicion,
+    valor_es_mercado: payload.valor_es_mercado,
+    depreciacion: payload.depreciacion,
+    vida_util_meses: payload.vida_util_meses,
+    observacion: payload.observacion,
+    responsable,
+    cuenta_contable_codigo: payload.cuenta_contable_codigo,
+    cuenta_contable_nombre: payload.cuenta_contable_nombre,
+  };
+
+  if (payload.estado_registro === "REGISTRADO") {
+    return {
+      ...base,
+      sede_id: payload.sede_id,
+      ambiente_id: payload.ambiente_id,
+      estado_registro: "REGISTRADO",
+    };
+  }
+
+  return {
+    ...base,
+    estado_registro: "PREREGISTRADO",
+    posible_ambiente_id: payload.posible_ambiente_id,
   };
 }
 
@@ -139,15 +203,31 @@ function buildLocalActivoFromImport(
   responsable: string | null,
   ubicaciones: ImportUbicacionRef[],
 ): ActivoConUbicacion {
-  const ubicacion = ubicaciones.find((u) => u.ambienteId === payload.ambiente_id);
+  const preregistroRef = ubicaciones.find((u) => u.esPreregistro);
+  const ubicacionFisica =
+    payload.estado_registro === "REGISTRADO"
+      ? ubicaciones.find((u) => u.ambienteId === payload.ambiente_id)
+      : payload.posible_ambiente_id
+        ? ubicaciones.find((u) => u.ambienteId === payload.posible_ambiente_id)
+        : null;
+
+  const sedeId =
+    payload.estado_registro === "REGISTRADO"
+      ? payload.sede_id!
+      : preregistroRef?.sedeId ?? null;
+  const ambienteId =
+    payload.estado_registro === "REGISTRADO"
+      ? payload.ambiente_id!
+      : preregistroRef?.ambienteId ?? null;
+
   const now = new Date().toISOString();
   const base: Activo = {
     id: `pending-${crypto.randomUUID()}`,
     entidad_id: payload.entidad_id,
-    sede_id: payload.sede_id,
-    ambiente_id: payload.ambiente_id,
+    sede_id: sedeId,
+    ambiente_id: ambienteId,
     codigo_catalogo: payload.codigo_catalogo,
-    correlativo: null,
+    correlativo: payload.estado_registro === "REGISTRADO" ? null : null,
     codigo_barras: null,
     nombre: payload.nombre,
     nombre_etiqueta: null,
@@ -167,7 +247,7 @@ function buildLocalActivoFromImport(
     observacion: payload.observacion,
     responsable,
     valor_es_mercado: payload.valor_es_mercado,
-    estado_registro: "REGISTRADO",
+    estado_registro: payload.estado_registro,
     valor_adquisicion: payload.valor_adquisicion,
     fecha_adquisicion: payload.fecha_adquisicion,
     fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion,
@@ -177,7 +257,7 @@ function buildLocalActivoFromImport(
     comprobante_serie: null,
     cuenta_contable_codigo: payload.cuenta_contable_codigo,
     cuenta_contable_nombre: payload.cuenta_contable_nombre,
-    posible_ambiente_id: null,
+    posible_ambiente_id: payload.posible_ambiente_id,
     motivo_baja: null,
     created_by: "",
     updated_by: null,
@@ -187,8 +267,15 @@ function buildLocalActivoFromImport(
 
   return {
     ...base,
-    sede_nombre: ubicacion?.sedeNombre,
-    ambiente_nombre: ubicacion?.ambienteNombre,
+    sede_nombre:
+      payload.estado_registro === "REGISTRADO"
+        ? ubicacionFisica?.sedeNombre ?? preregistroRef?.sedeNombre
+        : preregistroRef?.sedeNombre,
+    ambiente_nombre:
+      payload.estado_registro === "REGISTRADO"
+        ? ubicacionFisica?.ambienteNombre ?? preregistroRef?.ambienteNombre
+        : preregistroRef?.ambienteNombre,
+    posible_ambiente_nombre: ubicacionFisica?.ambienteNombre,
     cuenta_codigo: payload.cuenta_contable_codigo,
     contabilidad: payload.cuenta_contable_nombre,
   };
@@ -242,10 +329,6 @@ export async function importActivos(
   }
 
   const ubicaciones = await getImportActivosUbicaciones(entidadId);
-  const ubicacionLookup = buildUbicacionLookup(ubicaciones);
-  const responsableByAmbiente = new Map(
-    ubicaciones.map((u) => [u.ambienteId, u.responsable?.trim() || null] as const),
-  );
   const codigos = collectImportCatalogoCodigos(filas);
   const [catalogoByCodigo, cuentaLookupSeed] = await Promise.all([
     loadCatalogoForImport(codigos),
@@ -261,81 +344,58 @@ export async function importActivos(
 
   for (let i = 0; i < filas.length; i++) {
     try {
-    const fila = filas[i]!;
-    const filaExcel = filaOffset + i + 2;
-    const validated = validateImportActivoFila(
-      fila,
-      entidadId,
-      ubicacionLookup,
-      catalogoByCodigo,
-      cuentaLookup,
-    );
-    if (!validated.ok) {
-      errores.push({ fila: filaExcel, datos: fila, motivo: validated.motivo });
-      continue;
-    }
-
-    cuentaLookup = validated.cuentaLookup;
-    if (validated.cuentaToCreate) {
-      const created = await upsertCuentaContable(validated.cuentaToCreate);
-      if (created.error) {
-        errores.push({ fila: filaExcel, datos: fila, motivo: created.error });
-        continue;
-      }
-    }
-
-    const payload = validated.payload;
-    const responsable = responsableByAmbiente.get(payload.ambiente_id) ?? null;
-
-    if (!isOnline()) {
-      const offlineResult = await insertActivoImportOffline(
+      const fila = filas[i]!;
+      const filaExcel = filaOffset + i + 2;
+      const validated = validateImportActivoFila(
+        fila,
         entidadId,
-        payload,
-        responsable,
         ubicaciones,
+        catalogoByCodigo,
+        cuentaLookup,
       );
-      if (offlineResult.error) {
-        errores.push({ fila: filaExcel, datos: fila, motivo: offlineResult.error });
+      if (!validated.ok) {
+        errores.push({ fila: filaExcel, datos: fila, motivo: validated.motivo });
         continue;
       }
+
+      cuentaLookup = validated.cuentaLookup;
+      if (validated.cuentaToCreate) {
+        const created = await upsertCuentaContable(validated.cuentaToCreate);
+        if (created.error) {
+          errores.push({ fila: filaExcel, datos: fila, motivo: created.error });
+          continue;
+        }
+      }
+
+      const payload = validated.payload;
+      const responsable = responsableForImportPayload(payload, ubicaciones);
+
+      if (!isOnline()) {
+        const offlineResult = await insertActivoImportOffline(
+          entidadId,
+          payload,
+          responsable,
+          ubicaciones,
+        );
+        if (offlineResult.error) {
+          errores.push({ fila: filaExcel, datos: fila, motivo: offlineResult.error });
+          continue;
+        }
+        importados += 1;
+        continue;
+      }
+
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from("activos")
+        .insert(buildActivosInsertFromImport(payload, responsable));
+
+      if (error) {
+        errores.push({ fila: filaExcel, datos: fila, motivo: error.message });
+        continue;
+      }
+
       importados += 1;
-      continue;
-    }
-
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.from("activos").insert({
-      entidad_id: payload.entidad_id,
-      codigo_catalogo: payload.codigo_catalogo,
-      nombre: payload.nombre,
-      caracteristicas: payload.caracteristicas,
-      categoria: payload.categoria,
-      estado_bien: payload.estado_bien,
-      marca: payload.marca,
-      modelo: payload.modelo,
-      serie: payload.serie,
-      color: payload.color,
-      medidas: payload.medidas,
-      fecha_adquisicion: payload.fecha_adquisicion,
-      fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion,
-      valor_adquisicion: payload.valor_adquisicion,
-      valor_es_mercado: payload.valor_es_mercado,
-      depreciacion: payload.depreciacion,
-      vida_util_meses: payload.vida_util_meses,
-      observacion: payload.observacion,
-      responsable,
-      sede_id: payload.sede_id,
-      ambiente_id: payload.ambiente_id,
-      cuenta_contable_codigo: payload.cuenta_contable_codigo,
-      cuenta_contable_nombre: payload.cuenta_contable_nombre,
-      estado_registro: "REGISTRADO",
-    });
-
-    if (error) {
-      errores.push({ fila: filaExcel, datos: fila, motivo: error.message });
-      continue;
-    }
-
-    importados += 1;
     } finally {
       onProgress?.(toImportProgress(i + 1, filas.length));
     }

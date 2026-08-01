@@ -1746,6 +1746,7 @@ export {
   normalizeImportCodigoCatalogoPropio,
   normalizeImportCodigoCatalogoRaw,
   normalizeImportKey,
+  isImportPreregistroAmbienteAlias,
   validateImportActivoFila,
   type ImportActivoCatalogoContabilidadUpdate,
   type ImportActivoCatalogoItem,

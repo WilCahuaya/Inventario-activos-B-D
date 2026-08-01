@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  buildUbicacionLookup,
   normalizeImportCodigoCatalogoRaw,
   validateImportActivoFila,
   type ImportActivoCatalogoItem,
   type ImportActivoErrorItem,
   type ImportActivoFila,
   type ImportActivosResult,
+  type ImportActivoInsertPayload,
   type ImportUbicacionRef,
 } from "@inventario/types";
 import { createClient } from "@/lib/supabase/server";
@@ -25,6 +25,7 @@ export async function getImportActivosUbicaciones(entidadId: string): Promise<Im
     ambienteId: a.id,
     ambienteNombre: a.nombre,
     responsable: a.responsable,
+    esPreregistro: a.es_preregistro,
   }));
 }
 
@@ -78,6 +79,63 @@ function collectImportCatalogoCodigos(filas: ImportActivoFila[]): string[] {
   return [...codes];
 }
 
+function responsableForImportPayload(
+  payload: ImportActivoInsertPayload,
+  ubicaciones: ImportUbicacionRef[],
+): string | null {
+  const ambienteId =
+    payload.estado_registro === "REGISTRADO"
+      ? payload.ambiente_id
+      : payload.posible_ambiente_id;
+  if (!ambienteId) return null;
+  const ref = ubicaciones.find((u) => u.ambienteId === ambienteId);
+  return ref?.responsable?.trim() || null;
+}
+
+function buildActivosInsertFromImport(
+  payload: ImportActivoInsertPayload,
+  responsable: string | null,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    entidad_id: payload.entidad_id,
+    codigo_catalogo: payload.codigo_catalogo,
+    nombre: payload.nombre,
+    caracteristicas: payload.caracteristicas,
+    categoria: payload.categoria,
+    estado_bien: payload.estado_bien,
+    marca: payload.marca,
+    modelo: payload.modelo,
+    serie: payload.serie,
+    color: payload.color,
+    medidas: payload.medidas,
+    fecha_adquisicion: payload.fecha_adquisicion,
+    fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion ?? undefined,
+    valor_adquisicion: payload.valor_adquisicion,
+    valor_es_mercado: payload.valor_es_mercado,
+    depreciacion: payload.depreciacion,
+    vida_util_meses: payload.vida_util_meses,
+    observacion: payload.observacion,
+    responsable,
+    cuenta_contable_codigo: payload.cuenta_contable_codigo,
+    cuenta_contable_nombre: payload.cuenta_contable_nombre,
+  };
+
+  if (payload.estado_registro === "REGISTRADO") {
+    return {
+      ...base,
+      sede_id: payload.sede_id,
+      ambiente_id: payload.ambiente_id,
+      estado_registro: "REGISTRADO",
+    };
+  }
+
+  return {
+    ...base,
+    estado_registro: "PREREGISTRADO",
+    posible_ambiente_id: payload.posible_ambiente_id,
+  };
+}
+
 export async function importActivos(
   entidadId: string,
   filas: ImportActivoFila[],
@@ -98,10 +156,6 @@ export async function importActivos(
   if (!entidad) return { error: "Entidad no encontrada." };
 
   const ubicaciones = await getImportActivosUbicaciones(entidadId);
-  const ubicacionLookup = buildUbicacionLookup(ubicaciones);
-  const responsableByAmbiente = new Map(
-    ubicaciones.map((u) => [u.ambienteId, u.responsable?.trim() || null] as const),
-  );
   const codigos = collectImportCatalogoCodigos(filas);
   const [catalogoByCodigo, cuentaLookupSeed] = await Promise.all([
     loadCatalogoForImport(supabase, codigos),
@@ -119,7 +173,7 @@ export async function importActivos(
     const validated = validateImportActivoFila(
       fila,
       entidadId,
-      ubicacionLookup,
+      ubicaciones,
       catalogoByCodigo,
       cuentaLookup,
     );
@@ -138,34 +192,11 @@ export async function importActivos(
     }
 
     const payload = validated.payload;
-    const responsable = responsableByAmbiente.get(payload.ambiente_id) ?? null;
+    const responsable = responsableForImportPayload(payload, ubicaciones);
 
-    const { error } = await supabase.from("activos").insert({
-      entidad_id: payload.entidad_id,
-      codigo_catalogo: payload.codigo_catalogo,
-      nombre: payload.nombre,
-      caracteristicas: payload.caracteristicas,
-      categoria: payload.categoria,
-      estado_bien: payload.estado_bien,
-      marca: payload.marca,
-      modelo: payload.modelo,
-      serie: payload.serie,
-      color: payload.color,
-      medidas: payload.medidas,
-      fecha_adquisicion: payload.fecha_adquisicion,
-      fecha_inicio_depreciacion: payload.fecha_inicio_depreciacion ?? undefined,
-      valor_adquisicion: payload.valor_adquisicion,
-      valor_es_mercado: payload.valor_es_mercado,
-      depreciacion: payload.depreciacion,
-      vida_util_meses: payload.vida_util_meses,
-      observacion: payload.observacion,
-      responsable,
-      sede_id: payload.sede_id,
-      ambiente_id: payload.ambiente_id,
-      cuenta_contable_codigo: payload.cuenta_contable_codigo,
-      cuenta_contable_nombre: payload.cuenta_contable_nombre,
-      estado_registro: "REGISTRADO",
-    });
+    const { error } = await supabase
+      .from("activos")
+      .insert(buildActivosInsertFromImport(payload, responsable));
 
     if (error) {
       errores.push({ fila: filaExcel, datos: fila, motivo: error.message });
