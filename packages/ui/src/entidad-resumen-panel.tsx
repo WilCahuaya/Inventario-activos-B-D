@@ -62,13 +62,18 @@ export interface EntidadResumenPanelProps {
 const RESUMEN_TABLE_WIDTHS_PCT = [38, 22, 22, 18] as const;
 const AMBIENTES_RESUMEN_TABLE_WIDTHS_PCT = [18, 14, 30, 10, 12] as const;
 
-function filtrarRegistrados<T extends { estado_registro?: string }>(activos: T[]): T[] {
-  return activos.filter((a) => a.estado_registro === "REGISTRADO");
+/** Incluye registrados y preregistrados; excluye dados de baja. */
+function filtrarParaResumenDashboard<T extends { estado_registro?: string }>(
+  activos: T[],
+): T[] {
+  return activos.filter(
+    (a) => a.estado_registro === "REGISTRADO" || a.estado_registro === "PREREGISTRADO",
+  );
 }
 
 function conteosPorAmbiente(activos: EntidadResumenActivo[]): Map<string, number> {
   const map = new Map<string, number>();
-  for (const activo of filtrarRegistrados(activos)) {
+  for (const activo of filtrarParaResumenDashboard(activos)) {
     const ambienteId = activo.ambiente_id?.trim();
     if (!ambienteId) continue;
     map.set(ambienteId, (map.get(ambienteId) ?? 0) + 1);
@@ -106,14 +111,14 @@ export function EntidadResumenPanel({
   headerExtra,
   showEntidadHeader = true,
 }: EntidadResumenPanelProps) {
-  const registrados = useMemo(() => filtrarRegistrados(activos), [activos]);
+  const activosResumen = useMemo(() => filtrarParaResumenDashboard(activos), [activos]);
   const resumenFilas = useMemo(
-    () => buildClasificacionResumen(registrados, fechaResumen),
-    [registrados, fechaResumen],
+    () => buildClasificacionResumen(activosResumen, fechaResumen),
+    [activosResumen, fechaResumen],
   );
   const totales = useMemo(
-    () => buildValorizacionTotales(registrados, fechaResumen),
-    [registrados, fechaResumen],
+    () => buildValorizacionTotales(activosResumen, fechaResumen),
+    [activosResumen, fechaResumen],
   );
 
   const conteosAmbiente = useMemo(() => conteosPorAmbiente(activos), [activos]);
@@ -156,7 +161,7 @@ export function EntidadResumenPanel({
               <p className="text-sm text-muted-foreground">RUC {entidadRuc}</p>
             )}
             <p className="mt-1 text-xs text-muted-foreground">
-              Solo activos registrados · valorización al {fechaLabel}
+              Registrados y preregistrados · valorización al {fechaLabel}
             </p>
           </div>
           {headerExtra}
@@ -173,7 +178,7 @@ export function EntidadResumenPanel({
         </div>
 
         {resumenFilas.length === 0 ? (
-          <PanelEmptyState message="No hay activos registrados para valorizar en esta entidad." />
+          <PanelEmptyState message="No hay activos registrados ni preregistrados para valorizar en esta entidad." />
         ) : (
           <div className={`${scrollbarThemedClass} overflow-x-auto`}>
             <table className="w-full min-w-[44rem] table-fixed text-left text-sm">
