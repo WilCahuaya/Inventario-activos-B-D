@@ -13,9 +13,8 @@ import {
   assessLabelPrintWarnings,
   buildActivoCuentaContablePayload,
   buildNombreConsolidado,
-  calcDepreciacionAcumulada,
   calcPeriodoMeses,
-  calcValorNeto,
+  calcValorizacionActivo,
   formatComprobanteSerieInput,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
@@ -607,13 +606,16 @@ export function ActivoForm({
     [valor, valorIncrementoNum],
   );
   const vidaUtilNum = vidaUtilMeses ? Number(vidaUtilMeses) : null;
-  const depreciacionAcumulada = useMemo(
-    () => calcDepreciacionAcumulada(valorNum, vidaUtilNum, periodoMeses),
-    [valorNum, vidaUtilNum, periodoMeses],
-  );
-  const valorNeto = useMemo(
-    () => calcValorNeto(valorNum, depreciacionAcumulada),
-    [valorNum, depreciacionAcumulada],
+  const { depreciacionAcumulada, valorNeto } = useMemo(
+    () =>
+      calcValorizacionActivo({
+        valor: valorNum,
+        vidaUtilMeses: vidaUtilNum,
+        periodoMeses,
+        categoria,
+        estadoBien,
+      }),
+    [valorNum, vidaUtilNum, periodoMeses, categoria, estadoBien],
   );
   const nombreConsolidado = useMemo(
     () => buildNombreConsolidado(nombre, marca, modelo, serie, color, medidas, detalle),

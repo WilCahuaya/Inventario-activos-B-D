@@ -975,7 +975,7 @@ export function calcPeriodoMesesHasta(fechaAdquisicion: string | null, fechaHast
   );
 }
 
-/** Valor neto mínimo mientras el activo está vigente (no dado de baja). */
+/** Valor neto mínimo mientras el activo está vigente (no de baja ni en estado malo). */
 export const VALOR_NETO_MINIMO_ACTIVO = 1;
 
 /** Valor contable efectivo: precio/valor de adquisición + incremento de mejora. */
@@ -992,15 +992,27 @@ export function valorActivoEfectivo(
   return base + extra;
 }
 
+/**
+ * Valor neto en cero: dado de baja o estado físico malo.
+ * En ambos casos la depreciación acumulada puede llegar al 100 % del valor.
+ */
+export function activoValorNetoEnCero(
+  estadoRegistro?: string | null,
+  estadoBien?: string | null,
+): boolean {
+  return estadoRegistro === "DADO_DE_BAJA" || estadoBien === "MALO";
+}
+
 export function calcDepreciacionAcumulada(
   valor: number | null,
   vidaUtilMeses: number | null,
   periodoMeses: number,
-  dadoDeBaja = false,
+  /** Baja o estado malo: permite depreciar hasta el valor completo. */
+  sinValorNeto = false,
 ): number | null {
   if (valor == null || vidaUtilMeses == null || vidaUtilMeses <= 0) return null;
   const mensual = valor / vidaUtilMeses;
-  const topeDepreciacion = dadoDeBaja
+  const topeDepreciacion = sinValorNeto
     ? valor
     : Math.max(0, valor - VALOR_NETO_MINIMO_ACTIVO);
   return Math.min(topeDepreciacion, mensual * periodoMeses);
@@ -1009,14 +1021,50 @@ export function calcDepreciacionAcumulada(
 export function calcValorNeto(
   valor: number | null,
   depreciacionAcumulada: number | null,
-  dadoDeBaja = false,
+  /** Baja o estado malo: valor neto = 0. */
+  sinValorNeto = false,
 ): number | null {
   if (valor == null) return null;
-  if (dadoDeBaja) return 0;
+  if (sinValorNeto) return 0;
   if (depreciacionAcumulada == null) return null;
   const neto = valor - depreciacionAcumulada;
   if (valor <= VALOR_NETO_MINIMO_ACTIVO) return valor;
   return Math.max(VALOR_NETO_MINIMO_ACTIVO, neto);
+}
+
+/**
+ * Valorización contable por activo.
+ * Cuenta de orden no deprecia: valor neto = precio/valor de mercado (valor efectivo),
+ * salvo baja o estado malo (neto = 0).
+ */
+export function calcValorizacionActivo(params: {
+  valor: number | null;
+  vidaUtilMeses: number | null;
+  periodoMeses: number;
+  categoria?: CategoriaBien | string | null;
+  estadoRegistro?: string | null;
+  estadoBien?: string | null;
+}): { depreciacionAcumulada: number | null; valorNeto: number | null } {
+  const sinValorNeto = activoValorNetoEnCero(params.estadoRegistro, params.estadoBien);
+  if (params.categoria === "CUENTA_ORDEN") {
+    if (params.valor == null) {
+      return { depreciacionAcumulada: null, valorNeto: null };
+    }
+    if (sinValorNeto) {
+      return { depreciacionAcumulada: params.valor, valorNeto: 0 };
+    }
+    return { depreciacionAcumulada: 0, valorNeto: params.valor };
+  }
+  const depreciacionAcumulada = calcDepreciacionAcumulada(
+    params.valor,
+    params.vidaUtilMeses,
+    params.periodoMeses,
+    sinValorNeto,
+  );
+  return {
+    depreciacionAcumulada,
+    valorNeto: calcValorNeto(params.valor, depreciacionAcumulada, sinValorNeto),
+  };
 }
 
 /** Extrae el % anual de textos como "10 %", "10%" o "10,5 %". Acepta solo el número. */

@@ -12,9 +12,8 @@ import {
   debePersistirCuentaContableEnActivo,
   assessLabelPrintWarnings,
   buildNombreConsolidado,
-  calcDepreciacionAcumulada,
   calcPeriodoMeses,
-  calcValorNeto,
+  calcValorizacionActivo,
   formatComprobanteSerieInput,
   formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
@@ -403,13 +402,16 @@ export function ActivoFormDesktop({
     [valor, valorIncrementoNum],
   );
   const vidaUtilNum = vidaUtilMeses ? Number(vidaUtilMeses) : null;
-  const depreciacionAcumulada = useMemo(
-    () => calcDepreciacionAcumulada(valorNum, vidaUtilNum, periodoMeses),
-    [valorNum, vidaUtilNum, periodoMeses],
-  );
-  const valorNeto = useMemo(
-    () => calcValorNeto(valorNum, depreciacionAcumulada),
-    [valorNum, depreciacionAcumulada],
+  const { depreciacionAcumulada, valorNeto } = useMemo(
+    () =>
+      calcValorizacionActivo({
+        valor: valorNum,
+        vidaUtilMeses: vidaUtilNum,
+        periodoMeses,
+        categoria,
+        estadoBien,
+      }),
+    [valorNum, vidaUtilNum, periodoMeses, categoria, estadoBien],
   );
   const nombreOficial = nombre.trim() || catalogo?.denominacion || "";
   const mostrarDepreciacion = categoria !== "CUENTA_ORDEN" && !modoPreregistro;

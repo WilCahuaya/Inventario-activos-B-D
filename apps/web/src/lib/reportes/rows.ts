@@ -1,8 +1,7 @@
 import {
   buildDescripcionBien,
-  calcDepreciacionAcumulada,
   calcPeriodoMesesHasta,
-  calcValorNeto,
+  calcValorizacionActivo,
   categoriaBienCorto,
   estadoBienLabel,
   formatActivoCodigoDisplay,
@@ -276,18 +275,18 @@ function valoresMonetariosFila(activo: ActivoReporte, fechaCorte: Date): string[
   const valorEfectivo = valorActivoEfectivo(activo.valor_adquisicion, activo.valor_incremento);
   const precioAdq = !activo.valor_es_mercado ? valorEfectivo : null;
   const valorMercado = activo.valor_es_mercado ? valorEfectivo : null;
-  const dadoDeBaja = activo.estado_registro === "DADO_DE_BAJA";
   const periodo = calcPeriodoMesesHasta(
     resolveFechaInicioDepreciacion(activo.fecha_inicio_depreciacion, activo.fecha_adquisicion),
     fechaCorte,
   );
-  const depAcum = calcDepreciacionAcumulada(
-    valorEfectivo,
-    activo.vida_util_meses,
-    periodo,
-    dadoDeBaja,
-  );
-  const valorNeto = calcValorNeto(valorEfectivo, depAcum, dadoDeBaja);
+  const { depreciacionAcumulada: depAcum, valorNeto } = calcValorizacionActivo({
+    valor: valorEfectivo,
+    vidaUtilMeses: activo.vida_util_meses,
+    periodoMeses: periodo,
+    categoria: activo.categoria,
+    estadoRegistro: activo.estado_registro,
+    estadoBien: activo.estado_bien,
+  });
 
   return [
     precioAdq != null ? `S/ ${formatMonedaPE(precioAdq)}` : "—",

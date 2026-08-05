@@ -4,9 +4,8 @@ import type { ReactNode } from "react";
 import type { Activo, CategoriaBien, EstadoBien } from "@inventario/types";
 import {
   buildDescripcionBien,
-  calcDepreciacionAcumulada,
   calcPeriodoMeses,
-  calcValorNeto,
+  calcValorizacionActivo,
   resolveFechaInicioDepreciacion,
   valorActivoEfectivo,
   categoriaBienLetra,
@@ -418,12 +417,13 @@ export function inventarioDepreciacionFila(activo: Activo, inactivo: boolean) {
     resolveFechaInicioDepreciacion(activo.fecha_inicio_depreciacion, activo.fecha_adquisicion),
   );
   const valor = valorActivoEfectivo(activo.valor_adquisicion, activo.valor_incremento);
-  const depAcum = calcDepreciacionAcumulada(
+  const { depreciacionAcumulada: depAcum, valorNeto } = calcValorizacionActivo({
     valor,
-    activo.vida_util_meses,
-    periodo,
-    inactivo,
-  );
-  const valorNeto = calcValorNeto(valor, depAcum, inactivo);
+    vidaUtilMeses: activo.vida_util_meses,
+    periodoMeses: periodo,
+    categoria: activo.categoria,
+    estadoRegistro: inactivo ? "DADO_DE_BAJA" : activo.estado_registro,
+    estadoBien: activo.estado_bien,
+  });
   return { periodo, depAcum, valorNeto };
 }
