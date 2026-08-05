@@ -1,14 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   buildClasificacionResumen,
   buildValorizacionTotales,
   entidadMuestraSelectorSede,
+  parseFechaDDMMYYYY,
+  validarFechaDDMMYYYY,
   type ActivoValorizacionFuente,
   type ClasificacionResumen,
 } from "@inventario/types";
+import { FechaDdMmYyyyInput } from "./fecha-dd-mm-yyyy-input";
 import {
   PanelEmptyState,
   PanelCountLabel,
@@ -23,6 +26,16 @@ import {
   panelTableStickyHeadClass,
 } from "./panel";
 import { scrollbarThemedClass } from "./responsive-layout";
+
+function dateToDDMMYYYY(date: Date): string {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${date.getFullYear()}`;
+}
+
+function dateFromISO(iso: string): Date {
+  return new Date(`${iso}T12:00:00`);
+}
 
 export interface EntidadResumenAmbiente {
   id: string;
@@ -53,6 +66,7 @@ export interface EntidadResumenPanelProps {
   activos: EntidadResumenActivo[];
   ambientes: EntidadResumenAmbiente[];
   sedes: EntidadResumenSede[];
+  /** Valor inicial del corte (por defecto hoy). El usuario puede cambiarlo en el panel. */
   fechaResumen?: Date;
   headerExtra?: ReactNode;
   /** Oculta el bloque superior con nombre/RUC (p. ej. dashboard con tabla de entidades arriba). */
@@ -111,14 +125,18 @@ export function EntidadResumenPanel({
   headerExtra,
   showEntidadHeader = true,
 }: EntidadResumenPanelProps) {
+  const [fechaCorteText, setFechaCorteText] = useState(() => dateToDDMMYYYY(fechaResumen));
+  const [fechaCorte, setFechaCorte] = useState(() => fechaResumen);
+  const [fechaError, setFechaError] = useState<string | null>(null);
+
   const activosResumen = useMemo(() => filtrarParaResumenDashboard(activos), [activos]);
   const resumenFilas = useMemo(
-    () => buildClasificacionResumen(activosResumen, fechaResumen),
-    [activosResumen, fechaResumen],
+    () => buildClasificacionResumen(activosResumen, fechaCorte),
+    [activosResumen, fechaCorte],
   );
   const totales = useMemo(
-    () => buildValorizacionTotales(activosResumen, fechaResumen),
-    [activosResumen, fechaResumen],
+    () => buildValorizacionTotales(activosResumen, fechaCorte),
+    [activosResumen, fechaCorte],
   );
 
   const conteosAmbiente = useMemo(() => conteosPorAmbiente(activos), [activos]);
@@ -145,11 +163,31 @@ export function EntidadResumenPanel({
       }));
   }, [ambientes, sedes]);
 
-  const fechaLabel = fechaResumen.toLocaleDateString("es-PE", {
+  const fechaLabel = fechaCorte.toLocaleDateString("es-PE", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
+
+  const aplicarFechaCorte = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      setFechaError("Ingrese la fecha de corte.");
+      return;
+    }
+    const error = validarFechaDDMMYYYY(trimmed);
+    if (error) {
+      setFechaError(error);
+      return;
+    }
+    const iso = parseFechaDDMMYYYY(trimmed);
+    if (!iso) {
+      setFechaError("Fecha inválida.");
+      return;
+    }
+    setFechaError(null);
+    setFechaCorte(dateFromISO(iso));
+  };
 
   return (
     <div className="space-y-6">
@@ -173,8 +211,38 @@ export function EntidadResumenPanel({
       ) : null}
 
       <section className={panelCardClass}>
-        <div className="border-b border-border/60 px-4 py-4 text-center">
-          <h3 className="text-xl font-bold tracking-wide text-foreground">RESUMEN</h3>
+        <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0 text-center sm:text-left">
+            <h3 className="text-xl font-bold tracking-wide text-foreground">RESUMEN</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Depreciación y valor neto recalculados a la fecha de corte
+            </p>
+          </div>
+          <div className="mx-auto w-full max-w-[11rem] space-y-1 sm:mx-0">
+            <label
+              htmlFor="resumen_fecha_corte"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              Fecha de corte
+            </label>
+            <FechaDdMmYyyyInput
+              id="resumen_fecha_corte"
+              value={fechaCorteText}
+              onChange={(next) => {
+                setFechaCorteText(next);
+                if (fechaError) setFechaError(null);
+              }}
+              onBlur={() => aplicarFechaCorte(fechaCorteText)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  aplicarFechaCorte(fechaCorteText);
+                }
+              }}
+              aria-invalid={Boolean(fechaError)}
+            />
+            {fechaError && <p className="text-xs text-destructive">{fechaError}</p>}
+          </div>
         </div>
 
         {resumenFilas.length === 0 ? (
