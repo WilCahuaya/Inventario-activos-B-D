@@ -169,25 +169,42 @@ export function EntidadResumenPanel({
     year: "numeric",
   });
 
-  const onFechaCorteChange = (next: string) => {
-    setFechaCorteText(next);
-    const trimmed = next.trim();
+  const aplicarFechaCorte = (raw: string, { fromBlur }: { fromBlur?: boolean } = {}) => {
+    const trimmed = raw.trim();
     if (!trimmed) {
-      setFechaError(null);
+      if (fromBlur) {
+        setFechaError("Ingrese la fecha de corte.");
+        setFechaCorteText(dateToDDMMYYYY(fechaCorte));
+      } else {
+        setFechaError(null);
+      }
       return;
     }
+
     const iso = parseFechaDDMMYYYY(trimmed);
     if (iso) {
       setFechaError(null);
+      setFechaCorteText(dateToDDMMYYYY(dateFromISO(iso)));
       setFechaCorte(dateFromISO(iso));
       return;
     }
-    // Solo mostrar error cuando el usuario terminó de escribir DD/MM/AAAA
-    if (trimmed.length >= 10) {
+
+    const completa = /^\d{2}\/\d{2}\/\d{4}$/.test(trimmed);
+    if (completa || fromBlur) {
       setFechaError(validarFechaDDMMYYYY(trimmed) ?? "Fecha inválida.");
-    } else {
-      setFechaError(null);
+      if (fromBlur) {
+        // Mantener el cálculo con la última fecha válida
+        setFechaCorteText(dateToDDMMYYYY(fechaCorte));
+      }
+      return;
     }
+
+    setFechaError(null);
+  };
+
+  const onFechaCorteChange = (next: string) => {
+    setFechaCorteText(next);
+    aplicarFechaCorte(next);
   };
 
   return (
@@ -231,6 +248,7 @@ export function EntidadResumenPanel({
               value={fechaCorteText}
               onChange={onFechaCorteChange}
               onFocus={(e) => e.currentTarget.select()}
+              onBlur={(e) => aplicarFechaCorte(e.currentTarget.value, { fromBlur: true })}
               aria-invalid={Boolean(fechaError)}
             />
             {fechaError && <p className="text-xs text-destructive">{fechaError}</p>}

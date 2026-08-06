@@ -4,30 +4,18 @@ import { useRef, type InputHTMLAttributes } from "react";
 import { formatFechaInputDDMMYYYY } from "@inventario/types";
 import { Input } from "./components";
 
-function estimateCursorAfterFechaFormat(
-  prev: string,
-  next: string,
-  cursor: number,
-): number {
-  if (!next) return 0;
-  // Selección completa / reemplazo: el cursor nativo queda en 0 y next es más corto.
-  // Colocar al final para poder seguir escribiendo dígitos (como campo vacío).
-  if (next.length < prev.length && cursor === 0) {
-    return next.length;
-  }
-  const digitsBefore = prev.slice(0, cursor).replace(/\D/g, "").length;
-  if (digitsBefore === 0) return Math.min(cursor, next.length);
-
-  let digitsSeen = 0;
-  for (let i = 0; i < next.length; i++) {
-    if (/\d/.test(next[i]!)) {
-      digitsSeen++;
-      if (digitsSeen >= digitsBefore) {
-        return i + 1;
-      }
+/** Posición del cursor tras N dígitos en el texto formateado DD/MM/AAAA. */
+function cursorAfterDigitCount(formatted: string, digitCount: number): number {
+  if (!formatted) return 0;
+  if (digitCount <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < formatted.length; i++) {
+    if (/\d/.test(formatted[i]!)) {
+      seen++;
+      if (seen >= digitCount) return i + 1;
     }
   }
-  return next.length;
+  return formatted.length;
 }
 
 export type FechaDdMmYyyyInputProps = Omit<
@@ -51,13 +39,16 @@ export function FechaDdMmYyyyInput({
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const el = e.target;
-    const cursor = el.selectionStart ?? value.length;
-    const next = formatFechaInputDDMMYYYY(el.value);
+    const raw = el.value;
+    const cursor = el.selectionStart ?? raw.length;
+    // Contar dígitos del valor crudo (antes del formateo), no del valor anterior controlado.
+    const digitsBeforeCursor = raw.slice(0, cursor).replace(/\D/g, "").length;
+    const next = formatFechaInputDDMMYYYY(raw);
     onChange(next);
     requestAnimationFrame(() => {
       const input = inputRef.current;
       if (!input) return;
-      const pos = estimateCursorAfterFechaFormat(value, next, cursor);
+      const pos = cursorAfterDigitCount(next, digitsBeforeCursor);
       input.setSelectionRange(pos, pos);
     });
   }

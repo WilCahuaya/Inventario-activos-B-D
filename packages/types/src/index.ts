@@ -445,39 +445,8 @@ export function parseFechaDDMMYYYY(text: string): string | null {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-/** Formatea dígitos al escribir: 06062026 → 06/06/2026. Con barras, edita día/mes/año por segmento. */
+/** Formatea dígitos al escribir: 12122025 → 12/12/2025. Ignora barras sueltas (evita 12//12). */
 export function formatFechaInputDDMMYYYY(value: string): string {
-  if (value.includes("/")) {
-    const parts = value.split("/");
-    const day = (parts[0] ?? "").replace(/\D/g, "").slice(0, 2);
-    let month = "";
-    let year = "";
-
-    if (parts.length >= 3) {
-      month = (parts[1] ?? "").replace(/\D/g, "").slice(0, 2);
-      year = (parts[2] ?? "").replace(/\D/g, "").slice(0, 4);
-    } else if (parts.length === 2) {
-      const rest = (parts[1] ?? "").replace(/\D/g, "");
-      if (rest.length > 2) {
-        month = rest.slice(0, 2);
-        year = rest.slice(2, 6);
-      } else {
-        month = rest.slice(0, 2);
-      }
-    }
-
-    let out = day;
-    if (parts.length > 1 || value.includes("/")) {
-      out += `/${month}`;
-      if (parts.length > 2) {
-        out += `/${year}`;
-      } else if (year) {
-        out += `/${year}`;
-      }
-    }
-    return out;
-  }
-
   const digits = value.replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;

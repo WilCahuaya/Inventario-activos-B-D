@@ -15,7 +15,6 @@ import {
   calcPeriodoMeses,
   calcValorizacionActivo,
   formatComprobanteSerieInput,
-  formatFechaInputDDMMYYYY,
   formatFechaISOToDDMMYYYY,
   formatLabelPrintWarnings,
   resolveFechaInicioDepreciacion,
@@ -48,6 +47,7 @@ import {
   ConfirmDialog,
   CuentaContableFields,
   Dialog,
+  FechaDdMmYyyyInput,
   FileInput,
   IncrementoMejoraField,
   Input,
@@ -556,11 +556,10 @@ export function ActivoFormDesktop({
   }
 
   function handleFechaAdquisicionChange(value: string) {
-    const next = formatFechaInputDDMMYYYY(value);
     setFechaInicioDepreciacion((current) =>
-      syncFechaInicioDepreciacionInput(current, fechaAdquisicion, next),
+      syncFechaInicioDepreciacionInput(current, fechaAdquisicion, value),
     );
-    setFechaAdquisicion(next);
+    setFechaAdquisicion(value);
     if (fechaAdquisicionError) setFechaAdquisicionError(null);
   }
 
@@ -572,7 +571,7 @@ export function ActivoFormDesktop({
   }
 
   function handleFechaInicioDepreciacionChange(value: string) {
-    setFechaInicioDepreciacion(formatFechaInputDDMMYYYY(value));
+    setFechaInicioDepreciacion(value);
     if (fechaInicioDepreciacionError) setFechaInicioDepreciacionError(null);
   }
 
@@ -1297,14 +1296,11 @@ export function ActivoFormDesktop({
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="fecha_adquisicion_bulk">Fecha de adquisición</Label>
-                <Input
+                <FechaDdMmYyyyInput
                   id="fecha_adquisicion_bulk"
-                  inputMode="numeric"
                   value={fechaAdquisicion}
-                  onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
+                  onChange={handleFechaAdquisicionChange}
                   onBlur={handleFechaAdquisicionBlur}
-                  placeholder="DD/MM/AAAA"
-                  maxLength={10}
                   aria-invalid={Boolean(fechaAdquisicionError)}
                   className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
                 />
@@ -1321,14 +1317,11 @@ export function ActivoFormDesktop({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fecha_inicio_depreciacion_bulk">Fecha de inicio de depreciación</Label>
-                <Input
+                <FechaDdMmYyyyInput
                   id="fecha_inicio_depreciacion_bulk"
-                  inputMode="numeric"
                   value={fechaInicioDepreciacion}
-                  onChange={(e) => handleFechaInicioDepreciacionChange(e.target.value)}
+                  onChange={handleFechaInicioDepreciacionChange}
                   onBlur={handleFechaInicioDepreciacionBlur}
-                  placeholder="DD/MM/AAAA"
-                  maxLength={10}
                   aria-invalid={Boolean(fechaInicioDepreciacionError)}
                 />
                 {fechaInicioDepreciacionError && (
@@ -1780,14 +1773,11 @@ export function ActivoFormDesktop({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="fecha_adquisicion">Fecha de adquisición</Label>
-            <Input
+            <FechaDdMmYyyyInput
               id="fecha_adquisicion"
-              inputMode="numeric"
               value={fechaAdquisicion}
-              onChange={(e) => handleFechaAdquisicionChange(e.target.value)}
+              onChange={handleFechaAdquisicionChange}
               onBlur={handleFechaAdquisicionBlur}
-              placeholder="DD/MM/AAAA"
-              maxLength={10}
               aria-invalid={Boolean(fechaAdquisicionError)}
               className={fechaAdquisicion ? fechaAdquisicionToneClass(valorEsMercado) : undefined}
             />
@@ -1804,14 +1794,11 @@ export function ActivoFormDesktop({
           </div>
           <div className="space-y-2">
             <Label htmlFor="fecha_inicio_depreciacion">Fecha de inicio de depreciación</Label>
-            <Input
+            <FechaDdMmYyyyInput
               id="fecha_inicio_depreciacion"
-              inputMode="numeric"
               value={fechaInicioDepreciacion}
-              onChange={(e) => handleFechaInicioDepreciacionChange(e.target.value)}
+              onChange={handleFechaInicioDepreciacionChange}
               onBlur={handleFechaInicioDepreciacionBlur}
-              placeholder="DD/MM/AAAA"
-              maxLength={10}
               aria-invalid={Boolean(fechaInicioDepreciacionError)}
             />
             {fechaInicioDepreciacionError && (
