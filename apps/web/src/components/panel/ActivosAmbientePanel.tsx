@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Activo, EstadoRegistro } from "@inventario/types";
-import { matchesCodigoBarrasQuery } from "@inventario/types";
-import { useToast, mensajeEliminacionPreregistros } from "@inventario/ui";
+import type { Activo, CategoriaBien, EstadoRegistro } from "@inventario/types";
+import { FILTROS_CATEGORIA_BIEN, matchesCodigoBarrasQuery } from "@inventario/types";
+import { Select, useToast, mensajeEliminacionPreregistros } from "@inventario/ui";
 import {
   ActivoEditScopeNav,
   type ActivoEditScope,
@@ -98,6 +98,7 @@ export function ActivosAmbientePanel({
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
     esAmbientePreregistro ? "PREREGISTRADO" : "",
   );
+  const [categoriaBien, setCategoriaBien] = useState<"" | CategoriaBien>("");
   const { panelScrollRef, showToolbarTrigger, scrollToToolbar } = usePanelInventarioUnifiedScroll();
   const [preregistroHeaderToolbar, setPreregistroHeaderToolbar] =
     useState<PreregistroGestionToolbarState | null>(null);
@@ -221,6 +222,7 @@ export function ActivosAmbientePanel({
       } else if (estadoRegistro && a.estado_registro !== estadoRegistro) {
         return false;
       }
+      if (categoriaBien && a.categoria !== categoriaBien) return false;
       if (!q) return true;
       return (
         a.nombre.toLowerCase().includes(q) ||
@@ -229,7 +231,7 @@ export function ActivosAmbientePanel({
         (a.modelo?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [activosList, busqueda, estadoRegistro, esAmbientePreregistro]);
+  }, [activosList, busqueda, estadoRegistro, categoriaBien, esAmbientePreregistro]);
 
   function handleSuccess() {
     setEditActivo(null);
@@ -383,12 +385,26 @@ export function ActivosAmbientePanel({
                 )}
 
                 <div
-                  className={`min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm ${esAmbientePreregistro ? "w-full max-w-none" : ""}`}
+                  className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 ${esAmbientePreregistro ? "w-full" : "md:justify-end"}`}
                 >
-                  <PanelSearchInput
-                    value={busqueda}
-                    onChange={setBusqueda}
-                    placeholder="Buscar por código, nombre, marca…"
+                  <div
+                    className={`min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm ${esAmbientePreregistro ? "w-full max-w-none" : ""}`}
+                  >
+                    <PanelSearchInput
+                      value={busqueda}
+                      onChange={setBusqueda}
+                      placeholder="Buscar por código, nombre, marca…"
+                    />
+                  </div>
+                  <Select
+                    aria-label="Categoría"
+                    size="compact"
+                    value={categoriaBien}
+                    onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
+                    options={FILTROS_CATEGORIA_BIEN.map((f) => ({
+                      value: f.value,
+                      label: f.label,
+                    }))}
                   />
                 </div>
               </div>

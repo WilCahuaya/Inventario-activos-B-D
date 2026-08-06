@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Ambiente, Entidad, EstadoRegistro, Sede } from "@inventario/types";
+import type { Ambiente, CategoriaBien, Entidad, EstadoRegistro, Sede } from "@inventario/types";
 import {
   aniosAdquisicionDesdeActivos,
   entidadMuestraSelectorSede,
+  FILTROS_CATEGORIA_BIEN,
   matchesCodigoBarrasQuery,
   pasoFiltroAnioAdquisicion,
   pasoFiltroSerieComprobante,
@@ -137,6 +138,7 @@ export function ActivosCampoList({
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
     esAmbientePreregistro ? "PREREGISTRADO" : "",
   );
+  const [categoriaBien, setCategoriaBien] = useState<"" | CategoriaBien>("");
   const [filterEntidadId, setFilterEntidadId] = useState("");
   const [sedeId, setSedeId] = useState(fixedSedeId ?? "");
   const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? ambienteFilter?.id ?? "");
@@ -276,6 +278,7 @@ export function ActivosCampoList({
     }
     if (!fixedAmbienteId) setAmbienteId("");
     setEstadoRegistro(esAmbientePreregistro ? "PREREGISTRADO" : "");
+    setCategoriaBien("");
     setFilter("");
     setAnioAdquisicion("");
     setSerieComprobanteFiltro("");
@@ -291,6 +294,7 @@ export function ActivosCampoList({
       (mostrarSelectorSede && sedeId) ||
       ambienteId ||
       estadoRegistro ||
+      categoriaBien ||
       filter.trim() ||
       anioAdquisicion ||
       serieComprobanteFiltro.trim(),
@@ -312,6 +316,7 @@ export function ActivosCampoList({
       } else if (estadoRegistro && a.estado_registro !== estadoRegistro) {
         return false;
       }
+      if (categoriaBien && a.categoria !== categoriaBien) return false;
       if (mostrarFiltrosAdquisicion && !pasoFiltroAnioAdquisicion(a.fecha_adquisicion, anioAdquisicion)) {
         return false;
       }
@@ -341,6 +346,7 @@ export function ActivosCampoList({
     fixedSedeId,
     fixedAmbienteId,
     estadoRegistro,
+    categoriaBien,
     filter,
     isGlobal,
     isAmbiente,
@@ -495,6 +501,17 @@ export function ActivosCampoList({
             placeholder="Buscar por código, nombre, marca…"
           />
         </div>
+
+        <Select
+          aria-label="Categoría"
+          size="compact"
+          value={categoriaBien}
+          onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
+          options={FILTROS_CATEGORIA_BIEN.map((f) => ({
+            value: f.value,
+            label: f.label,
+          }))}
+        />
       </div>
     </div>
   ) : null;
@@ -616,6 +633,17 @@ export function ActivosCampoList({
                         { value: "", label: "Ambiente: todos" },
                         ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
                       ]}
+                    />
+
+                    <Select
+                      aria-label="Categoría"
+                      size="compact"
+                      value={categoriaBien}
+                      onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
+                      options={FILTROS_CATEGORIA_BIEN.map((f) => ({
+                        value: f.value,
+                        label: f.label,
+                      }))}
                     />
 
                     {mostrarFiltrosAdquisicion && (
@@ -779,6 +807,20 @@ export function ActivosCampoList({
                 { value: "", label: "Todos" },
                 ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
               ]}
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="filtro_categoria" className="text-xs font-medium text-muted-foreground">
+              Categoría
+            </label>
+            <Select
+              id="filtro_categoria"
+              value={categoriaBien}
+              onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
+              options={FILTROS_CATEGORIA_BIEN.map((f) => ({
+                value: f.value,
+                label: f.label,
+              }))}
             />
           </div>
           <div className="flex items-end sm:col-span-2 lg:col-span-1">

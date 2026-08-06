@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { Activo, Entidad, EstadoRegistro } from "@inventario/types";
+import type { Activo, Entidad, EstadoRegistro, CategoriaBien } from "@inventario/types";
 import {
   aniosAdquisicionDesdeActivos,
   entidadMuestraSelectorSede,
+  FILTROS_CATEGORIA_BIEN,
   matchesCodigoBarrasQuery,
   pasoFiltroAnioAdquisicion,
   pasoFiltroSerieComprobante,
@@ -87,6 +88,7 @@ export function InventarioGlobalPanel({
   const [sedeId, setSedeId] = useState("");
   const [ambienteId, setAmbienteId] = useState("");
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(initialEstado);
+  const [categoriaBien, setCategoriaBien] = useState<"" | CategoriaBien>("");
   const [anioAdquisicion, setAnioAdquisicion] = useState("");
   const [serieComprobanteFiltro, setSerieComprobanteFiltro] = useState("");
   const [sedes, setSedes] = useState<Sede[]>([]);
@@ -236,6 +238,7 @@ export function InventarioGlobalPanel({
       if (sedeId && a.sede_id !== sedeId) return false;
       if (ambienteId && a.ambiente_id !== ambienteId) return false;
       if (estadoRegistro && a.estado_registro !== estadoRegistro) return false;
+      if (categoriaBien && a.categoria !== categoriaBien) return false;
       if (mostrarFiltrosAdquisicion && !pasoFiltroAnioAdquisicion(a.fecha_adquisicion, anioAdquisicion)) {
         return false;
       }
@@ -258,6 +261,7 @@ export function InventarioGlobalPanel({
     sedeId,
     ambienteId,
     estadoRegistro,
+    categoriaBien,
     hasFixedEntidad,
     mostrarFiltrosAdquisicion,
     anioAdquisicion,
@@ -269,6 +273,7 @@ export function InventarioGlobalPanel({
       sedeId ||
       ambienteId ||
       estadoRegistro ||
+      categoriaBien ||
       busqueda.trim() ||
       anioAdquisicion ||
       serieComprobanteFiltro.trim(),
@@ -311,6 +316,7 @@ export function InventarioGlobalPanel({
       setAmbientes([]);
     }
     setEstadoRegistro("");
+    setCategoriaBien("");
     setBusqueda("");
     setAnioAdquisicion("");
     setSerieComprobanteFiltro("");
@@ -486,6 +492,17 @@ export function InventarioGlobalPanel({
                       { value: "", label: "Ambiente: todos" },
                       ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
                     ]}
+                  />
+
+                  <Select
+                    aria-label="Categoría"
+                    size="compact"
+                    value={categoriaBien}
+                    onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
+                    options={FILTROS_CATEGORIA_BIEN.map((f) => ({
+                      value: f.value,
+                      label: f.label,
+                    }))}
                   />
 
                   {mostrarFiltrosAdquisicion && (

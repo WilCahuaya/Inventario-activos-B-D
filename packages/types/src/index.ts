@@ -426,6 +426,13 @@ export const CATEGORIA_BIEN_LABELS: Record<
   },
 };
 
+/** Opciones de filtro de categoría en listas de inventario (valor vacío = todas). */
+export const FILTROS_CATEGORIA_BIEN: { value: "" | CategoriaBien; label: string }[] = [
+  { value: "", label: "Categoría: todas" },
+  { value: "ACTIVO", label: CATEGORIA_BIEN_LABELS.ACTIVO.titulo },
+  { value: "CUENTA_ORDEN", label: CATEGORIA_BIEN_LABELS.CUENTA_ORDEN.titulo },
+];
+
 /** Convierte DD/MM/AAAA a ISO (YYYY-MM-DD) o null si es inválida. */
 export function parseFechaDDMMYYYY(text: string): string | null {
   const trimmed = text.trim();
