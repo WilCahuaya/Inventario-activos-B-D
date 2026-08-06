@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Activo, CategoriaBien, EstadoRegistro } from "@inventario/types";
 import { FILTROS_CATEGORIA_BIEN, matchesCodigoBarrasQuery } from "@inventario/types";
-import { Select, useToast, mensajeEliminacionPreregistros } from "@inventario/ui";
+import { useToast, mensajeEliminacionPreregistros } from "@inventario/ui";
 import {
   ActivoEditScopeNav,
   type ActivoEditScope,
@@ -361,7 +361,7 @@ export function ActivosAmbientePanel({
               <div
                 className={panelFilterRowClass}
                 role={esAmbientePreregistro ? undefined : "tablist"}
-                aria-label={esAmbientePreregistro ? undefined : "Estado del activo"}
+                aria-label={esAmbientePreregistro ? undefined : "Filtros de inventario"}
               >
                 {!esAmbientePreregistro && (
                   <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
@@ -385,26 +385,35 @@ export function ActivosAmbientePanel({
                 )}
 
                 <div
-                  className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 ${esAmbientePreregistro ? "w-full" : "md:justify-end"}`}
+                  className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                  role="tablist"
+                  aria-label="Categoría del bien"
                 >
-                  <div
-                    className={`min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm ${esAmbientePreregistro ? "w-full max-w-none" : ""}`}
-                  >
-                    <PanelSearchInput
-                      value={busqueda}
-                      onChange={setBusqueda}
-                      placeholder="Buscar por código, nombre, marca…"
-                    />
-                  </div>
-                  <Select
-                    aria-label="Categoría"
-                    size="compact"
-                    value={categoriaBien}
-                    onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
-                    options={FILTROS_CATEGORIA_BIEN.map((f) => ({
-                      value: f.value,
-                      label: f.label,
-                    }))}
+                  {FILTROS_CATEGORIA_BIEN.map((f) => (
+                    <button
+                      key={f.value || "all-cat"}
+                      type="button"
+                      role="tab"
+                      aria-selected={categoriaBien === f.value}
+                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                        categoriaBien === f.value
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setCategoriaBien(f.value)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div
+                  className={`min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm ${esAmbientePreregistro ? "w-full max-w-none" : ""}`}
+                >
+                  <PanelSearchInput
+                    value={busqueda}
+                    onChange={setBusqueda}
+                    placeholder="Buscar por código, nombre, marca…"
                   />
                 </div>
               </div>

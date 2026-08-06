@@ -471,7 +471,7 @@ export function ActivosCampoList({
       <div
         className={panelFilterRowClass}
         role={esAmbientePreregistro ? undefined : "tablist"}
-        aria-label={esAmbientePreregistro ? undefined : "Estado del activo"}
+        aria-label={esAmbientePreregistro ? undefined : "Filtros de inventario"}
       >
         {!esAmbientePreregistro && (
           <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
@@ -494,6 +494,29 @@ export function ActivosCampoList({
           </div>
         )}
 
+        <div
+          className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+          role="tablist"
+          aria-label="Categoría del bien"
+        >
+          {FILTROS_CATEGORIA_BIEN.map((f) => (
+            <button
+              key={f.value || "all-cat"}
+              type="button"
+              role="tab"
+              aria-selected={categoriaBien === f.value}
+              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                categoriaBien === f.value
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setCategoriaBien(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         <div className="min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm">
           <PanelSearchInput
             value={filter}
@@ -501,17 +524,6 @@ export function ActivosCampoList({
             placeholder="Buscar por código, nombre, marca…"
           />
         </div>
-
-        <Select
-          aria-label="Categoría"
-          size="compact"
-          value={categoriaBien}
-          onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
-          options={FILTROS_CATEGORIA_BIEN.map((f) => ({
-            value: f.value,
-            label: f.label,
-          }))}
-        />
       </div>
     </div>
   ) : null;
@@ -560,7 +572,7 @@ export function ActivosCampoList({
                   </div>
                 </div>
 
-                <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
+                <div className={panelFilterRowClass} role="tablist" aria-label="Filtros de inventario">
                   <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
                     {FILTROS_ESTADO.map((f) => (
                       <button
@@ -574,6 +586,29 @@ export function ActivosCampoList({
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                         onClick={() => setEstadoRegistro(f.value)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div
+                    className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                    role="tablist"
+                    aria-label="Categoría del bien"
+                  >
+                    {FILTROS_CATEGORIA_BIEN.map((f) => (
+                      <button
+                        key={f.value || "all-cat"}
+                        type="button"
+                        role="tab"
+                        aria-selected={categoriaBien === f.value}
+                        className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                          categoriaBien === f.value
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        onClick={() => setCategoriaBien(f.value)}
                       >
                         {f.label}
                       </button>
@@ -633,17 +668,6 @@ export function ActivosCampoList({
                         { value: "", label: "Ambiente: todos" },
                         ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
                       ]}
-                    />
-
-                    <Select
-                      aria-label="Categoría"
-                      size="compact"
-                      value={categoriaBien}
-                      onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
-                      options={FILTROS_CATEGORIA_BIEN.map((f) => ({
-                        value: f.value,
-                        label: f.label,
-                      }))}
                     />
 
                     {mostrarFiltrosAdquisicion && (
@@ -741,6 +765,17 @@ export function ActivosCampoList({
               {f.label}
             </Button>
           ))}
+          {FILTROS_CATEGORIA_BIEN.map((f) => (
+            <Button
+              key={f.value || "all-cat"}
+              type="button"
+              size="sm"
+              variant={categoriaBien === f.value ? "default" : "outline"}
+              onClick={() => setCategoriaBien(f.value)}
+            >
+              {f.label === "Todas" ? "Cat. todas" : f.label}
+            </Button>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {exportMeta && (
@@ -807,20 +842,6 @@ export function ActivosCampoList({
                 { value: "", label: "Todos" },
                 ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
               ]}
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="filtro_categoria" className="text-xs font-medium text-muted-foreground">
-              Categoría
-            </label>
-            <Select
-              id="filtro_categoria"
-              value={categoriaBien}
-              onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
-              options={FILTROS_CATEGORIA_BIEN.map((f) => ({
-                value: f.value,
-                label: f.label,
-              }))}
             />
           </div>
           <div className="flex items-end sm:col-span-2 lg:col-span-1">

@@ -422,7 +422,7 @@ export function InventarioGlobalPanel({
                 </div>
               </div>
 
-              <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
+              <div className={panelFilterRowClass} role="tablist" aria-label="Filtros de inventario">
                 <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
                   {FILTROS_ESTADO.map((f) => (
                     <button
@@ -436,6 +436,29 @@ export function InventarioGlobalPanel({
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                       onClick={() => setEstadoRegistro(f.value)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div
+                  className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                  role="tablist"
+                  aria-label="Categoría del bien"
+                >
+                  {FILTROS_CATEGORIA_BIEN.map((f) => (
+                    <button
+                      key={f.value || "all-cat"}
+                      type="button"
+                      role="tab"
+                      aria-selected={categoriaBien === f.value}
+                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                        categoriaBien === f.value
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setCategoriaBien(f.value)}
                     >
                       {f.label}
                     </button>
@@ -492,17 +515,6 @@ export function InventarioGlobalPanel({
                       { value: "", label: "Ambiente: todos" },
                       ...ambientes.map((a) => ({ value: a.id, label: a.nombre })),
                     ]}
-                  />
-
-                  <Select
-                    aria-label="Categoría"
-                    size="compact"
-                    value={categoriaBien}
-                    onChange={(value) => setCategoriaBien(value as "" | CategoriaBien)}
-                    options={FILTROS_CATEGORIA_BIEN.map((f) => ({
-                      value: f.value,
-                      label: f.label,
-                    }))}
                   />
 
                   {mostrarFiltrosAdquisicion && (
