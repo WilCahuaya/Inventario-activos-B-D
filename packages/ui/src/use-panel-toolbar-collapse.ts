@@ -10,19 +10,37 @@ export function usePanelInventarioUnifiedScroll(triggerThreshold = 32) {
 
   const panelScrollRef = useCallback((node: HTMLDivElement | null) => {
     scrollElRef.current = node;
+    if (node) {
+      node.style.setProperty("--inventario-body-client-width", `${node.clientWidth}px`);
+    }
     setScrollElement(node);
   }, []);
 
   useEffect(() => {
     if (!scrollElement) return;
 
-    const sync = () => {
+    const syncScroll = () => {
       setShowToolbarTrigger(scrollElement.scrollTop > triggerThreshold);
     };
 
-    sync();
-    scrollElement.addEventListener("scroll", sync, { passive: true });
-    return () => scrollElement.removeEventListener("scroll", sync);
+    /** Ancho del viewport del scroll: la toolbar sticky-left no se estira con la tabla. */
+    const syncClientWidth = () => {
+      scrollElement.style.setProperty(
+        "--inventario-body-client-width",
+        `${scrollElement.clientWidth}px`,
+      );
+    };
+
+    syncScroll();
+    syncClientWidth();
+    scrollElement.addEventListener("scroll", syncScroll, { passive: true });
+    const resizeObserver = new ResizeObserver(syncClientWidth);
+    resizeObserver.observe(scrollElement);
+
+    return () => {
+      scrollElement.removeEventListener("scroll", syncScroll);
+      resizeObserver.disconnect();
+    };
   }, [scrollElement, triggerThreshold]);
 
   const scrollToToolbar = useCallback(() => {

@@ -82,62 +82,65 @@ export const INVENTARIO_TABLE_FULL_PREREGISTRO_COL_COUNT =
 
 /** Vista administrador: sin cuenta contable ni depreciación detallada (% / periodo / acum.). */
 export const INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX = [
-  44, // N°
-  52, // Cat.
-  120, // Código
-  220, // Nombre del bien
-  240, // Descripción
+  40, // N°
+  44, // Cat.
+  108, // Código
+  160, // Nombre del bien
+  160, // Descripción
   88, // Fecha adq.
-  84, // Estado
-  100, // PA / VM
-  100, // Valor neto
-  180, // Observación
-  140, // CP / Comprobante
-  136, // Acciones
+  72, // Estado
+  118, // Importe PA/VM
+  118, // Valor neto
+  120, // Observación
+  120, // Comprobante
+  112, // Acciones
 ] as const;
 
 export const INVENTARIO_TABLE_ADMIN_COL_COUNT = INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX.length;
 
 /** Admin + posible ambiente (preregistro). */
 export const INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX = [
-  44, // N°
-  52, // Cat.
-  120, // Código
-  200, // Nombre del bien
-  180, // Posible ambiente
-  220, // Descripción
+  40, // N°
+  44, // Cat.
+  108, // Código
+  150, // Nombre del bien
+  140, // Posible ambiente
+  150, // Descripción
   88, // Fecha adq.
-  84, // Estado
-  100, // PA / VM
-  100, // Valor neto
-  160, // Observación
-  140, // CP
-  136, // Acciones
+  72, // Estado
+  118, // Importe PA/VM
+  118, // Valor neto
+  120, // Observación
+  120, // Comprobante
+  112, // Acciones
 ] as const;
 
 export const INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_COUNT =
   INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX.length;
 
 /** Anchos mínimos por columna (px) — lectura cómoda con scroll horizontal. */
-export const INVENTARIO_TABLE_SELECTION_COL_WIDTH_PX = 44;
+export const INVENTARIO_TABLE_SELECTION_COL_WIDTH_PX = 40;
+
+/** Columnas fijas a la izquierda: N°, Cat., Código, Nombre (+ selección si aplica). */
+export const INVENTARIO_STICKY_DATA_COL_COUNT = 4;
 
 export const INVENTARIO_TABLE_COL_WIDTHS_PX = [
-  44, // N°
-  52, // Cat.
-  120, // Código
-  220, // Nombre del bien
-  240, // Descripción
+  40, // N°
+  44, // Cat.
+  108, // Código
+  160, // Nombre del bien
+  160, // Descripción
   88, // Fecha adq.
   120, // Cuenta contable
-  84, // Estado
-  100, // PA / VM
-  68, // % Deprec.
-  60, // Periodo
-  100, // Dep. acum.
-  100, // Valor neto
-  180, // Observación
-  140, // CP / Comprobante
-  136, // Acciones
+  72, // Estado
+  118, // Importe PA/VM
+  72, // % Deprec.
+  64, // Periodo
+  118, // Dep. acum.
+  118, // Valor neto
+  120, // Observación
+  120, // Comprobante
+  112, // Acciones
 ] as const;
 
 const INVENTARIO_UBICACION_COL_WIDTH_PX = 150;
@@ -164,54 +167,54 @@ export const INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_COUNT =
   INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_WIDTHS_PX.length;
 
 export const INVENTARIO_TABLE_COMPACT_COL_WIDTHS_PX = [
-  44, // N°
-  52, // Cat.
-  120, // Código
-  220, // Nombre
-  240, // Descripción
-  88, // Fecha
-  120, // Cuenta contable
-  84, // Estado
-  100, // Precio PA/VM
-  100, // Valor neto
-  180, // Observación
-  140, // CP
-  136, // Acciones
+  40, // N°
+  44, // Cat.
+  108, // Código
+  150, // Nombre
+  150, // Descripción
+  72, // Fecha
+  96, // Cuenta contable
+  68, // Estado
+  118, // Precio PA/VM
+  118, // Valor neto
+  110, // Observación
+  100, // CP
+  112, // Acciones
 ] as const;
 
 export const INVENTARIO_TABLE_PREREGISTRO_COL_WIDTHS_PX = [
-  44, // N°
-  52, // Cat.
-  120, // Código
-  220, // Nombre del bien
-  180, // Posible ambiente
-  240, // Descripción
-  88, // Fecha adq.
-  120, // Cuenta contable
-  84, // Estado
-  100, // Precio
-  180, // Observación
-  136, // Acciones
+  40, // N°
+  44, // Cat.
+  108, // Código
+  150, // Nombre del bien
+  130, // Posible ambiente
+  150, // Descripción
+  72, // Fecha adq.
+  96, // Cuenta contable
+  68, // Estado
+  118, // Precio
+  110, // Observación
+  112, // Acciones
 ] as const;
 
 export const INVENTARIO_TABLE_FULL_PREREGISTRO_COL_WIDTHS_PX = [
-  44, // N°
-  52, // Cat.
-  120, // Código
-  200, // Nombre del bien
-  180, // Posible ambiente
-  220, // Descripción
+  40, // N°
+  44, // Cat.
+  108, // Código
+  150, // Nombre del bien
+  140, // Posible ambiente
+  150, // Descripción
   88, // Fecha adq.
   120, // Cuenta contable
-  84, // Estado
-  100, // PA / VM
-  68, // % Deprec.
-  60, // Periodo
-  100, // Dep. acum.
-  100, // Valor neto
-  160, // Observación
-  140, // CP
-  136, // Acciones
+  72, // Estado
+  118, // Importe PA/VM
+  72, // % Deprec.
+  64, // Periodo
+  118, // Dep. acum.
+  118, // Valor neto
+  120, // Observación
+  120, // Comprobante
+  112, // Acciones
 ] as const;
 
 function sumWidths(widths: readonly number[]): number {
@@ -325,26 +328,51 @@ export function inventarioTableColWidthsAdminEntityUbicacion(options?: {
   ).css;
 }
 
+export function inventarioTableWidthValuesPx(options?: {
+  modoPreregistro?: boolean;
+  modoAdmin?: boolean;
+  mostrarUbicacion?: boolean;
+  withSelection?: boolean;
+}): number[] {
+  const withSelection = options?.withSelection ?? false;
+  let widths: readonly number[];
+  if (options?.modoAdmin) {
+    widths = options.mostrarUbicacion
+      ? INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_WIDTHS_PX
+      : options.modoPreregistro
+        ? INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX
+        : INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX;
+  } else if (options?.modoPreregistro) {
+    widths = INVENTARIO_TABLE_FULL_PREREGISTRO_COL_WIDTHS_PX;
+  } else {
+    widths = options?.mostrarUbicacion
+      ? INVENTARIO_TABLE_ENTITY_UBICACION_COL_WIDTHS_PX
+      : INVENTARIO_TABLE_COL_WIDTHS_PX;
+  }
+  return withSelection
+    ? [INVENTARIO_TABLE_SELECTION_COL_WIDTH_PX, ...widths]
+    : [...widths];
+}
+
+/** Offsets `left` (px) para columnas sticky. */
+export function inventarioStickyLeftOffsets(
+  widthsPx: readonly number[],
+  stickyCount: number,
+): number[] {
+  const offsets: number[] = [];
+  let left = 0;
+  for (let i = 0; i < stickyCount && i < widthsPx.length; i++) {
+    offsets.push(left);
+    left += widthsPx[i]!;
+  }
+  return offsets;
+}
+
 export function inventarioTableMinWidthPx(options?: {
   modoPreregistro?: boolean;
   modoAdmin?: boolean;
   mostrarUbicacion?: boolean;
   withSelection?: boolean;
 }): number {
-  const withSelection = options?.withSelection ?? false;
-  if (options?.modoAdmin) {
-    const widths = options.mostrarUbicacion
-      ? INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_WIDTHS_PX
-      : options.modoPreregistro
-        ? INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_WIDTHS_PX
-        : INVENTARIO_TABLE_ADMIN_COL_WIDTHS_PX;
-    return colWidthsPx(widths, withSelection).total;
-  }
-  if (options?.modoPreregistro) {
-    return colWidthsPx(INVENTARIO_TABLE_FULL_PREREGISTRO_COL_WIDTHS_PX, withSelection).total;
-  }
-  const widths = options?.mostrarUbicacion
-    ? INVENTARIO_TABLE_ENTITY_UBICACION_COL_WIDTHS_PX
-    : INVENTARIO_TABLE_COL_WIDTHS_PX;
-  return colWidthsPx(widths, withSelection).total;
+  return sumWidths(inventarioTableWidthValuesPx(options));
 }

@@ -34,7 +34,6 @@ import {
   vidaUtilMesesFromPorcentaje,
   debePersistirCuentaContableEnActivo,
   entidadMuestraSelectorSede,
-  isCatalogoNacionalOficial,
   isCatalogoPropio,
   sedeIdSinSelector,
   splitObservacionActivo,
@@ -183,10 +182,17 @@ export function ActivoForm({
   const mostrarDepreciacionBulk = esBulkContador && categoria !== "CUENTA_ORDEN";
 
   const searchCatalogoByCategoria = useCallback(
-    (query: string, limit?: number) =>
-      categoria === "CUENTA_ORDEN"
-        ? searchCatalogoPropio(query, limit)
-        : searchCatalogoNacionalOficial(query, limit),
+    async (query: string, limit?: number) => {
+      if (categoria !== "CUENTA_ORDEN") {
+        return searchCatalogoNacionalOficial(query, limit);
+      }
+      const perSide = Math.max(Math.ceil((limit ?? 50) / 2), 15);
+      const [nacional, propio] = await Promise.all([
+        searchCatalogoNacionalOficial(query, perSide),
+        searchCatalogoPropio(query, perSide),
+      ]);
+      return [...nacional, ...propio];
+    },
     [categoria],
   );
 
@@ -195,14 +201,6 @@ export function ActivoForm({
     if (!catalogo) return;
     const esPropio = isCatalogoPropio(catalogo);
     if (next === "ACTIVO" && esPropio) {
-      setCatalogo(null);
-      setNombre("");
-      setNombreEtiqueta("");
-      setDepreciacion("");
-      setVidaUtilMeses("");
-      setCuentaCodigo("");
-      setCuentaNombre("");
-    } else if (next === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
       setCatalogo(null);
       setNombre("");
       setNombreEtiqueta("");
@@ -784,7 +782,7 @@ export function ActivoForm({
     if (!catalogo) {
       setMessage(
         categoria === "CUENTA_ORDEN"
-          ? "Seleccione un ítem del catálogo propio."
+          ? "Seleccione un ítem del catálogo nacional o propio."
           : "Seleccione un ítem del catálogo nacional.",
       );
       return;
@@ -866,11 +864,6 @@ export function ActivoForm({
       if (categoria === "ACTIVO" && isCatalogoPropio(catalogo)) {
         setPending(false);
         setMessage("Para categoría Activo use un código del catálogo nacional.");
-        return;
-      }
-      if (categoria === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
-        setPending(false);
-        setMessage("Para cuenta de orden use un código del catálogo propio (BD…).");
         return;
       }
     }
@@ -1569,7 +1562,7 @@ export function ActivoForm({
         />
 
         <CatalogoPicker
-          variant={categoria === "CUENTA_ORDEN" ? "propio" : "nacional"}
+          variant={categoria === "CUENTA_ORDEN" ? "ambos" : "nacional"}
           searchCatalogo={searchCatalogoByCategoria}
           resolveCodigo={getCatalogoByCodigo}
           selectedCodigo={catalogo?.codigo}
@@ -1579,7 +1572,7 @@ export function ActivoForm({
             setCatalogoAlta(null);
             if (isCatalogoPropio(item)) {
               setCategoria("CUENTA_ORDEN");
-            } else {
+            } else if (categoria !== "CUENTA_ORDEN") {
               setCategoria("ACTIVO");
             }
             setCatalogo(item);

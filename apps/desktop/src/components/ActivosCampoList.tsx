@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Ambiente, Entidad, EstadoRegistro, Sede } from "@inventario/types";
+import type { Ambiente, CategoriaBien, Entidad, EstadoRegistro, Sede } from "@inventario/types";
 import {
   aniosAdquisicionDesdeActivos,
   entidadMuestraSelectorSede,
@@ -38,6 +38,12 @@ const FILTROS_ESTADO_AMBIENTE: { value: "" | EstadoRegistro; label: string }[] =
   { value: "", label: "Todos" },
   { value: "REGISTRADO", label: "Registrados" },
   { value: "DADO_DE_BAJA", label: "Dados de baja" },
+];
+
+const FILTROS_CATEGORIA: { value: "" | CategoriaBien; label: string }[] = [
+  { value: "", label: "Todas" },
+  { value: "ACTIVO", label: "Activo" },
+  { value: "CUENTA_ORDEN", label: "Cta. Orden" },
 ];
 
 type ActivosListVariant = "entity" | "global" | "ambiente" | "entity-inventario";
@@ -137,6 +143,7 @@ export function ActivosCampoList({
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
     esAmbientePreregistro ? "PREREGISTRADO" : "",
   );
+  const [categoria, setCategoria] = useState<"" | CategoriaBien>("");
   const [filterEntidadId, setFilterEntidadId] = useState("");
   const [sedeId, setSedeId] = useState(fixedSedeId ?? "");
   const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? ambienteFilter?.id ?? "");
@@ -276,6 +283,7 @@ export function ActivosCampoList({
     }
     if (!fixedAmbienteId) setAmbienteId("");
     setEstadoRegistro(esAmbientePreregistro ? "PREREGISTRADO" : "");
+    setCategoria("");
     setFilter("");
     setAnioAdquisicion("");
     setSerieComprobanteFiltro("");
@@ -291,6 +299,7 @@ export function ActivosCampoList({
       (mostrarSelectorSede && sedeId) ||
       ambienteId ||
       estadoRegistro ||
+      categoria ||
       filter.trim() ||
       anioAdquisicion ||
       serieComprobanteFiltro.trim(),
@@ -312,6 +321,7 @@ export function ActivosCampoList({
       } else if (estadoRegistro && a.estado_registro !== estadoRegistro) {
         return false;
       }
+      if (categoria && a.categoria !== categoria) return false;
       if (mostrarFiltrosAdquisicion && !pasoFiltroAnioAdquisicion(a.fecha_adquisicion, anioAdquisicion)) {
         return false;
       }
@@ -341,6 +351,7 @@ export function ActivosCampoList({
     fixedSedeId,
     fixedAmbienteId,
     estadoRegistro,
+    categoria,
     filter,
     isGlobal,
     isAmbiente,
@@ -435,37 +446,10 @@ export function ActivosCampoList({
 
   const ambienteToolbar = isAmbiente ? (
     <div className={panelInventarioToolbarClass}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {exportMeta?.ambienteNombre ? (
-          <div className="panel-toolbar-title min-w-0">
-            <h1 className="panel-toolbar-heading text-foreground">{exportMeta.ambienteNombre}</h1>
-          </div>
-        ) : null}
-        <div className={`${panelToolbarActionsClass} ${exportMeta?.ambienteNombre ? "" : "w-full justify-end"}`}>
-          {preregistroHeaderToolbar && (
-            <PreregistroGestionToolbar {...preregistroHeaderToolbar} />
-          )}
-          {reportesExport ??
-            (exportMeta && (
-              <InventarioExportButtons activos={filtered} meta={exportMeta} />
-            ))}
-          {onPrintBatch && selectedActivos.length > 0 && (
-            <Button type="button" size="sm" className="h-8 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
-              Imprimir lote ({selectedActivos.length})
-            </Button>
-          )}
-          <span className="text-sm text-muted-foreground">
-            {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
-            {loading ? " · …" : ""}
-          </span>
-          {toolbarExtra}
-        </div>
-      </div>
-
       <div
         className={panelFilterRowClass}
         role={esAmbientePreregistro ? undefined : "tablist"}
-        aria-label={esAmbientePreregistro ? undefined : "Estado del activo"}
+        aria-label="Filtros de inventario"
       >
         {!esAmbientePreregistro && (
           <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
@@ -488,12 +472,55 @@ export function ActivosCampoList({
           </div>
         )}
 
+        <div
+          className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+          role="tablist"
+          aria-label="Categoría"
+        >
+          {FILTROS_CATEGORIA.map((f) => (
+            <button
+              key={f.value || "all-cat"}
+              type="button"
+              role="tab"
+              aria-selected={categoria === f.value}
+              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                categoria === f.value
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setCategoria(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         <div className="min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm">
           <PanelSearchInput
             value={filter}
             onChange={setFilter}
             placeholder="Buscar por código, nombre, marca…"
           />
+        </div>
+
+        <div className={`${panelToolbarActionsClass} ml-auto`}>
+          {preregistroHeaderToolbar && (
+            <PreregistroGestionToolbar {...preregistroHeaderToolbar} />
+          )}
+          {reportesExport ??
+            (exportMeta && (
+              <InventarioExportButtons activos={filtered} meta={exportMeta} />
+            ))}
+          {onPrintBatch && selectedActivos.length > 0 && (
+            <Button type="button" size="sm" className="h-8 px-2 text-xs" onClick={() => onPrintBatch(selectedActivos)}>
+              Imprimir lote ({selectedActivos.length})
+            </Button>
+          )}
+          <span className="text-sm text-muted-foreground">
+            {filtered.length} {filtered.length === 1 ? "activo" : "activos"}
+            {loading ? " · …" : ""}
+          </span>
+          {toolbarExtra}
         </div>
       </div>
     </div>
@@ -543,7 +570,7 @@ export function ActivosCampoList({
                   </div>
                 </div>
 
-                <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
+                <div className={panelFilterRowClass} role="tablist" aria-label="Filtros de inventario">
                   <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
                     {FILTROS_ESTADO.map((f) => (
                       <button
@@ -557,6 +584,29 @@ export function ActivosCampoList({
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                         onClick={() => setEstadoRegistro(f.value)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div
+                    className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                    role="tablist"
+                    aria-label="Categoría"
+                  >
+                    {FILTROS_CATEGORIA.map((f) => (
+                      <button
+                        key={f.value || "all-cat"}
+                        type="button"
+                        role="tab"
+                        aria-selected={categoria === f.value}
+                        className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                          categoria === f.value
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        onClick={() => setCategoria(f.value)}
                       >
                         {f.label}
                       </button>
@@ -709,6 +759,17 @@ export function ActivosCampoList({
               size="sm"
               variant={estadoRegistro === f.value ? "default" : "outline"}
               onClick={() => setEstadoRegistro(f.value)}
+            >
+              {f.label}
+            </Button>
+          ))}
+          {FILTROS_CATEGORIA.map((f) => (
+            <Button
+              key={f.value || "all-cat"}
+              type="button"
+              size="sm"
+              variant={categoria === f.value ? "default" : "outline"}
+              onClick={() => setCategoria(f.value)}
             >
               {f.label}
             </Button>

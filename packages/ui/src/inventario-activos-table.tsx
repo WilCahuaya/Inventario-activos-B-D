@@ -1,15 +1,22 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useMemo } from "react";
 import type { Activo } from "@inventario/types";
-import { formatMonedaPE, formatPosibleAmbienteLabel } from "@inventario/types";
 import {
+  buildValorizacionTotales,
+  formatMonedaPE,
+  formatPosibleAmbienteLabel,
+} from "@inventario/types";
+import {
+  INVENTARIO_STICKY_DATA_COL_COUNT,
   INVENTARIO_TABLE_ADMIN_COL_COUNT,
   INVENTARIO_TABLE_ADMIN_ENTITY_UBICACION_COL_COUNT,
   INVENTARIO_TABLE_ADMIN_PREREGISTRO_COL_COUNT,
   INVENTARIO_TABLE_COL_COUNT,
   INVENTARIO_TABLE_ENTITY_UBICACION_COL_COUNT,
   INVENTARIO_TABLE_FULL_PREREGISTRO_COL_COUNT,
+  inventarioStickyLeftOffsets,
   inventarioTableColWidths,
   inventarioTableColWidthsAdmin,
   inventarioTableColWidthsAdminEntityUbicacion,
@@ -17,6 +24,7 @@ import {
   inventarioTableColWidthsEntityUbicacion,
   inventarioTableColWidthsFullPreregistro,
   inventarioTableMinWidthPx,
+  inventarioTableWidthValuesPx,
 } from "./inventario-table-cols";
 import {
   EstadoBienBadge,
@@ -45,6 +53,12 @@ import {
 
 const tdBase =
   "max-w-0 overflow-hidden border-b border-r border-border/40 px-2.5 py-2 text-xs leading-snug text-foreground last:border-r-0";
+
+const tdTotalBase =
+  "border-t border-b border-r border-border/60 px-2.5 py-2 text-xs font-semibold leading-none text-foreground last:border-r-0";
+
+const tdTotalAccent =
+  "border-t border-b border-r border-border/60 px-2 py-2 text-right text-[11px] font-semibold tabular-nums leading-none whitespace-nowrap text-primary last:border-r-0";
 
 function Colgroup({
   modoPreregistro,
@@ -77,21 +91,52 @@ function Colgroup({
   );
 }
 
+function stickyCellProps(
+  offsets: number[],
+  index: number,
+  widthsPx?: readonly number[],
+  baseZ = 12,
+): { className: string; style: CSSProperties } | undefined {
+  if (index < 0 || index >= offsets.length) return undefined;
+  const isLast = index === offsets.length - 1;
+  const width = widthsPx?.[index];
+  return {
+    className: `inventario-sticky-col${isLast ? " inventario-sticky-col--last" : ""}`,
+    style: {
+      left: offsets[index],
+      zIndex: baseZ + index,
+      ...(width != null
+        ? { width, minWidth: width, maxWidth: width }
+        : null),
+    },
+  };
+}
+
 function Th({
   children,
   className,
   rowSpan,
   colSpan,
   multiline,
+  style,
+  title,
 }: {
   children: ReactNode;
   className?: string;
   rowSpan?: number;
   colSpan?: number;
   multiline?: boolean;
+  style?: CSSProperties;
+  title?: string;
 }) {
   return (
-    <th rowSpan={rowSpan} colSpan={colSpan} className={className ?? inventarioThStd}>
+    <th
+      rowSpan={rowSpan}
+      colSpan={colSpan}
+      className={className ?? inventarioThStd}
+      style={style}
+      title={title}
+    >
       <span
         className={
           multiline
@@ -159,10 +204,10 @@ function rowClassName(activo: Activo, rowIndex: number): string {
 
 function SelectionHeader({
   selection,
-  rowSpan = 2,
+  sticky,
 }: {
   selection: InventarioSelectionProps;
-  rowSpan?: number;
+  sticky?: { className: string; style: CSSProperties };
 }) {
   const selectableOnPage =
     selection.selectableOnPage.length > 0
@@ -170,7 +215,10 @@ function SelectionHeader({
       : (selection.printableOnPage ?? []);
 
   return (
-    <th rowSpan={rowSpan} className={`${inventarioThStd} normal-case`}>
+    <th
+      className={`${inventarioThStd} normal-case ${sticky?.className ?? ""}`}
+      style={sticky?.style}
+    >
       <input
         type="checkbox"
         className="h-4 w-4 rounded border-input"
@@ -186,9 +234,11 @@ function SelectionHeader({
 function SelectionCell<T extends Activo>({
   activo,
   selection,
+  sticky,
 }: {
   activo: T;
   selection: InventarioSelectionProps;
+  sticky?: { className: string; style: CSSProperties };
 }) {
   const puede =
     selection.puedeSeleccionar?.(activo) ??
@@ -196,7 +246,7 @@ function SelectionCell<T extends Activo>({
     (activo.estado_registro === "REGISTRADO" && Boolean(activo.codigo_barras));
 
   return (
-    <td className={`${tdBase} text-center`}>
+    <td className={`${tdBase} text-center ${sticky?.className ?? ""}`} style={sticky?.style}>
       {puede ? (
         <input
           type="checkbox"
@@ -221,6 +271,78 @@ function CuentaContableCell<T extends Activo>({ activo }: { activo: T }) {
   );
 }
 
+function TotalsFooter({
+  activos,
+  modoAdmin,
+  modoPreregistro,
+  mostrarUbicacion,
+  stickyOffsets,
+  stickyWidths,
+}: {
+  activos: Activo[];
+  modoAdmin?: boolean;
+  modoPreregistro?: boolean;
+  mostrarUbicacion?: boolean;
+  stickyOffsets: number[];
+  stickyWidths: readonly number[];
+}) {
+  const totales = useMemo(() => buildValorizacionTotales(activos), [activos]);
+  if (activos.length === 0) return null;
+
+  const stickyCount = stickyOffsets.length;
+  const stickyLabelWidth = stickyWidths.reduce((sum, w) => sum + w, 0);
+  const stickyLabelStyle: CSSProperties = {
+    left: 0,
+    zIndex: 38,
+    width: stickyLabelWidth,
+    minWidth: stickyLabelWidth,
+    maxWidth: stickyLabelWidth,
+  };
+  const label = `Total (${totales.cantidad})`;
+  const importe = `S/ ${formatMonedaPE(totales.valorAdquisicion)}`;
+  const depAcum = `S/ ${formatMonedaPE(totales.depreciacionAcumulada)}`;
+  const valorNeto = `S/ ${formatMonedaPE(totales.valorNeto)}`;
+
+  return (
+    <tfoot>
+      <tr className="inventario-totales-row">
+        <td
+          colSpan={stickyCount}
+          className={`${tdTotalBase} inventario-sticky-col inventario-sticky-col--last`}
+          style={stickyLabelStyle}
+          title={label}
+        >
+          <span className="block truncate whitespace-nowrap">{label}</span>
+        </td>
+        {modoPreregistro && <td className={tdTotalBase} />}
+        <td className={tdTotalBase} />
+        <td className={tdTotalBase} />
+        {!modoAdmin && <td className={tdTotalBase} />}
+        <td className={tdTotalBase} />
+        <td className={`${tdTotalAccent} inventario-totales-monto`} title={`Importe: ${importe}`}>
+          {importe}
+        </td>
+        {!modoAdmin && (
+          <>
+            <td className={tdTotalBase} />
+            <td className={tdTotalBase} />
+            <td className={`${tdTotalAccent} inventario-totales-monto`} title={`Depreciación acumulada: ${depAcum}`}>
+              {depAcum}
+            </td>
+          </>
+        )}
+        <td className={`${tdTotalAccent} inventario-totales-monto`} title={`Valor neto: ${valorNeto}`}>
+          {valorNeto}
+        </td>
+        <td className={tdTotalBase} />
+        <td className={tdTotalBase} />
+        {mostrarUbicacion && <td className={tdTotalBase} />}
+        <td className={tdTotalBase} />
+      </tr>
+    </tfoot>
+  );
+}
+
 function FullTableBody<T extends Activo>({
   activos,
   paginated,
@@ -235,8 +357,15 @@ function FullTableBody<T extends Activo>({
   modoAdmin,
   renderComprobante,
   renderAcciones,
-}: ActivosInventarioTableProps<T> & { colSpan: number }) {
+  stickyOffsets,
+  stickyWidths,
+}: ActivosInventarioTableProps<T> & {
+  colSpan: number;
+  stickyOffsets: number[];
+  stickyWidths: readonly number[];
+}) {
   const modoPreregistro = Boolean(mostrarPosibleAmbiente);
+  const sel = selection?.withSelection ? 1 : 0;
 
   return (
     <tbody>
@@ -252,16 +381,41 @@ function FullTableBody<T extends Activo>({
         const descripcion = inventarioDescripcion(activo);
         const inactivo = activo.estado_registro === "DADO_DE_BAJA";
         const { periodo, depAcum, valorNeto } = inventarioDepreciacionFila(activo, inactivo);
+        const stickySel = stickyCellProps(stickyOffsets, 0, stickyWidths);
+        const stickyN = stickyCellProps(stickyOffsets, sel, stickyWidths);
+        const stickyCat = stickyCellProps(stickyOffsets, sel + 1, stickyWidths);
+        const stickyCod = stickyCellProps(stickyOffsets, sel + 2, stickyWidths);
+        const stickyNom = stickyCellProps(stickyOffsets, sel + 3, stickyWidths);
 
         return (
           <tr key={activo.id} className={rowClassName(activo, rowIndex)}>
-            {selection?.withSelection && <SelectionCell activo={activo} selection={selection} />}
-            <InventarioTextCell center>{rowIndex + 1}</InventarioTextCell>
-            <InventarioCategoriaCell activo={activo} />
-            <td className={`${tdBase} text-center`}>
+            {selection?.withSelection && (
+              <SelectionCell activo={activo} selection={selection} sticky={stickySel} />
+            )}
+            <InventarioTextCell
+              center
+              className={stickyN?.className}
+              style={stickyN?.style}
+            >
+              {rowIndex + 1}
+            </InventarioTextCell>
+            <InventarioCategoriaCell
+              activo={activo}
+              className={stickyCat?.className}
+              style={stickyCat?.style}
+            />
+            <td
+              className={`${tdBase} text-center ${stickyCod?.className ?? ""}`}
+              style={stickyCod?.style}
+            >
               <InventarioCodigoCellContent activo={activo} />
             </td>
-            <InventarioTextCell title={activo.nombre} lineClamp2>
+            <InventarioTextCell
+              title={activo.nombre}
+              lineClamp2
+              className={stickyNom?.className}
+              style={stickyNom?.style}
+            >
               <span className={inactivo ? "line-through decoration-red-400/60" : undefined}>
                 {activo.nombre}
               </span>
@@ -353,15 +507,27 @@ export function ActivosInventarioTable<T extends Activo>(props: ActivosInventari
     mostrarUbicacion,
     withSelection,
   });
+  const widthValues = inventarioTableWidthValuesPx({
+    modoPreregistro,
+    modoAdmin,
+    mostrarUbicacion,
+    withSelection,
+  });
+  const stickyCount = (withSelection ? 1 : 0) + INVENTARIO_STICKY_DATA_COL_COUNT;
+  const stickyOffsets = inventarioStickyLeftOffsets(widthValues, stickyCount);
+  const stickyWidths = widthValues.slice(0, stickyCount);
+  const sel = withSelection ? 1 : 0;
+  const stickySel = stickyCellProps(stickyOffsets, 0, stickyWidths, 40);
+  const stickyN = stickyCellProps(stickyOffsets, sel, stickyWidths, 40);
+  const stickyCat = stickyCellProps(stickyOffsets, sel + 1, stickyWidths, 40);
+  const stickyCod = stickyCellProps(stickyOffsets, sel + 2, stickyWidths, 40);
+  const stickyNom = stickyCellProps(stickyOffsets, sel + 3, stickyWidths, 40);
   const tableWrapClass = embeddedInParentScroll
     ? `${panelDataTableWrapClass} ${panelDataTableWrapEmbeddedClass}`
     : panelDataTableWrapClass;
 
   return (
-    <div
-      ref={embeddedInParentScroll ? undefined : tableScrollRef}
-      className={tableWrapClass}
-    >
+    <div ref={tableScrollRef} className={tableWrapClass}>
       <div className={panelDataTableFullClass}>
         <table
           className={`${tableClass} w-full table-fixed border-separate border-spacing-0`}
@@ -374,90 +540,111 @@ export function ActivosInventarioTable<T extends Activo>(props: ActivosInventari
             withSelection={withSelection}
           />
           <thead>
-            {modoAdmin ? (
-              <tr>
-                {withSelection && selection && <SelectionHeader selection={selection} rowSpan={1} />}
-                <Th className={`${inventarioThStd} normal-case`}>N°</Th>
-                <Th>Cat.</Th>
-                <Th>Código</Th>
-                <Th className={`${inventarioThStd} normal-case`}>Nombre</Th>
-                {modoPreregistro && (
-                  <Th multiline className={`${inventarioThStd} normal-case`}>
-                    Pos. ambiente
+            <tr>
+              {withSelection && selection && (
+                <SelectionHeader selection={selection} sticky={stickySel} />
+              )}
+              <Th
+                className={`${inventarioThStd} normal-case ${stickyN?.className ?? ""}`}
+                style={stickyN?.style}
+              >
+                N°
+              </Th>
+              <Th
+                className={`${inventarioThStd} normal-case ${stickyCat?.className ?? ""}`}
+                style={stickyCat?.style}
+                title="Categoría"
+              >
+                Cat.
+              </Th>
+              <Th
+                className={`${inventarioThStd} ${stickyCod?.className ?? ""}`}
+                style={stickyCod?.style}
+              >
+                Código
+              </Th>
+              <Th
+                className={`${inventarioThStd} normal-case ${stickyNom?.className ?? ""}`}
+                style={stickyNom?.style}
+                multiline
+              >
+                Nombre del bien
+              </Th>
+              {modoPreregistro && (
+                <Th multiline className={`${inventarioThStd} normal-case`}>
+                  Posible ambiente
+                </Th>
+              )}
+              <Th multiline className={`${inventarioThStd} normal-case`}>
+                Descripción
+              </Th>
+              <Th multiline className={`${inventarioThStd} whitespace-nowrap`}>
+                Fecha adq.
+              </Th>
+              {!modoAdmin && (
+                <Th multiline className={`${inventarioThStd} normal-case`}>
+                  Cuenta contable
+                </Th>
+              )}
+              <Th>Estado</Th>
+              <Th multiline title="Precio de adquisición o valor de mercado">
+                Importe
+              </Th>
+              {!modoAdmin && (
+                <>
+                  <Th
+                    className={inventarioThAccent}
+                    multiline
+                    title="Porcentaje de depreciación"
+                  >
+                    % Deprec.
                   </Th>
-                )}
-                <Th className={`${inventarioThStd} normal-case`}>Descripción</Th>
-                <Th className={`${inventarioThStd} whitespace-nowrap`}>Fecha</Th>
-                <Th>Estado</Th>
-                <Th multiline>Importe</Th>
-                <Th className={inventarioThAccent}>V. neto</Th>
-                <Th className={`${inventarioThStd} normal-case`}>Obs.</Th>
-                <Th className={`${inventarioThStd} normal-case whitespace-nowrap`}>CP</Th>
-                {mostrarUbicacion && (
-                  <Th multiline className={`${inventarioThStd} normal-case`}>
-                    Ubicación
+                  <Th
+                    className={inventarioThAccent}
+                    multiline
+                    title="Periodo en meses"
+                  >
+                    Periodo
                   </Th>
-                )}
-                <Th className={`${inventarioThStd} whitespace-nowrap`}>Acciones</Th>
-              </tr>
-            ) : (
-              <>
-                <tr>
-                  {withSelection && selection && <SelectionHeader selection={selection} />}
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    N°
+                  <Th
+                    className={inventarioThAccent}
+                    multiline
+                    title="Depreciación acumulada"
+                  >
+                    Dep. acum.
                   </Th>
-                  <Th rowSpan={2}>Cat.</Th>
-                  <Th rowSpan={2}>Código</Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    Nombre
-                  </Th>
-                  {modoPreregistro && (
-                    <Th rowSpan={2} multiline className={`${inventarioThStd} normal-case`}>
-                      Pos. ambiente
-                    </Th>
-                  )}
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    Descripción
-                  </Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} whitespace-nowrap`}>
-                    Fecha
-                  </Th>
-                  <Th rowSpan={2} multiline className={`${inventarioThStd} normal-case`}>
-                    Cuenta
-                  </Th>
-                  <Th rowSpan={2}>Estado</Th>
-                  <Th rowSpan={2} multiline>
-                    Importe
-                  </Th>
-                  <Th colSpan={4} className={inventarioThAccent}>
-                    Depreciación
-                  </Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case`}>
-                    Obs.
-                  </Th>
-                  <Th rowSpan={2} className={`${inventarioThStd} normal-case whitespace-nowrap`}>
-                    CP
-                  </Th>
-                  {mostrarUbicacion && (
-                    <Th rowSpan={2} multiline className={`${inventarioThStd} normal-case`}>
-                      Ubicación
-                    </Th>
-                  )}
-                  <Th rowSpan={2} className={`${inventarioThStd} whitespace-nowrap`}>
-                    Acciones
-                  </Th>
-                </tr>
-                <tr>
-                  <Th className={inventarioThAccent}>% Dep.</Th>
-                  <Th className={inventarioThAccent}>Per.</Th>
-                  <Th className={inventarioThAccent}>D. acum.</Th>
-                  <Th className={inventarioThAccent}>V. neto</Th>
-                </tr>
-              </>
-            )}
+                </>
+              )}
+              <Th
+                className={inventarioThAccent}
+                multiline
+                title="Valor neto"
+              >
+                Valor neto
+              </Th>
+              <Th multiline className={`${inventarioThStd} normal-case`}>
+                Observación
+              </Th>
+              <Th multiline className={`${inventarioThStd} normal-case`}>
+                Comprobante
+              </Th>
+              {mostrarUbicacion && (
+                <Th multiline className={`${inventarioThStd} normal-case`}>
+                  Ubicación
+                </Th>
+              )}
+              <Th className={`${inventarioThStd} whitespace-nowrap`}>Acciones</Th>
+            </tr>
           </thead>
-          <FullTableBody {...props} colSpan={colSpan} />
+          <FullTableBody {...props} colSpan={colSpan} stickyOffsets={stickyOffsets} stickyWidths={stickyWidths} />
+          <TotalsFooter
+            activos={props.activos}
+            modoAdmin={modoAdmin}
+            modoPreregistro={modoPreregistro}
+            mostrarUbicacion={mostrarUbicacion}
+            stickyOffsets={stickyOffsets}
+            stickyWidths={stickyWidths}
+          />
         </table>
       </div>
     </div>

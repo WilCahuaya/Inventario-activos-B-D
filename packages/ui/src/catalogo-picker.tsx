@@ -1,13 +1,17 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CatalogoNacional } from "@inventario/types";
-import { CATALOGO_SEARCH_MAX_RESULTS, minCatalogoQueryLength } from "@inventario/types";
+import {
+  CATALOGO_SEARCH_MAX_RESULTS,
+  isCatalogoPropio,
+  minCatalogoQueryLength,
+} from "@inventario/types";
 import { computeFloatingMenuLayout, type FloatingMenuLayout } from "./dropdown-position";
 import { Input, Label } from "./components";
 
-export type CatalogoPickerVariant = "nacional" | "propio";
+export type CatalogoPickerVariant = "nacional" | "propio" | "ambos";
 
 const CATALOGO_PICKER_COPY: Record<
   CatalogoPickerVariant,
@@ -25,6 +29,12 @@ const CATALOGO_PICKER_COPY: Record<
     placeholder: "Buscar por código o denominación…",
     empty: "Sin coincidencias en el catálogo propio.",
   },
+  ambos: {
+    label: "Código catálogo",
+    hint: "Busque en catálogo nacional o propio por código o denominación.",
+    placeholder: "Buscar por código o denominación…",
+    empty: "Sin coincidencias en catálogo nacional ni propio.",
+  },
 };
 
 export interface CatalogoPickerProps {
@@ -33,7 +43,7 @@ export interface CatalogoPickerProps {
   selectedCodigo?: string;
   selectedDenominacion?: string;
   disabled?: boolean;
-  /** Nacional (SBN) o propio (BD…). Cambia título y mensajes. */
+  /** Nacional (SBN), propio (BD…) o ambos (secciones). Cambia título y mensajes. */
   variant?: CatalogoPickerVariant;
   searchCatalogo: (query: string, limit?: number) => Promise<CatalogoNacional[]>;
   resolveCodigo?: (codigo: string) => Promise<CatalogoNacional | null>;
@@ -44,7 +54,33 @@ function looksLikeCatalogoCodigo(trimmed: string, variant: CatalogoPickerVariant
   if (variant === "propio") {
     return /^BD\d{1,6}$/i.test(trimmed) || /^\d{1,8}$/.test(trimmed);
   }
+  if (variant === "ambos") {
+    return /^BD\d{1,6}$/i.test(trimmed) || /^\d{1,12}$/.test(trimmed);
+  }
   return /^\d{1,12}$/.test(trimmed);
+}
+
+function CatalogoResultButton({
+  item,
+  onSelect,
+}: {
+  item: CatalogoNacional;
+  onSelect: (item: CatalogoNacional) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => onSelect(item)}
+    >
+      <span className="font-mono font-medium text-primary">{item.codigo}</span>
+      <span className="ml-2">{item.denominacion}</span>
+      {item.clase && (
+        <span className="mt-0.5 block text-xs text-muted-foreground">{item.clase}</span>
+      )}
+    </button>
+  );
 }
 
 export function CatalogoPicker({
@@ -76,6 +112,19 @@ export function CatalogoPicker({
   onSelectRef.current = onSelect;
   searchCatalogoRef.current = searchCatalogo;
   resolveCodigoRef.current = resolveCodigo;
+
+  const groupedResults = useMemo(() => {
+    if (variant !== "ambos") {
+      return { nacional: results, propio: [] as CatalogoNacional[] };
+    }
+    const nacional: CatalogoNacional[] = [];
+    const propio: CatalogoNacional[] = [];
+    for (const item of results) {
+      if (isCatalogoPropio(item)) propio.push(item);
+      else nacional.push(item);
+    }
+    return { nacional, propio };
+  }, [results, variant]);
 
   useEffect(() => {
     if (selectedCodigo) {
@@ -200,22 +249,40 @@ export function CatalogoPicker({
         {loading && results.length === 0 && (
           <li className="px-3 py-2 text-sm text-muted-foreground">Buscando…</li>
         )}
-        {results.map((item) => (
-          <li key={item.codigo} role="option">
-            <button
-              type="button"
-              className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleSelect(item)}
-            >
-              <span className="font-mono font-medium text-primary">{item.codigo}</span>
-              <span className="ml-2">{item.denominacion}</span>
-              {item.clase && (
-                <span className="mt-0.5 block text-xs text-muted-foreground">{item.clase}</span>
-              )}
-            </button>
-          </li>
-        ))}
+        {variant === "ambos" ? (
+          <>
+            {groupedResults.nacional.length > 0 && (
+              <>
+                <li className="sticky top-0 z-[1] border-b border-border/70 bg-muted/95 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
+                  Catálogo nacional
+                </li>
+                {groupedResults.nacional.map((item) => (
+                  <li key={item.codigo} role="option">
+                    <CatalogoResultButton item={item} onSelect={handleSelect} />
+                  </li>
+                ))}
+              </>
+            )}
+            {groupedResults.propio.length > 0 && (
+              <>
+                <li className="sticky top-0 z-[1] border-b border-border/70 bg-muted/95 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
+                  Catálogo propio
+                </li>
+                {groupedResults.propio.map((item) => (
+                  <li key={item.codigo} role="option">
+                    <CatalogoResultButton item={item} onSelect={handleSelect} />
+                  </li>
+                ))}
+              </>
+            )}
+          </>
+        ) : (
+          results.map((item) => (
+            <li key={item.codigo} role="option">
+              <CatalogoResultButton item={item} onSelect={handleSelect} />
+            </li>
+          ))
+        )}
         {loading && results.length > 0 && (
           <li className="border-t px-3 py-1.5 text-xs text-muted-foreground">Actualizando…</li>
         )}

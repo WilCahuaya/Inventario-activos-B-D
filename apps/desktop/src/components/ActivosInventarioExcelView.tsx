@@ -565,7 +565,7 @@ export function ActivosInventarioExcelView({
             <div ref={bodyScrollRef} className={panelInventarioBodyScrollClass}>
               {toolbar}
               {inlinePreregistroToolbar}
-              {mobileCards}
+              <div className={panelDataCardsWrapClass}>{mobileCards}</div>
               {tableBlock}
             </div>
           </div>

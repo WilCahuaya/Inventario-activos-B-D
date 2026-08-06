@@ -603,7 +603,8 @@
   }
 
   .panel-inventario-body-scroll {
-    @apply min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto;
+    /* Un solo scrollport X/Y: filtros se mueven en vertical; thead sticky al bajar. */
+    @apply min-h-0 w-full min-w-0 flex-1 overflow-auto;
   }
 
   .panel-inventario-pagination-footer {
@@ -619,8 +620,18 @@
     @apply mb-1.5 shrink-0 space-y-2 rounded-lg border border-border/60 bg-card px-2 py-2 shadow-sm sm:mb-2 sm:space-y-2.5 sm:px-3 sm:py-2.5 md:px-4 lg:py-3;
   }
 
+  /**
+   * Filtros/acciones: se desplazan en vertical con el scroll,
+   * pero quedan anclados a la izquierda (sin scroll horizontal de la tabla).
+   */
   .panel-inventario-body-scroll > .panel-inventario-toolbar {
-    @apply rounded-none border-x-0 border-t-0 shadow-none;
+    position: sticky;
+    left: 0;
+    z-index: 25;
+    box-sizing: border-box;
+    width: var(--inventario-body-client-width, 100%);
+    max-width: var(--inventario-body-client-width, 100%);
+    @apply mb-0 rounded-none border-x-0 border-t-0 bg-card shadow-none;
   }
 
   .panel-filter-row {
@@ -647,8 +658,9 @@
   }
 
   .panel-data-table-wrap.panel-data-table-wrap--embedded {
+    /* Sin overflow propio: el scroll es del body; así thead sticky funciona al bajar. */
     max-height: none !important;
-    @apply w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible;
+    @apply w-full min-w-0 max-w-full overflow-visible;
   }
 
   .panel-data-cards-wrap {
@@ -736,6 +748,25 @@
     box-shadow: 0 1px 0 hsl(var(--border) / 0.55);
   }
 
+  .inventario-activos-table tfoot {
+    position: sticky;
+    bottom: 0;
+    z-index: 28;
+  }
+
+  .inventario-activos-table tfoot td {
+    background-color: color-mix(in srgb, hsl(var(--muted)) 45%, hsl(var(--card)));
+    box-shadow: 0 -1px 0 hsl(var(--border) / 0.55);
+  }
+
+  .inventario-activos-table tfoot td.inventario-sticky-col {
+    background-color: color-mix(in srgb, hsl(var(--muted)) 45%, hsl(var(--card)));
+  }
+
+  .inventario-activos-table tfoot td.inventario-totales-monto {
+    white-space: nowrap;
+  }
+
   .inventario-activos-table thead th {
     overflow: visible;
     vertical-align: middle;
@@ -751,6 +782,69 @@
 
   .dark .inventario-activos-table thead th.inventario-th-accent {
     background-color: color-mix(in srgb, hsl(var(--primary)) 30%, hsl(var(--card)));
+  }
+
+  /* Columnas fijas al scroll horizontal (N°, Cat., Código, Nombre). */
+  .inventario-activos-table th.inventario-sticky-col,
+  .inventario-activos-table td.inventario-sticky-col {
+    position: sticky;
+    overflow: hidden;
+    background-clip: padding-box;
+  }
+
+  .inventario-activos-table thead th.inventario-sticky-col {
+    /* Encima del thead sticky vertical; z-index base lo sube el inline por columna. */
+    background-color: hsl(var(--card));
+  }
+
+  .inventario-activos-table thead th.inventario-sticky-col.inventario-th-std {
+    background-color: hsl(var(--card));
+  }
+
+  .inventario-activos-table td.inventario-sticky-col--last,
+  .inventario-activos-table th.inventario-sticky-col--last {
+    box-shadow: 2px 0 0 0 hsl(var(--border) / 0.55);
+  }
+
+  /* Fondos opacos: si son semitransparentes, el texto de columnas vecinas se ve encima. */
+  .inventario-activos-table tbody tr.inventario-row-even td.inventario-sticky-col {
+    background-color: hsl(var(--card));
+  }
+
+  .inventario-activos-table tbody tr.inventario-row-odd td.inventario-sticky-col {
+    background-color: color-mix(in srgb, hsl(var(--muted)) 35%, hsl(var(--card)));
+  }
+
+  .inventario-activos-table tbody tr.inventario-row-inactivo td.inventario-sticky-col {
+    background-color: color-mix(in srgb, rgb(239 68 68) 12%, hsl(var(--card)));
+  }
+
+  .dark .inventario-activos-table tbody tr.inventario-row-inactivo td.inventario-sticky-col {
+    background-color: color-mix(in srgb, rgb(239 68 68) 16%, hsl(var(--card)));
+  }
+
+  .inventario-activos-table tbody tr.inventario-row-prereg td.inventario-sticky-col {
+    background-color: color-mix(in srgb, rgb(245 158 11) 16%, hsl(var(--card)));
+  }
+
+  .inventario-activos-table tbody tr.inventario-table-row:hover td.inventario-sticky-col {
+    background-color: color-mix(in srgb, hsl(var(--primary)) 14%, hsl(var(--card)));
+  }
+
+  .dark .inventario-activos-table tbody tr.inventario-table-row:hover td.inventario-sticky-col {
+    background-color: color-mix(in srgb, hsl(var(--primary)) 22%, hsl(var(--card)));
+  }
+
+  .inventario-activos-table tbody tr.inventario-row-prereg:hover td.inventario-sticky-col {
+    background-color: color-mix(in srgb, rgb(245 158 11) 28%, hsl(var(--card)));
+  }
+
+  .inventario-activos-table tbody tr.inventario-row-inactivo:hover td.inventario-sticky-col {
+    background-color: color-mix(in srgb, rgb(239 68 68) 18%, hsl(var(--card)));
+  }
+
+  .dark .inventario-activos-table tbody tr.inventario-row-inactivo:hover td.inventario-sticky-col {
+    background-color: color-mix(in srgb, rgb(239 68 68) 22%, hsl(var(--card)));
   }
 
   /* Sitio público (marketing) */

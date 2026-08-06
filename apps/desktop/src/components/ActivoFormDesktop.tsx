@@ -32,7 +32,6 @@ import {
   validarCuentaContableParaCatalogo,
   vidaUtilMesesFromPorcentaje,
   entidadMuestraSelectorSede,
-  isCatalogoNacionalOficial,
   isCatalogoPropio,
   sedeIdSinSelector,
   type ActivoAtributoCampo,
@@ -156,10 +155,17 @@ export function ActivoFormDesktop({
   );
 
   const searchCatalogoByCategoria = useCallback(
-    (query: string, limit?: number) =>
-      categoria === "CUENTA_ORDEN"
-        ? searchCatalogoPropio(query, limit)
-        : searchCatalogoNacionalOficial(query, limit),
+    async (query: string, limit?: number) => {
+      if (categoria !== "CUENTA_ORDEN") {
+        return searchCatalogoNacionalOficial(query, limit);
+      }
+      const perSide = Math.max(Math.ceil((limit ?? 50) / 2), 15);
+      const [nacional, propio] = await Promise.all([
+        searchCatalogoNacionalOficial(query, perSide),
+        searchCatalogoPropio(query, perSide),
+      ]);
+      return [...nacional, ...propio];
+    },
     [categoria],
   );
 
@@ -168,14 +174,6 @@ export function ActivoFormDesktop({
     if (!catalogo || isEdit) return;
     const esPropio = isCatalogoPropio(catalogo);
     if (next === "ACTIVO" && esPropio) {
-      setCatalogo(null);
-      setNombre("");
-      setNombreEtiqueta("");
-      setDepreciacion("");
-      setVidaUtilMeses("");
-      setCuentaCodigo("");
-      setCuentaNombre("");
-    } else if (next === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
       setCatalogo(null);
       setNombre("");
       setNombreEtiqueta("");
@@ -493,12 +491,14 @@ export function ActivoFormDesktop({
     (item: CatalogoNacional) => {
       setCatalogo(item);
       setNombre(item.denominacion);
-      if (isCatalogoPropio(item)) {
-        setCategoria("CUENTA_ORDEN");
-      } else {
-        setCategoria("ACTIVO");
-      }
-      if (!isCatalogoPropio(item) && item.depreciacion) {
+      setCategoria((current) => {
+        if (isCatalogoPropio(item)) return "CUENTA_ORDEN";
+        if (current === "CUENTA_ORDEN") return "CUENTA_ORDEN";
+        return "ACTIVO";
+      });
+      const quedaCuentaOrden =
+        isCatalogoPropio(item) || categoria === "CUENTA_ORDEN";
+      if (!quedaCuentaOrden && item.depreciacion) {
         setDepreciacion(item.depreciacion);
         const pct = parsePorcentajeDepreciacion(item.depreciacion);
         if (pct) setVidaUtilMeses(String(vidaUtilMesesFromPorcentaje(pct)));
@@ -512,14 +512,14 @@ export function ActivoFormDesktop({
       if (mostrarCuentaContable) {
         const codigo =
           item.cuenta_codigo?.trim() ||
-          (isCatalogoPropio(item) ? CATALOGO_CUENTA_ORDEN_CONTABILIDAD : "");
+          (quedaCuentaOrden ? CATALOGO_CUENTA_ORDEN_CONTABILIDAD : "");
         const nombre = item.contabilidad?.trim() || "";
         setCuentaCodigo(codigo);
         setCuentaNombre(nombre);
         cuentaReferenciaRef.current = { codigo, nombre };
       }
     },
-    [entidadId, isEdit, mostrarCuentaContable],
+    [categoria, entidadId, isEdit, mostrarCuentaContable],
   );
 
   useEffect(() => {
@@ -648,7 +648,7 @@ export function ActivoFormDesktop({
     if (!catalogo) {
       setMessage(
         categoria === "CUENTA_ORDEN"
-          ? "Seleccione un ítem del catálogo propio."
+          ? "Seleccione un ítem del catálogo nacional o propio."
           : "Seleccione un ítem del catálogo nacional.",
       );
       return;
@@ -706,10 +706,6 @@ export function ActivoFormDesktop({
     if (catalogo) {
       if (categoria === "ACTIVO" && isCatalogoPropio(catalogo)) {
         setMessage("Para categoría Activo use un código del catálogo nacional.");
-        return;
-      }
-      if (categoria === "CUENTA_ORDEN" && isCatalogoNacionalOficial(catalogo)) {
-        setMessage("Para cuenta de orden use un código del catálogo propio (BD…).");
         return;
       }
     }
@@ -1536,7 +1532,7 @@ export function ActivoFormDesktop({
         />
 
         <CatalogoPicker
-          variant={categoria === "CUENTA_ORDEN" ? "propio" : "nacional"}
+          variant={categoria === "CUENTA_ORDEN" ? "ambos" : "nacional"}
           searchCatalogo={searchCatalogoByCategoria}
           resolveCodigo={getCatalogoByCodigo}
           onSelect={(item) => {

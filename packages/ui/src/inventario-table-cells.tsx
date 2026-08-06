@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Activo, CategoriaBien, EstadoBien } from "@inventario/types";
 import {
   buildDescripcionBien,
@@ -214,13 +214,21 @@ export function InventarioCorrelativoCellContent({ activo }: { activo: Activo })
   return <InventarioCodigoCellContent activo={activo} />;
 }
 
-export function CategoriaBienCell({ categoria }: { categoria: CategoriaBien }) {
+export function CategoriaBienCell({
+  categoria,
+  className,
+  style,
+}: {
+  categoria: CategoriaBien;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const letra = categoriaBienLetra(categoria);
   const titulo = categoria === "CUENTA_ORDEN" ? "Cuenta de orden" : "Activo";
   const badgeKind: InventarioTablaBadgeKind = letra === "C" ? "C" : "A";
 
   return (
-    <td className={`${tdBase} text-center`} title={titulo}>
+    <td className={`${tdBase} text-center ${className ?? ""}`} style={style} title={titulo}>
       <InventarioTablaLeyendaBadge kind={badgeKind} />
     </td>
   );
@@ -237,8 +245,16 @@ export function CategoriaLetraCell({
   return <CategoriaBienCell categoria={categoria} />;
 }
 
-export function InventarioCategoriaCell({ activo }: { activo: Activo }) {
-  return <CategoriaBienCell categoria={activo.categoria} />;
+export function InventarioCategoriaCell({
+  activo,
+  className,
+  style,
+}: {
+  activo: Activo;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return <CategoriaBienCell categoria={activo.categoria} className={className} style={style} />;
 }
 
 export function ValorBienCell({ activo }: { activo: Activo }) {
@@ -374,12 +390,14 @@ export function InventarioTextCell({
   children,
   center,
   className,
+  style,
   title,
   lineClamp2,
 }: {
   children?: ReactNode;
   center?: boolean;
   className?: string;
+  style?: CSSProperties;
   title?: string;
   lineClamp2?: boolean;
 }) {
@@ -387,6 +405,7 @@ export function InventarioTextCell({
   return (
     <td
       className={`${tdBase} ${center ? "text-center" : ""} ${className ?? ""}`}
+      style={style}
       title={title}
     >
       {empty ? (

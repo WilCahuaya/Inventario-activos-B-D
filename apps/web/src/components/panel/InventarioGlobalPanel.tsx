@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { Activo, Entidad, EstadoRegistro } from "@inventario/types";
+import type { Activo, CategoriaBien, Entidad, EstadoRegistro } from "@inventario/types";
 import {
   aniosAdquisicionDesdeActivos,
   entidadMuestraSelectorSede,
@@ -64,6 +64,12 @@ const FILTROS_ESTADO: { value: "" | EstadoRegistro; label: string }[] = [
   { value: "DADO_DE_BAJA", label: "Dados de baja" },
 ];
 
+const FILTROS_CATEGORIA: { value: "" | CategoriaBien; label: string }[] = [
+  { value: "", label: "Todas" },
+  { value: "ACTIVO", label: "Activo" },
+  { value: "CUENTA_ORDEN", label: "Cta. Orden" },
+];
+
 export function InventarioGlobalPanel({
   entidades,
   activos,
@@ -87,6 +93,7 @@ export function InventarioGlobalPanel({
   const [sedeId, setSedeId] = useState("");
   const [ambienteId, setAmbienteId] = useState("");
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(initialEstado);
+  const [categoria, setCategoria] = useState<"" | CategoriaBien>("");
   const [anioAdquisicion, setAnioAdquisicion] = useState("");
   const [serieComprobanteFiltro, setSerieComprobanteFiltro] = useState("");
   const [sedes, setSedes] = useState<Sede[]>([]);
@@ -236,6 +243,7 @@ export function InventarioGlobalPanel({
       if (sedeId && a.sede_id !== sedeId) return false;
       if (ambienteId && a.ambiente_id !== ambienteId) return false;
       if (estadoRegistro && a.estado_registro !== estadoRegistro) return false;
+      if (categoria && a.categoria !== categoria) return false;
       if (mostrarFiltrosAdquisicion && !pasoFiltroAnioAdquisicion(a.fecha_adquisicion, anioAdquisicion)) {
         return false;
       }
@@ -258,6 +266,7 @@ export function InventarioGlobalPanel({
     sedeId,
     ambienteId,
     estadoRegistro,
+    categoria,
     hasFixedEntidad,
     mostrarFiltrosAdquisicion,
     anioAdquisicion,
@@ -269,6 +278,7 @@ export function InventarioGlobalPanel({
       sedeId ||
       ambienteId ||
       estadoRegistro ||
+      categoria ||
       busqueda.trim() ||
       anioAdquisicion ||
       serieComprobanteFiltro.trim(),
@@ -311,6 +321,7 @@ export function InventarioGlobalPanel({
       setAmbientes([]);
     }
     setEstadoRegistro("");
+    setCategoria("");
     setBusqueda("");
     setAnioAdquisicion("");
     setSerieComprobanteFiltro("");
@@ -416,7 +427,7 @@ export function InventarioGlobalPanel({
                 </div>
               </div>
 
-              <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
+              <div className={panelFilterRowClass} role="tablist" aria-label="Filtros de inventario">
                 <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
                   {FILTROS_ESTADO.map((f) => (
                     <button
@@ -430,6 +441,29 @@ export function InventarioGlobalPanel({
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                       onClick={() => setEstadoRegistro(f.value)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div
+                  className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                  role="tablist"
+                  aria-label="Categoría"
+                >
+                  {FILTROS_CATEGORIA.map((f) => (
+                    <button
+                      key={f.value || "all-cat"}
+                      type="button"
+                      role="tab"
+                      aria-selected={categoria === f.value}
+                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                        categoria === f.value
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setCategoria(f.value)}
                     >
                       {f.label}
                     </button>

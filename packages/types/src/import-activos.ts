@@ -398,6 +398,7 @@ export function normalizeImportCodigoCatalogoPropio(text: string): string | null
 
 /**
  * Normaliza código de catálogo según categoría (para precargar lookups).
+ * Cuenta de orden acepta propio (BD…) y nacional.
  * Sin categoría válida intenta nacional y propio.
  */
 export function normalizeImportCodigoCatalogoRaw(
@@ -405,20 +406,41 @@ export function normalizeImportCodigoCatalogoRaw(
   categoria?: CategoriaBien | null,
 ): string[] {
   const candidates: string[] = [];
-  if (categoria === "CUENTA_ORDEN") {
-    const propio = normalizeImportCodigoCatalogoPropio(text);
-    if (propio) candidates.push(propio);
-    return candidates;
-  }
+  const pushUnique = (code: string | null | undefined) => {
+    if (code && !candidates.includes(code)) candidates.push(code);
+  };
+
   if (categoria === "ACTIVO") {
-    const nacional = normalizeImportCodigoCatalogoNacional(text);
-    if (nacional) candidates.push(nacional);
+    pushUnique(normalizeImportCodigoCatalogoNacional(text));
     return candidates;
   }
-  const nacional = normalizeImportCodigoCatalogoNacional(text);
-  if (nacional) candidates.push(nacional);
-  const propio = normalizeImportCodigoCatalogoPropio(text);
-  if (propio) candidates.push(propio);
+
+  if (categoria === "CUENTA_ORDEN") {
+    const trimmed = text.replace(/\u00a0/g, " ").trim();
+    if (!trimmed) return candidates;
+
+    const bdMatch = trimmed.match(CATALOGO_PROPIO_IMPORT_RE);
+    const digits = trimmed.replace(/\D/g, "");
+    const fromSymbol = digits ? decodeCatalogoPropioDesdeSimbolo(digits) : null;
+
+    if (bdMatch || fromSymbol) {
+      pushUnique(normalizeImportCodigoCatalogoPropio(text));
+      return candidates;
+    }
+
+    if (digits.length > 6) {
+      pushUnique(normalizeImportCodigoCatalogoNacional(text));
+      return candidates;
+    }
+
+    // Códigos cortos: conservar compatibilidad con propio y permitir nacional.
+    pushUnique(normalizeImportCodigoCatalogoPropio(text));
+    pushUnique(normalizeImportCodigoCatalogoNacional(text));
+    return candidates;
+  }
+
+  pushUnique(normalizeImportCodigoCatalogoNacional(text));
+  pushUnique(normalizeImportCodigoCatalogoPropio(text));
   return candidates;
 }
 
@@ -524,34 +546,41 @@ export function validateImportActivoFila(
     };
   }
 
-  let codigoCatalogo: string;
-  if (categoria === "CUENTA_ORDEN") {
-    const propio = normalizeImportCodigoCatalogoPropio(fila["Código catálogo"]);
-    if (!propio) {
-      return {
-        ok: false,
-        motivo: 'Código catálogo inválido para cuenta de orden (ej. BD000001).',
-      };
-    }
-    codigoCatalogo = propio;
-  } else {
-    codigoCatalogo = normalizeImportCodigoCatalogoNacional(fila["Código catálogo"]);
-    if (!codigoCatalogo) {
-      return { ok: false, motivo: "Código catálogo inválido." };
-    }
+  const codigoCandidates = normalizeImportCodigoCatalogoRaw(
+    fila["Código catálogo"],
+    categoria,
+  );
+  if (codigoCandidates.length === 0) {
+    return {
+      ok: false,
+      motivo:
+        categoria === "CUENTA_ORDEN"
+          ? 'Código catálogo inválido para cuenta de orden (ej. BD000001 o código nacional).'
+          : "Código catálogo inválido.",
+    };
   }
 
-  const catalogoItem = catalogoByCodigo.get(codigoCatalogo);
-  if (!catalogoItem) {
+  let codigoCatalogo: string | null = null;
+  let catalogoItem: ImportActivoCatalogoItem | undefined;
+  for (const code of codigoCandidates) {
+    const item = catalogoByCodigo.get(code);
+    if (item) {
+      codigoCatalogo = code;
+      catalogoItem = item;
+      break;
+    }
+  }
+  if (!catalogoItem || !codigoCatalogo) {
+    const shown = codigoCandidates[0]!;
     if (categoria === "CUENTA_ORDEN") {
       return {
         ok: false,
-        motivo: `Código catálogo "${codigoCatalogo}" no existe en el catálogo propio.`,
+        motivo: `Código catálogo "${shown}" no existe en el catálogo nacional ni propio.`,
       };
     }
     return {
       ok: false,
-      motivo: `Código catálogo "${codigoCatalogo}" no existe en el catálogo nacional.`,
+      motivo: `Código catálogo "${shown}" no existe en el catálogo nacional.`,
     };
   }
 
