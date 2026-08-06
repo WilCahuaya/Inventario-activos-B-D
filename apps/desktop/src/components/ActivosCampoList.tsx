@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Ambiente, Entidad, EstadoRegistro, Sede } from "@inventario/types";
+import type { Ambiente, CategoriaBien, Entidad, EstadoRegistro, Sede } from "@inventario/types";
 import {
   aniosAdquisicionDesdeActivos,
   entidadMuestraSelectorSede,
+  FILTROS_CATEGORIA_BIEN,
   matchesCodigoBarrasQuery,
   pasoFiltroAnioAdquisicion,
   pasoFiltroSerieComprobante,
@@ -137,6 +138,7 @@ export function ActivosCampoList({
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
     esAmbientePreregistro ? "PREREGISTRADO" : "",
   );
+  const [categoriaBien, setCategoriaBien] = useState<"" | CategoriaBien>("");
   const [filterEntidadId, setFilterEntidadId] = useState("");
   const [sedeId, setSedeId] = useState(fixedSedeId ?? "");
   const [ambienteId, setAmbienteId] = useState(fixedAmbienteId ?? ambienteFilter?.id ?? "");
@@ -276,6 +278,7 @@ export function ActivosCampoList({
     }
     if (!fixedAmbienteId) setAmbienteId("");
     setEstadoRegistro(esAmbientePreregistro ? "PREREGISTRADO" : "");
+    setCategoriaBien("");
     setFilter("");
     setAnioAdquisicion("");
     setSerieComprobanteFiltro("");
@@ -291,6 +294,7 @@ export function ActivosCampoList({
       (mostrarSelectorSede && sedeId) ||
       ambienteId ||
       estadoRegistro ||
+      categoriaBien ||
       filter.trim() ||
       anioAdquisicion ||
       serieComprobanteFiltro.trim(),
@@ -312,6 +316,7 @@ export function ActivosCampoList({
       } else if (estadoRegistro && a.estado_registro !== estadoRegistro) {
         return false;
       }
+      if (categoriaBien && a.categoria !== categoriaBien) return false;
       if (mostrarFiltrosAdquisicion && !pasoFiltroAnioAdquisicion(a.fecha_adquisicion, anioAdquisicion)) {
         return false;
       }
@@ -341,6 +346,7 @@ export function ActivosCampoList({
     fixedSedeId,
     fixedAmbienteId,
     estadoRegistro,
+    categoriaBien,
     filter,
     isGlobal,
     isAmbiente,
@@ -465,7 +471,7 @@ export function ActivosCampoList({
       <div
         className={panelFilterRowClass}
         role={esAmbientePreregistro ? undefined : "tablist"}
-        aria-label={esAmbientePreregistro ? undefined : "Estado del activo"}
+        aria-label={esAmbientePreregistro ? undefined : "Filtros de inventario"}
       >
         {!esAmbientePreregistro && (
           <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
@@ -487,6 +493,29 @@ export function ActivosCampoList({
             ))}
           </div>
         )}
+
+        <div
+          className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+          role="tablist"
+          aria-label="Categoría del bien"
+        >
+          {FILTROS_CATEGORIA_BIEN.map((f) => (
+            <button
+              key={f.value || "all-cat"}
+              type="button"
+              role="tab"
+              aria-selected={categoriaBien === f.value}
+              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                categoriaBien === f.value
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setCategoriaBien(f.value)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
 
         <div className="min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm">
           <PanelSearchInput
@@ -543,7 +572,7 @@ export function ActivosCampoList({
                   </div>
                 </div>
 
-                <div className={panelFilterRowClass} role="tablist" aria-label="Estado del activo">
+                <div className={panelFilterRowClass} role="tablist" aria-label="Filtros de inventario">
                   <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
                     {FILTROS_ESTADO.map((f) => (
                       <button
@@ -557,6 +586,29 @@ export function ActivosCampoList({
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                         onClick={() => setEstadoRegistro(f.value)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div
+                    className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                    role="tablist"
+                    aria-label="Categoría del bien"
+                  >
+                    {FILTROS_CATEGORIA_BIEN.map((f) => (
+                      <button
+                        key={f.value || "all-cat"}
+                        type="button"
+                        role="tab"
+                        aria-selected={categoriaBien === f.value}
+                        className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                          categoriaBien === f.value
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        onClick={() => setCategoriaBien(f.value)}
                       >
                         {f.label}
                       </button>
@@ -711,6 +763,17 @@ export function ActivosCampoList({
               onClick={() => setEstadoRegistro(f.value)}
             >
               {f.label}
+            </Button>
+          ))}
+          {FILTROS_CATEGORIA_BIEN.map((f) => (
+            <Button
+              key={f.value || "all-cat"}
+              type="button"
+              size="sm"
+              variant={categoriaBien === f.value ? "default" : "outline"}
+              onClick={() => setCategoriaBien(f.value)}
+            >
+              {f.label === "Todas" ? "Cat. todas" : f.label}
             </Button>
           ))}
         </div>

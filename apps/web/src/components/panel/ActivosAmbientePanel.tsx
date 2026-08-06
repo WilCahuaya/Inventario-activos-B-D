@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Activo, EstadoRegistro } from "@inventario/types";
-import { matchesCodigoBarrasQuery } from "@inventario/types";
+import type { Activo, CategoriaBien, EstadoRegistro } from "@inventario/types";
+import { FILTROS_CATEGORIA_BIEN, matchesCodigoBarrasQuery } from "@inventario/types";
 import { useToast, mensajeEliminacionPreregistros } from "@inventario/ui";
 import {
   ActivoEditScopeNav,
@@ -98,6 +98,7 @@ export function ActivosAmbientePanel({
   const [estadoRegistro, setEstadoRegistro] = useState<"" | EstadoRegistro>(
     esAmbientePreregistro ? "PREREGISTRADO" : "",
   );
+  const [categoriaBien, setCategoriaBien] = useState<"" | CategoriaBien>("");
   const { panelScrollRef, showToolbarTrigger, scrollToToolbar } = usePanelInventarioUnifiedScroll();
   const [preregistroHeaderToolbar, setPreregistroHeaderToolbar] =
     useState<PreregistroGestionToolbarState | null>(null);
@@ -221,6 +222,7 @@ export function ActivosAmbientePanel({
       } else if (estadoRegistro && a.estado_registro !== estadoRegistro) {
         return false;
       }
+      if (categoriaBien && a.categoria !== categoriaBien) return false;
       if (!q) return true;
       return (
         a.nombre.toLowerCase().includes(q) ||
@@ -229,7 +231,7 @@ export function ActivosAmbientePanel({
         (a.modelo?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [activosList, busqueda, estadoRegistro, esAmbientePreregistro]);
+  }, [activosList, busqueda, estadoRegistro, categoriaBien, esAmbientePreregistro]);
 
   function handleSuccess() {
     setEditActivo(null);
@@ -359,7 +361,7 @@ export function ActivosAmbientePanel({
               <div
                 className={panelFilterRowClass}
                 role={esAmbientePreregistro ? undefined : "tablist"}
-                aria-label={esAmbientePreregistro ? undefined : "Estado del activo"}
+                aria-label={esAmbientePreregistro ? undefined : "Filtros de inventario"}
               >
                 {!esAmbientePreregistro && (
                   <div className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5">
@@ -381,6 +383,29 @@ export function ActivosAmbientePanel({
                     ))}
                   </div>
                 )}
+
+                <div
+                  className="inline-flex flex-wrap gap-0.5 rounded-md border border-border/60 bg-muted/30 p-0.5"
+                  role="tablist"
+                  aria-label="Categoría del bien"
+                >
+                  {FILTROS_CATEGORIA_BIEN.map((f) => (
+                    <button
+                      key={f.value || "all-cat"}
+                      type="button"
+                      role="tab"
+                      aria-selected={categoriaBien === f.value}
+                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                        categoriaBien === f.value
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setCategoriaBien(f.value)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
 
                 <div
                   className={`min-w-[10rem] flex-1 md:max-w-xs [&_input]:h-8 [&_input]:py-1 [&_input]:text-sm ${esAmbientePreregistro ? "w-full max-w-none" : ""}`}
