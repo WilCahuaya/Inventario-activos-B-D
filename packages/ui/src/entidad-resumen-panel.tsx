@@ -169,24 +169,25 @@ export function EntidadResumenPanel({
     year: "numeric",
   });
 
-  const aplicarFechaCorte = (raw: string) => {
-    const trimmed = raw.trim();
+  const onFechaCorteChange = (next: string) => {
+    setFechaCorteText(next);
+    const trimmed = next.trim();
     if (!trimmed) {
-      setFechaError("Ingrese la fecha de corte.");
-      return;
-    }
-    const error = validarFechaDDMMYYYY(trimmed);
-    if (error) {
-      setFechaError(error);
+      setFechaError(null);
       return;
     }
     const iso = parseFechaDDMMYYYY(trimmed);
-    if (!iso) {
-      setFechaError("Fecha inválida.");
+    if (iso) {
+      setFechaError(null);
+      setFechaCorte(dateFromISO(iso));
       return;
     }
-    setFechaError(null);
-    setFechaCorte(dateFromISO(iso));
+    // Solo mostrar error cuando el usuario terminó de escribir DD/MM/AAAA
+    if (trimmed.length >= 10) {
+      setFechaError(validarFechaDDMMYYYY(trimmed) ?? "Fecha inválida.");
+    } else {
+      setFechaError(null);
+    }
   };
 
   return (
@@ -218,7 +219,7 @@ export function EntidadResumenPanel({
               Depreciación y valor neto recalculados a la fecha de corte
             </p>
           </div>
-          <div className="mx-auto w-full max-w-[11rem] space-y-1 sm:mx-0">
+          <div className="mx-auto w-full max-w-[12.5rem] space-y-1 sm:mx-0">
             <label
               htmlFor="resumen_fecha_corte"
               className="text-xs font-medium text-muted-foreground"
@@ -228,17 +229,8 @@ export function EntidadResumenPanel({
             <FechaDdMmYyyyInput
               id="resumen_fecha_corte"
               value={fechaCorteText}
-              onChange={(next) => {
-                setFechaCorteText(next);
-                if (fechaError) setFechaError(null);
-              }}
-              onBlur={() => aplicarFechaCorte(fechaCorteText)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  aplicarFechaCorte(fechaCorteText);
-                }
-              }}
+              onChange={onFechaCorteChange}
+              onFocus={(e) => e.currentTarget.select()}
               aria-invalid={Boolean(fechaError)}
             />
             {fechaError && <p className="text-xs text-destructive">{fechaError}</p>}

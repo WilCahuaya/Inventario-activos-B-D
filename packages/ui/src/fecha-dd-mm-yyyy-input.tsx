@@ -10,6 +10,11 @@ function estimateCursorAfterFechaFormat(
   cursor: number,
 ): number {
   if (!next) return 0;
+  // Selección completa / reemplazo: el cursor nativo queda en 0 y next es más corto.
+  // Colocar al final para poder seguir escribiendo dígitos (como campo vacío).
+  if (next.length < prev.length && cursor === 0) {
+    return next.length;
+  }
   const digitsBefore = prev.slice(0, cursor).replace(/\D/g, "").length;
   if (digitsBefore === 0) return Math.min(cursor, next.length);
 
